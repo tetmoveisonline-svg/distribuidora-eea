@@ -1,0 +1,27 @@
+<%- include('head', { titulo: titulo }) %>
+<div class="topbar">
+  <div class="brand"><span class="dot"></span> <%= empresa.nome %></div>
+  <div class="top-right">
+    <%- include('theme-select') %>
+    <div class="user-menu">
+      <span class="uname"><%= user.nome %></span>
+      <form method="post" action="/logout"><button class="btn ghost sm" type="submit">Sair</button></form>
+    </div>
+  </div>
+</div>
+<div class="shell">
+  <aside class="side">
+    <% if (user.papel === 'cliente') { %>
+      <div class="grp">Cliente</div>
+      <a class="nav-item <%= ativo === 'novo' ? 'on' : '' %>" href="/novo"><span class="ico">&#8593;</span> Novo envio</a>
+      <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
+    <% } else { %>
+      <div class="grp">Operação</div>
+      <a class="nav-item <%= ativo === 'pedidos' ? 'on' : '' %>" href="/admin/pedidos"><span class="ico">&#9776;</span> Pedidos recebidos</a>
+      <span class="nav-item disabled"><span class="ico">&#8942;</span> Bipagem <span class="soon">em breve</span></span>
+      <div class="grp">Cadastros</div>
+      <span class="nav-item disabled"><span class="ico">&#9787;</span> Clientes <span class="soon">em breve</span></span>
+      <span class="nav-item disabled"><span class="ico">&#9873;</span> Itens e preços <span class="soon">em breve</span></span>
+    <% } %>
+  </aside>
+  <main class="main">

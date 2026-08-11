@@ -1,0 +1,27 @@
+<%- include('partials/head', { titulo: 'Entrar - Central de Postagem' }) %>
+<div class="login-top">
+  <%- include('partials/theme-select') %>
+</div>
+<div class="login-wrap">
+  <form class="card pad login-card" method="post" action="/login">
+    <div class="logo-box">LOGO</div>
+    <h2 class="title" style="text-align:center"><%= empresa.nome %></h2>
+    <p class="sub" style="text-align:center">Acesse com o login enviado pelo administrador</p>
+
+    <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
+    <div class="field">
+      <label for="login">Usuário ou e-mail</label>
+      <input id="login" name="login" type="text" autocomplete="username" autofocus />
+    </div>
+    <div class="field">
+      <label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="current-password" />
+    </div>
+    <button class="btn block" type="submit">Entrar</button>
+
+    <div class="divider"></div>
+    <p class="dim" style="text-align:center;font-size:12.5px;margin:0">Esqueceu a senha? Fale com o administrador para redefinir seu acesso.</p>
+  </form>
+</div>
+<%- include('partials/foot') %>

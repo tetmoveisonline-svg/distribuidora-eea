@@ -1,0 +1,72 @@
+<%- include('../partials/app-open', { titulo: 'Novo envio', ativo: 'novo' }) %>
+
+<h2 class="title">Novo envio</h2>
+<p class="sub">Suba os PDFs das etiquetas (formato térmico, 1 etiqueta por página). O sistema conta as páginas e já preenche a quantidade.</p>
+
+<% if (itens.length === 0) { %>
+  <div class="alert err">Você ainda não tem itens cadastrados. Peça ao administrador para cadastrar seus itens e preços.</div>
+<% } %>
+
+<div class="card pad">
+  <div class="dropzone" id="dropzone">
+    <div class="big">Arraste os PDFs das etiquetas aqui</div>
+    <div>ou clique para selecionar &middot; PDF térmico, 1 etiqueta por página</div>
+  </div>
+  <input type="file" id="fileInput" accept="application/pdf" multiple style="display:none" />
+
+  <div id="uploadMsg" class="alert err" style="display:none;margin-top:14px"></div>
+
+  <div id="files" style="margin-top:18px"></div>
+  <div id="empty" class="empty">Nenhum arquivo ainda. Selecione os PDFs das etiquetas para começar.</div>
+
+  <div class="totalbar">
+    <div class="muted"><span id="fileCount">0</span> arquivos &middot; <b style="color:var(--text)"><span id="labelCount">0</span> etiquetas</b> no total</div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div class="big" id="grandTotal">R$ 0,00</div>
+      <button class="btn" id="revisarBtn" disabled>Revisar pedido</button>
+    </div>
+  </div>
+</div>
+
+<div class="hint-box">A quantidade vem do número de páginas do PDF e pode ser ajustada no &minus; / +. O valor de cada arquivo é quantidade &times; preço negociado do item, e o rodapé soma tudo.</div>
+
+<!-- Modal revisar/aceitar -->
+<div class="overlay" id="overlay">
+  <div class="card pad modal">
+    <h2 class="title">Revisar pedido</h2>
+    <p class="sub">Confira as etiquetas, os itens e os valores. Ao aceitar, geramos o comprovante em PDF com data e hora.</p>
+
+    <table>
+      <thead><tr><th>Arquivo</th><th>Item</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th class="num">Total</th></tr></thead>
+      <tbody id="reviewBody"></tbody>
+    </table>
+    <div class="totalbar">
+      <div class="muted"><b style="color:var(--text)"><span id="reviewLabels">0</span> etiquetas</b> no total</div>
+      <div class="big" id="reviewTotal">R$ 0,00</div>
+    </div>
+
+    <div class="field" style="margin-top:8px">
+      <label for="obs">Observações (opcional)</label>
+      <input id="obs" type="text" maxlength="500" placeholder="alguma observação para o comprovante" />
+    </div>
+
+    <label class="checkrow">
+      <input type="checkbox" id="confirmCk" />
+      <span>Confirmo os envios e os valores negociados listados acima.</span>
+    </label>
+
+    <div id="acceptMsg" class="alert err" style="display:none"></div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn ghost" id="voltarBtn" type="button">Voltar</button>
+      <button class="btn" id="acceptBtn" type="button" disabled>Aceitar e gerar PDF</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.ITENS = <%- JSON.stringify(itens) %>;
+</script>
+<script src="/js/novo.js"></script>
+
+<%- include('../partials/app-close') %>

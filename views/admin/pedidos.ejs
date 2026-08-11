@@ -1,0 +1,58 @@
+<%- include('../partials/app-open', { titulo: 'Pedidos recebidos', ativo: 'pedidos' }) %>
+
+<h2 class="title">Pedidos recebidos</h2>
+<p class="sub">Cada pedido com cliente, nº de etiquetas, valor e status. Baixe as etiquetas (térmico, 1 por página) e o comprovante, e marque como despachado.</p>
+
+<div class="card pad">
+  <% if (pedidos.length === 0) { %>
+    <div class="empty">Nenhum pedido recebido ainda.</div>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr><th>Pedido</th><th>Cliente</th><th class="num">Etiquetas</th><th class="num">Valor</th><th>Status</th><th>Documentos</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% pedidos.forEach(function (p) { %>
+          <tr>
+            <td><%= p.numero %></td>
+            <td><%= p.cliente_nome %></td>
+            <td class="num"><%= p.total_etiquetas %></td>
+            <td class="num"><%= formatBRL(p.total_centavos) %></td>
+            <td>
+              <% if (p.status === 'despachado') { %>
+                <span class="badge ok">Despachado</span>
+              <% } else { %>
+                <span class="badge warn">Aguardando</span>
+              <% } %>
+            </td>
+            <td>
+              <div class="actions-inline">
+                <% if (p.expirado) { %>
+                  <span class="doc-link off">Etiquetas expiradas</span>
+                <% } else { %>
+                  <a class="doc-link" href="/admin/pedido/<%= p.id %>/etiquetas">Etiquetas
+                    <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span>
+                  </a>
+                <% } %>
+                <a class="doc-link" href="/admin/pedido/<%= p.id %>/comprovante">Relatório</a>
+              </div>
+            </td>
+            <td>
+              <% if (p.status === 'despachado') { %>
+                <span class="dim" style="font-size:12px">Despachado <%= formatDateTime(p.despachado_em) %></span>
+              <% } else { %>
+                <form method="post" action="/admin/pedidos/<%= p.id %>/despachar" style="margin:0">
+                  <button class="btn sm" type="submit">Marcar despachado</button>
+                </form>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<div class="hint-box">O PDF das etiquetas sai sempre em formato térmico, 1 etiqueta por página &mdash; nunca juntando em A4. O badge mostra quanto falta para expirar (72h); vermelho quando está perto.</div>
+
+<%- include('../partials/app-close') %>

@@ -1,0 +1,49 @@
+<%- include('../partials/app-open', { titulo: 'Meus envios', ativo: 'envios' }) %>
+
+<h2 class="title">Meus envios</h2>
+<p class="sub">Histórico dos seus pedidos. As etiquetas expiram em 72h; o comprovante fica sempre disponível.</p>
+
+<div class="card pad">
+  <% if (pedidos.length === 0) { %>
+    <div class="empty">Você ainda não tem envios. Comece em "Novo envio".</div>
+  <% } else { %>
+    <table>
+      <thead>
+        <tr><th>Pedido</th><th>Data / hora</th><th class="num">Etiquetas</th><th class="num">Valor</th><th>Status</th><th>Documentos</th></tr>
+      </thead>
+      <tbody>
+        <% pedidos.forEach(function (p) { %>
+          <tr>
+            <td><%= p.numero %></td>
+            <td><%= formatDateTime(p.aceite_em) %></td>
+            <td class="num"><%= p.total_etiquetas %></td>
+            <td class="num"><%= formatBRL(p.total_centavos) %></td>
+            <td>
+              <% if (p.status === 'despachado') { %>
+                <span class="badge ok">Despachado</span>
+              <% } else { %>
+                <span class="badge warn">Aguardando despacho</span>
+              <% } %>
+            </td>
+            <td>
+              <div class="actions-inline">
+                <% if (p.expirado) { %>
+                  <span class="doc-link off">Etiquetas expiradas</span>
+                <% } else { %>
+                  <a class="doc-link" href="/pedido/<%= p.id %>/etiquetas">Etiquetas
+                    <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span>
+                  </a>
+                <% } %>
+                <a class="doc-link" href="/pedido/<%= p.id %>/comprovante">Comprovante</a>
+              </div>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<div class="hint-box">Quando as etiquetas expiram (após 72h), o link fica indisponível e você precisa reenviar. O comprovante permanece como prova do aceite.</div>
+
+<%- include('../partials/app-close') %>
