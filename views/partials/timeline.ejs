@@ -1,0 +1,9 @@
+<div class="timeline">
+  <% passos.forEach(function (p) { %>
+    <div class="tstep <%= p.done ? 'done' : (p.current ? 'current' : '') %>">
+      <div class="tdot"><%- p.done ? '&#10003;' : (p.current ? '&#9679;' : '') %></div>
+      <div class="tlabel"><%= p.label %></div>
+      <div class="tdate"><%= p.quando ? p.quando : '—' %></div>
+    </div>
+  <% }); %>
+</div>

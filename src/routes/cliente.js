@@ -6,7 +6,7 @@ const db = require('../db');
 const { exigeCliente } = require('../auth');
 const { contarPaginas, juntarEtiquetas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
-const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas } = require('../util');
+const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
 
 const router = express.Router();
 
@@ -204,7 +204,8 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
 router.get('/meus-envios', exigeCliente, async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT id, numero, status, total_centavos, total_etiquetas, aceite_em, etiquetas_expira_em, despachado_em
+      `SELECT id, numero, status, total_centavos, total_etiquetas, aceite_em, criado_em,
+              etiquetas_expira_em, preparando_em, despachado_em
        FROM pedidos WHERE cliente_id = $1 ORDER BY id DESC`,
       [req.session.user.clienteId]
     );
@@ -212,6 +213,7 @@ router.get('/meus-envios', exigeCliente, async (req, res, next) => {
       ...p,
       expirado: etiquetasExpiradas(p.etiquetas_expira_em),
       horas: horasRestantes(p.etiquetas_expira_em),
+      passos: andamentoDisplay(p),
     }));
     res.render('cliente/meus-envios', { pedidos, formatBRL, formatDateTime });
   } catch (e) { next(e); }

@@ -1,75 +1,343 @@
 'use strict';
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { exigeAdmin } = require('../auth');
 const { juntarEtiquetas } = require('../etiquetas');
-const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas } = require('../util');
+const {
+  formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
+  horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps,
+} = require('../util');
 
 const router = express.Router();
+router.use(exigeAdmin);
 
-// ---------- Pedidos recebidos ----------
-router.get('/pedidos', exigeAdmin, async (req, res, next) => {
+// Se houver exatamente UM funcionario ativo com taxa, usamos como referencia
+// para mostrar a "taxa do funcionario" nas telas do admin/representante.
+async function funcRef() {
+  const r = await db.query(
+    "SELECT id, nome, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE AND taxa_etiqueta_centavos IS NOT NULL ORDER BY id"
+  );
+  return r.rowCount === 1 ? r.rows[0] : null;
+}
+
+function pInt(v) { const n = parseInt(v, 10); return isNaN(n) ? null : n; }
+
+// ===================== PEDIDOS =====================
+router.get('/pedidos', async (req, res, next) => {
   try {
     const r = await db.query(
       `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
-              p.aceite_em, p.etiquetas_expira_em, p.despachado_em, c.nome AS cliente_nome
+              p.aceite_em, p.etiquetas_expira_em, p.despachado_em,
+              p.comissao_centavos, p.comissao_bps,
+              c.nome AS cliente_nome, u.nome AS rep_nome
        FROM pedidos p
        JOIN clientes c ON c.id = p.cliente_id
+       LEFT JOIN usuarios u ON u.id = p.representante_id
        ORDER BY p.id DESC`
     );
+    const fr = await funcRef();
     const pedidos = r.rows.map((p) => ({
       ...p,
       expirado: etiquetasExpiradas(p.etiquetas_expira_em),
       horas: horasRestantes(p.etiquetas_expira_em),
+      taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
     }));
-    res.render('admin/pedidos', { pedidos, formatBRL, formatDateTime });
+    res.render('admin/pedidos', { pedidos, funcRef: fr, formatBRL, formatDateTime });
   } catch (e) { next(e); }
 });
 
-// ---------- Marcar despachado ----------
-router.post('/pedidos/:id/despachar', exigeAdmin, async (req, res, next) => {
+router.get('/pedido/:id', async (req, res, next) => {
   try {
-    await db.query(
-      "UPDATE pedidos SET status = 'despachado', despachado_em = now() WHERE id = $1 AND status <> 'despachado'",
-      [req.params.id]
+    const pr = await db.query(
+      `SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email, u.nome AS rep_nome
+       FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
+       LEFT JOIN usuarios u ON u.id = p.representante_id
+       WHERE p.id = $1`, [req.params.id]
     );
-    res.redirect('/admin/pedidos');
+    if (pr.rowCount === 0) return naoEncontrado(res, req);
+    const pedido = pr.rows[0];
+    const linhas = await db.query('SELECT * FROM linhas WHERE pedido_id = $1 ORDER BY id', [pedido.id]);
+    const reps = await db.query(
+      "SELECT id, nome, comissao_bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE ORDER BY nome"
+    );
+    const fr = await funcRef();
+    res.render('admin/pedido', {
+      pedido,
+      linhas: linhas.rows,
+      reps: reps.rows,
+      funcRef: fr,
+      taxaFuncCentavos: fr ? fr.taxa_etiqueta_centavos * pedido.total_etiquetas : null,
+      passos: andamentoDisplay(pedido),
+      expirado: etiquetasExpiradas(pedido.etiquetas_expira_em),
+      horas: horasRestantes(pedido.etiquetas_expira_em),
+      formatBRL, formatDateTime, formatPercent,
+    });
   } catch (e) { next(e); }
 });
 
-// ---------- Download: etiquetas (72h) ----------
-router.get('/pedido/:id/etiquetas', exigeAdmin, async (req, res, next) => {
+router.post('/pedido/:id/comissao', async (req, res, next) => {
+  try {
+    const pr = await db.query('SELECT id, total_centavos FROM pedidos WHERE id = $1', [req.params.id]);
+    if (pr.rowCount === 0) return naoEncontrado(res, req);
+    const total = pr.rows[0].total_centavos;
+    const repId = pInt(req.body.representante_id);
+
+    if (!repId) {
+      await db.query('UPDATE pedidos SET representante_id = NULL, comissao_bps = NULL, comissao_centavos = 0 WHERE id = $1', [req.params.id]);
+      return res.redirect('/admin/pedido/' + req.params.id);
+    }
+    const rep = await db.query("SELECT comissao_bps FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]);
+    if (rep.rowCount === 0) return res.redirect('/admin/pedido/' + req.params.id);
+
+    let bps = parsePercentToBps(req.body.percent);
+    if (bps === null) bps = rep.rows[0].comissao_bps || 0;
+    const comissao = comissaoCentavos(total, bps);
+    await db.query(
+      'UPDATE pedidos SET representante_id = $1, comissao_bps = $2, comissao_centavos = $3 WHERE id = $4',
+      [repId, bps, comissao, req.params.id]
+    );
+    res.redirect('/admin/pedido/' + req.params.id);
+  } catch (e) { next(e); }
+});
+
+router.post('/pedido/:id/status', async (req, res, next) => {
+  try {
+    const acao = req.body.acao;
+    if (acao === 'preparar') {
+      await db.query("UPDATE pedidos SET status = 'preparando', preparando_em = COALESCE(preparando_em, now()) WHERE id = $1 AND status = 'aguardando'", [req.params.id]);
+    } else if (acao === 'despachar') {
+      await db.query("UPDATE pedidos SET status = 'despachado', despachado_em = now(), preparando_em = COALESCE(preparando_em, now()) WHERE id = $1 AND status <> 'despachado'", [req.params.id]);
+    } else if (acao === 'reabrir') {
+      await db.query("UPDATE pedidos SET status = 'aguardando', despachado_em = NULL, preparando_em = NULL WHERE id = $1", [req.params.id]);
+    }
+    res.redirect('/admin/pedido/' + req.params.id);
+  } catch (e) { next(e); }
+});
+
+router.get('/pedido/:id/etiquetas', async (req, res, next) => {
   try {
     const p = await db.query('SELECT id, numero, etiquetas_expira_em FROM pedidos WHERE id = $1', [req.params.id]);
-    if (p.rowCount === 0) return notFound(res, req);
+    if (p.rowCount === 0) return naoEncontrado(res, req);
     if (etiquetasExpiradas(p.rows[0].etiquetas_expira_em)) {
       return res.status(410).render('erro', { titulo: 'Etiquetas expiradas', mensagem: 'As etiquetas deste pedido expiraram (72h). O cliente precisa reenviar.', user: req.session.user });
     }
     const arqs = await db.query('SELECT conteudo FROM arquivos WHERE pedido_id = $1 ORDER BY id', [p.rows[0].id]);
-    if (arqs.rowCount === 0) return notFound(res, req);
+    if (arqs.rowCount === 0) return naoEncontrado(res, req);
     const merged = await juntarEtiquetas(arqs.rows.map((r) => r.conteudo));
     enviarPdf(res, 'etiquetas-' + p.rows[0].numero + '.pdf', merged);
   } catch (e) { next(e); }
 });
 
-// ---------- Download: comprovante (permanente) ----------
-router.get('/pedido/:id/comprovante', exigeAdmin, async (req, res, next) => {
+router.get('/pedido/:id/comprovante', async (req, res, next) => {
   try {
     const p = await db.query('SELECT numero, comprovante FROM pedidos WHERE id = $1', [req.params.id]);
-    if (p.rowCount === 0 || !p.rows[0].comprovante) return notFound(res, req);
+    if (p.rowCount === 0 || !p.rows[0].comprovante) return naoEncontrado(res, req);
     enviarPdf(res, 'comprovante-' + p.rows[0].numero + '.pdf', p.rows[0].comprovante);
   } catch (e) { next(e); }
 });
 
-function notFound(res, req) {
-  return res.status(404).render('erro', { titulo: 'Nao encontrado', mensagem: 'Registro inexistente.', user: req.session.user });
-}
+// ===================== CLIENTES =====================
+router.get('/clientes', async (req, res, next) => {
+  try {
+    const r = await db.query(
+      `SELECT c.id, c.nome, c.ativo, u.login,
+              (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo) AS produtos
+       FROM clientes c
+       LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente'
+       ORDER BY c.nome`
+    );
+    res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null });
+  } catch (e) { next(e); }
+});
 
+router.post('/clientes', async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    const nome = (req.body.nome || '').trim();
+    const email = (req.body.email || '').trim();
+    const login = (req.body.login || '').trim();
+    const senha = req.body.senha || '';
+    if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
+
+    await client.query('BEGIN');
+    const c = await client.query('INSERT INTO clientes (nome, email) VALUES ($1,$2) RETURNING id', [nome, email || null]);
+    const hash = await bcrypt.hash(senha, 10);
+    await client.query(
+      'INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)',
+      [nome, login, hash, 'cliente', c.rows[0].id]
+    );
+    await client.query('COMMIT');
+    res.redirect('/admin/clientes');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.redirect('/admin/clientes?erro=' + encodeURIComponent(msgErro(e)));
+  } finally { client.release(); }
+});
+
+router.post('/clientes/:id/toggle', async (req, res, next) => {
+  try {
+    await db.query('UPDATE clientes SET ativo = NOT ativo WHERE id = $1', [req.params.id]);
+    await db.query("UPDATE usuarios SET ativo = (SELECT ativo FROM clientes WHERE id = $1) WHERE cliente_id = $1 AND papel = 'cliente'", [req.params.id]);
+    res.redirect('/admin/clientes');
+  } catch (e) { next(e); }
+});
+
+// ===================== REPRESENTANTES =====================
+router.get('/representantes', async (req, res, next) => {
+  try {
+    const r = await db.query(
+      `SELECT u.id, u.nome, u.login, u.ativo, u.comissao_bps,
+              (SELECT count(*) FROM pedidos p WHERE p.representante_id = u.id) AS pedidos
+       FROM usuarios u WHERE u.papel = 'representante' ORDER BY u.nome`
+    );
+    res.render('admin/representantes', { reps: r.rows, ativo: 'reps', erro: req.query.erro || null, formatPercent });
+  } catch (e) { next(e); }
+});
+
+router.post('/representantes', async (req, res, next) => {
+  try {
+    const nome = (req.body.nome || '').trim();
+    const login = (req.body.login || '').trim();
+    const senha = req.body.senha || '';
+    const bps = parsePercentToBps(req.body.comissao);
+    if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
+    if (bps === null) throw new Error('Informe a comissão padrão (%).');
+    const hash = await bcrypt.hash(senha, 10);
+    await db.query(
+      'INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps) VALUES ($1,$2,$3,$4,$5)',
+      [nome, login, hash, 'representante', bps]
+    );
+    res.redirect('/admin/representantes');
+  } catch (e) {
+    res.redirect('/admin/representantes?erro=' + encodeURIComponent(msgErro(e)));
+  }
+});
+
+router.post('/representantes/:id/toggle', async (req, res, next) => {
+  try { await db.query('UPDATE usuarios SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/representantes'); }
+  catch (e) { next(e); }
+});
+
+// ===================== FUNCIONARIOS =====================
+router.get('/funcionarios', async (req, res, next) => {
+  try {
+    const r = await db.query("SELECT id, nome, login, ativo, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' ORDER BY nome");
+    res.render('admin/funcionarios', { funcs: r.rows, ativo: 'funcs', erro: req.query.erro || null, formatBRL });
+  } catch (e) { next(e); }
+});
+
+router.post('/funcionarios', async (req, res, next) => {
+  try {
+    const nome = (req.body.nome || '').trim();
+    const login = (req.body.login || '').trim();
+    const senha = req.body.senha || '';
+    const taxa = parsePrecoToCentavos(req.body.taxa);
+    if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
+    if (taxa === null) throw new Error('Informe a taxa por etiqueta (R$).');
+    const hash = await bcrypt.hash(senha, 10);
+    await db.query(
+      'INSERT INTO usuarios (nome, login, senha_hash, papel, taxa_etiqueta_centavos) VALUES ($1,$2,$3,$4,$5)',
+      [nome, login, hash, 'funcionario', taxa]
+    );
+    res.redirect('/admin/funcionarios');
+  } catch (e) {
+    res.redirect('/admin/funcionarios?erro=' + encodeURIComponent(msgErro(e)));
+  }
+});
+
+router.post('/funcionarios/:id/toggle', async (req, res, next) => {
+  try { await db.query('UPDATE usuarios SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/funcionarios'); }
+  catch (e) { next(e); }
+});
+
+// ===================== PRODUTOS =====================
+router.get('/produtos', async (req, res, next) => {
+  try {
+    const r = await db.query('SELECT id, nome, descricao, ativo FROM produtos ORDER BY nome');
+    res.render('admin/produtos', { produtos: r.rows, ativo: 'produtos', erro: req.query.erro || null });
+  } catch (e) { next(e); }
+});
+
+router.post('/produtos', async (req, res, next) => {
+  try {
+    const nome = (req.body.nome || '').trim();
+    if (!nome) throw new Error('Informe o nome do produto.');
+    await db.query('INSERT INTO produtos (nome, descricao) VALUES ($1,$2)', [nome, (req.body.descricao || '').trim() || null]);
+    res.redirect('/admin/produtos');
+  } catch (e) {
+    res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e)));
+  }
+});
+
+router.post('/produtos/:id/toggle', async (req, res, next) => {
+  try { await db.query('UPDATE produtos SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/produtos'); }
+  catch (e) { next(e); }
+});
+
+// ===================== PRECOS POR CLIENTE =====================
+router.get('/precos', async (req, res, next) => {
+  try {
+    const clientes = await db.query('SELECT id, nome FROM clientes WHERE ativo = TRUE ORDER BY nome');
+    const produtos = await db.query('SELECT id, nome FROM produtos WHERE ativo = TRUE ORDER BY nome');
+    let clienteId = pInt(req.query.cliente);
+    if (!clienteId && clientes.rowCount > 0) clienteId = clientes.rows[0].id;
+
+    let itens = { rows: [] };
+    let clienteNome = '';
+    if (clienteId) {
+      itens = await db.query('SELECT id, nome, preco_centavos FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome', [clienteId]);
+      const cn = await db.query('SELECT nome FROM clientes WHERE id = $1', [clienteId]);
+      clienteNome = cn.rowCount ? cn.rows[0].nome : '';
+    }
+    res.render('admin/precos', {
+      clientes: clientes.rows, produtos: produtos.rows, itens: itens.rows,
+      clienteId, clienteNome, ativo: 'precos', erro: req.query.erro || null, formatBRL,
+    });
+  } catch (e) { next(e); }
+});
+
+router.post('/precos', async (req, res, next) => {
+  try {
+    const clienteId = pInt(req.body.cliente_id);
+    const produtoId = pInt(req.body.produto_id);
+    const preco = parsePrecoToCentavos(req.body.preco);
+    if (!clienteId || !produtoId) throw new Error('Escolha cliente e produto.');
+    if (preco === null) throw new Error('Informe o preço negociado.');
+    const prod = await db.query('SELECT nome FROM produtos WHERE id = $1', [produtoId]);
+    if (prod.rowCount === 0) throw new Error('Produto inválido.');
+    await db.query(
+      'INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos) VALUES ($1,$2,$3,$4)',
+      [clienteId, produtoId, prod.rows[0].nome, preco]
+    );
+    res.redirect('/admin/precos?cliente=' + clienteId);
+  } catch (e) {
+    const cid = pInt(req.body.cliente_id) || '';
+    res.redirect('/admin/precos?cliente=' + cid + '&erro=' + encodeURIComponent(msgErro(e)));
+  }
+});
+
+router.post('/precos/:id/remove', async (req, res, next) => {
+  try {
+    const it = await db.query('UPDATE itens SET ativo = FALSE WHERE id = $1 RETURNING cliente_id', [req.params.id]);
+    const cid = it.rowCount ? it.rows[0].cliente_id : '';
+    res.redirect('/admin/precos?cliente=' + cid);
+  } catch (e) { next(e); }
+});
+
+// ===================== helpers =====================
+function naoEncontrado(res, req) {
+  return res.status(404).render('erro', { titulo: 'Não encontrado', mensagem: 'Registro inexistente.', user: req.session.user });
+}
 function enviarPdf(res, filename, buffer) {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
   res.send(buffer);
+}
+function msgErro(e) {
+  if (e && e.code === '23505') return 'Login já em uso. Escolha outro.';
+  return (e && e.message) ? e.message : 'Falha ao salvar.';
 }
 
 module.exports = router;

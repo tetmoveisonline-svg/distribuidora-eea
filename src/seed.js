@@ -31,23 +31,43 @@ async function seedDemo() {
     console.log('Cliente demo ja existe. Nada a fazer.');
     return;
   }
-  const c = await db.query(
-    'INSERT INTO clientes (nome, email) VALUES ($1,$2) RETURNING id',
-    ['Loja do Cliente Ltda', 'cliente@email.com']
-  );
-  const clienteId = c.rows[0].id;
 
-  const hash = await bcrypt.hash('cliente123', 10);
+  // Produtos no catalogo.
+  const prods = [['PAC ate 300g', 'Encomenda PAC ate 300g'], ['SEDEX ate 300g', 'Encomenda SEDEX ate 300g'], ['PAC 301g a 1kg', 'Encomenda PAC ate 1kg']];
+  const prodIds = {};
+  for (const [n, d] of prods) {
+    const pr = await db.query('INSERT INTO produtos (nome, descricao) VALUES ($1,$2) RETURNING id', [n, d]);
+    prodIds[n] = pr.rows[0].id;
+  }
+
+  // Cliente + login.
+  const c = await db.query('INSERT INTO clientes (nome, email) VALUES ($1,$2) RETURNING id', ['Loja do Cliente Ltda', 'cliente@email.com']);
+  const clienteId = c.rows[0].id;
   await db.query(
     'INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)',
-    ['Loja do Cliente Ltda', 'cliente', hash, 'cliente', clienteId]
+    ['Loja do Cliente Ltda', 'cliente', await bcrypt.hash('cliente123', 10), 'cliente', clienteId]
   );
 
-  const itens = [['PAC ate 300g', 450], ['SEDEX ate 300g', 980], ['PAC 301g a 1kg', 620]];
-  for (const [n, p] of itens) {
-    await db.query('INSERT INTO itens (cliente_id, nome, preco_centavos) VALUES ($1,$2,$3)', [clienteId, n, p]);
+  // Precos por cliente (itens ligados aos produtos).
+  const precos = [['PAC ate 300g', 450], ['SEDEX ate 300g', 980], ['PAC 301g a 1kg', 620]];
+  for (const [n, p] of precos) {
+    await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos) VALUES ($1,$2,$3,$4)', [clienteId, prodIds[n], n, p]);
   }
-  console.log('Cliente demo criado. Login: cliente  Senha: cliente123');
+
+  // Representante e funcionario demo.
+  await db.query(
+    'INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps) VALUES ($1,$2,$3,$4,$5)',
+    ['Carlos Souza', 'representante', await bcrypt.hash('rep123', 10), 'representante', 500]
+  );
+  await db.query(
+    'INSERT INTO usuarios (nome, login, senha_hash, papel, taxa_etiqueta_centavos) VALUES ($1,$2,$3,$4,$5)',
+    ['Joao Pereira', 'funcionario', await bcrypt.hash('func123', 10), 'funcionario', 10]
+  );
+
+  console.log('Demo criada:');
+  console.log('  Cliente       -> login: cliente        senha: cliente123');
+  console.log('  Representante -> login: representante   senha: rep123');
+  console.log('  Funcionario   -> login: funcionario     senha: func123');
 }
 
 main().catch((err) => { console.error('Falha no seed:', err); process.exit(1); });

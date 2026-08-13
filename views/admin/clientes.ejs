@@ -1,0 +1,40 @@
+<%- include('../partials/app-open', { titulo: 'Clientes', ativo: 'clientes' }) %>
+
+<h2 class="title">Clientes</h2>
+<p class="sub">Cada cliente tem login/senha próprios para subir as etiquetas.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Novo cliente</div>
+    <form method="post" action="/admin/clientes">
+      <div class="field"><label>Nome / empresa</label><input name="nome" placeholder="Loja do Cliente Ltda" /></div>
+      <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
+      <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
+      <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
+      <button class="btn block" type="submit">Salvar cliente</button>
+    </form>
+  </div>
+  <div class="card pad">
+    <div class="section-title">Clientes cadastrados</div>
+    <% if (clientes.length === 0) { %><div class="empty">Nenhum cliente ainda.</div><% } else { %>
+    <table>
+      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Produtos</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <% clientes.forEach(function (c) { %>
+          <tr>
+            <td><%= c.nome %></td>
+            <td class="dim"><%= c.login || '—' %></td>
+            <td class="num"><%= c.produtos %></td>
+            <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
+            <td><form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <% } %>
+  </div>
+</div>
+
+<%- include('../partials/app-close') %>

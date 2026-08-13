@@ -43,10 +43,61 @@ function etiquetasExpiradas(expiraEm) {
   return h === null ? true : h <= 0;
 }
 
+// Formata pontos-base como percentual: 500 -> "5%", 550 -> "5,5%"
+function formatPercent(bps) {
+  const v = Number(bps || 0) / 100;
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '%';
+}
+
+// Converte "5" ou "5,5" em pontos-base (500 / 550). Retorna null se invalido.
+function parsePercentToBps(txt) {
+  if (txt === null || txt === undefined) return null;
+  let s = String(txt).trim().replace(/\s/g, '').replace('%', '');
+  if (s === '') return null;
+  if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+  const v = Number(s);
+  if (!isFinite(v) || v < 0) return null;
+  return Math.round(v * 100);
+}
+
+// Comissao em centavos = total * bps / 10000, arredondado.
+function comissaoCentavos(totalCentavos, bps) {
+  if (!bps || !totalCentavos) return 0;
+  return Math.round((Number(totalCentavos) * Number(bps)) / 10000);
+}
+
+// Etapas do andamento do pedido (para a timeline).
+function andamento(pedido) {
+  const st = pedido.status;
+  return [
+    { chave: 'aceito', label: 'Aceito', data: pedido.aceite_em, done: true },
+    { chave: 'recebido', label: 'Recebido', data: pedido.criado_em, done: true },
+    { chave: 'preparando', label: 'Em preparação', data: pedido.preparando_em,
+      done: st === 'despachado', current: st === 'preparando' },
+    { chave: 'despachado', label: 'Despachado', data: pedido.despachado_em,
+      done: st === 'despachado', current: false },
+  ];
+}
+
+// Andamento pronto para exibir (datas ja formatadas).
+function andamentoDisplay(pedido) {
+  return andamento(pedido).map((p) => ({
+    label: p.label,
+    done: p.done,
+    current: !!p.current,
+    quando: p.data ? formatDateTime(p.data) : '',
+  }));
+}
+
 module.exports = {
   formatBRL,
   formatDateTime,
   parsePrecoToCentavos,
   horasRestantes,
   etiquetasExpiradas,
+  formatPercent,
+  parsePercentToBps,
+  comissaoCentavos,
+  andamento,
+  andamentoDisplay,
 };

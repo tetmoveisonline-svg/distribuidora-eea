@@ -7,10 +7,17 @@ const { currentUser } = require('../auth');
 
 const router = express.Router();
 
+function homePorPapel(papel) {
+  if (papel === 'admin') return '/admin/pedidos';
+  if (papel === 'representante') return '/rep/pedidos';
+  if (papel === 'funcionario') return '/func/pedidos';
+  return '/novo';
+}
+router.homePorPapel = homePorPapel;
+
 router.get('/login', (req, res) => {
   if (currentUser(req)) {
-    const u = currentUser(req);
-    return res.redirect(u.papel === 'admin' ? '/admin/pedidos' : '/novo');
+    return res.redirect(homePorPapel(currentUser(req).papel));
   }
   res.render('login', { erro: null });
 });
@@ -40,7 +47,7 @@ router.post('/login', async (req, res, next) => {
       papel: usuario.papel,
       clienteId: usuario.cliente_id,
     };
-    return res.redirect(usuario.papel === 'admin' ? '/admin/pedidos' : '/novo');
+    return res.redirect(homePorPapel(usuario.papel));
   } catch (e) {
     next(e);
   }

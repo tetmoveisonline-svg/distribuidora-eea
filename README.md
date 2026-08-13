@@ -8,18 +8,30 @@ etiquetas (com validade de 72h) e o comprovante (permanente), e marca como despa
 Stack: Node.js + Express + PostgreSQL. Views em EJS. PDFs com pdfkit (comprovante) e pdf-lib
 (contagem e junção de etiquetas). Sessão no Postgres (connect-pg-simple).
 
-Esta é a Parte 1 (base + fluxo do cliente + admin mínimo de pedidos). Bipagem (entrada/saída)
-e os cadastros CRUD de clientes/itens vêm nas próximas partes.
+Partes 1 e 2 implementadas. Bipagem (entrada/saída) vem numa próxima parte.
 
 ## O que já funciona
 
-- Login (cliente e admin no mesmo formulário; o papel vem do cadastro).
-- Cliente: Novo envio (upload, detecção de páginas, item + preço, quantidade no -/+, totais),
-  Revisar, Aceitar e gerar comprovante PDF, Meus envios (histórico com regra de 72h).
-- Admin: Pedidos recebidos, baixar etiquetas (72h) e comprovante, marcar despachado.
-- Seletor de 5 temas (Escuro Minimal, Grafite Quente, Midnight Corporativo, Claro Corporativo,
-  Indústria/Terminal), salvo no navegador, com anti-flash.
+- Quatro papéis com login próprio: admin, cliente, representante e funcionário.
+- Cliente: Novo envio (upload, detecção de páginas, produto + preço, quantidade no -/+, totais),
+  Revisar, Aceitar e gerar comprovante PDF, Meus envios com andamento (Aceito → Recebido →
+  Em preparação → Despachado) e regra de 72h.
+- Admin: Pedidos recebidos (com comissão e taxa), detalhe do pedido com atribuição de
+  representante/comissão, avanço de andamento, downloads; cadastros de Clientes, Representantes,
+  Funcionários, Produtos e Preços por cliente.
+- Comissões: representante ganha percentual sobre o valor (definido no pedido); funcionário ganha
+  valor fixo por etiqueta (vê todos os pedidos).
+- Visibilidade: funcionário não vê a comissão do representante; o representante vê a taxa do
+  funcionário; o admin vê tudo; o cliente não vê comissões.
+- Seletor de 5 temas, salvo no navegador, com anti-flash.
 - Códigos por etiqueta (ex.: DS-1042-01) já gravados para a bipagem da próxima parte.
+
+## Logins de demonstração (após `npm run seed -- --demo`)
+
+- admin         -> definido por ADMIN_LOGIN / ADMIN_SENHA
+- cliente       -> login: cliente        senha: cliente123
+- representante -> login: representante   senha: rep123   (comissão padrão 5%)
+- funcionario   -> login: funcionario     senha: func123  (taxa R$ 0,10/etiqueta)
 
 ## Rodando localmente
 
@@ -48,12 +60,11 @@ e os cadastros CRUD de clientes/itens vêm nas próximas partes.
 3. Configure as variáveis de ambiente (ver `.env.example`). O Railway já injeta `PORT` e
    `DATABASE_URL`. Defina pelo menos `SESSION_SECRET`, `NODE_ENV=production`, os dados da
    empresa e as credenciais do admin.
-4. O `start` do projeto é `node src/server.js`. O esquema do banco é criado automaticamente no
-   primeiro boot.
-5. Rode o seed uma vez (via aba de comandos/one-off do Railway ou localmente apontando para o
-   banco de produção):
-
-   npm run seed
+4. O `start` do projeto é `node src/server.js`. No primeiro boot o esquema do banco é criado
+   automaticamente E o admin também é criado automaticamente a partir das variáveis
+   `ADMIN_LOGIN` / `ADMIN_SENHA` (não precisa rodar nenhum comando).
+5. (Opcional) Para criar um cliente de demonstração com itens, rode localmente apontando para o
+   banco de produção: `npm run seed -- --demo`.
 
 ## Variáveis de ambiente
 

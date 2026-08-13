@@ -43,15 +43,18 @@ app.use((req, res, next) => {
 });
 
 // Rotas.
-app.use('/', require('./routes/auth'));
+const authRoutes = require('./routes/auth');
+app.use('/', authRoutes);
 app.use('/', require('./routes/cliente'));
 app.use('/admin', require('./routes/admin'));
+app.use('/rep', require('./routes/rep'));
+app.use('/func', require('./routes/func'));
 
 // Raiz: manda pra area certa.
 app.get('/', (req, res) => {
   const u = currentUser(req);
   if (!u) return res.redirect('/login');
-  return res.redirect(u.papel === 'admin' ? '/admin/pedidos' : '/novo');
+  return res.redirect(authRoutes.homePorPapel(u.papel));
 });
 
 // 404.

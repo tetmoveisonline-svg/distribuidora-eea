@@ -27,4 +27,16 @@ function exigeCliente(req, res, next) {
   next();
 }
 
-module.exports = { currentUser, exigeLogin, exigeAdmin, exigeCliente };
+function exigePapel(papel, texto) {
+  return function (req, res, next) {
+    const u = currentUser(req);
+    if (!u) return res.redirect('/login');
+    if (u.papel !== papel) return res.status(403).render('erro', { titulo: 'Acesso negado', mensagem: texto, user: u });
+    next();
+  };
+}
+
+const exigeRepresentante = exigePapel('representante', 'Esta area e do representante.');
+const exigeFuncionario = exigePapel('funcionario', 'Esta area e do funcionario.');
+
+module.exports = { currentUser, exigeLogin, exigeAdmin, exigeCliente, exigeRepresentante, exigeFuncionario };
