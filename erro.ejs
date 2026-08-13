@@ -1,0 +1,12 @@
+<%- include('partials/head', { titulo: titulo }) %>
+<div class="login-top">
+  <%- include('partials/theme-select') %>
+</div>
+<div class="login-wrap">
+  <div class="card pad login-card" style="text-align:center">
+    <h2 class="title"><%= titulo %></h2>
+    <p class="sub"><%= mensagem %></p>
+    <a class="btn ghost" href="/">Voltar ao início</a>
+  </div>
+</div>
+<%- include('partials/foot') %>

@@ -1,0 +1,79 @@
+<%- include('../partials/app-open', { titulo: 'Clientes', ativo: 'clientes' }) %>
+
+<h2 class="title">Clientes</h2>
+<p class="sub">Cada cliente tem login/senha próprios e um desconto padrão (em % ou R$, em cada item ou no total). O cliente vê só o preço final.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
+<div class="card pad" style="margin-bottom:18px">
+  <div class="section-title">Novo cliente</div>
+  <form method="post" action="/admin/clientes">
+    <div class="grid2" style="grid-template-columns:1fr 1fr;align-items:end">
+      <div class="field"><label>Nome / empresa</label><input name="nome" placeholder="Loja do Cliente Ltda" /></div>
+      <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
+      <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
+      <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
+    </div>
+    <div class="section-title" style="margin-top:6px">Desconto padrão (opcional)</div>
+    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+      <div class="field" style="margin:0;width:160px"><label>Tipo</label>
+        <select name="desconto_tipo"><option value="">Sem desconto</option><option value="pct">Porcentagem (%)</option><option value="val">Valor (R$)</option></select>
+      </div>
+      <div class="field" style="margin:0;width:180px"><label>Onde aplica</label>
+        <select name="desconto_escopo"><option value="item">Em cada item</option><option value="total">No total da compra</option></select>
+      </div>
+      <div class="field" style="margin:0;width:140px"><label>Valor</label><input name="desconto_valor" placeholder="ex.: 10 ou 5,00" /></div>
+    </div>
+    <button class="btn block" type="submit" style="margin-top:6px">Salvar cliente</button>
+  </form>
+</div>
+
+<div class="card pad">
+  <div class="section-title">Clientes cadastrados</div>
+  <% if (clientes.length === 0) { %><div class="empty">Nenhum cliente ainda.</div><% } else { %>
+  <table>
+    <thead><tr><th>Cliente</th><th>Login</th><th class="num">Produtos</th><th>Desconto padrão</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <% clientes.forEach(function (c) {
+           var valorHuman = '';
+           if (c.desconto_tipo === 'pct') valorHuman = (c.desconto_valor/100).toString().replace('.', ',');
+           else if (c.desconto_tipo === 'val') valorHuman = (c.desconto_valor/100).toFixed(2).replace('.', ',');
+      %>
+        <tr>
+          <td><%= c.nome %></td>
+          <td class="dim"><%= c.login || '—' %></td>
+          <td class="num"><%= c.produtos %></td>
+          <td>
+            <% if (c.desconto_tipo) { %>
+              <span class="badge disc"><%= formatDesconto(c.desconto_tipo, c.desconto_valor) %></span>
+              <span class="dim" style="font-size:11px"><%= c.desconto_escopo === 'total' ? 'no total' : 'em cada item' %></span>
+            <% } else { %><span class="dim">sem desconto</span><% } %>
+          </td>
+          <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
+          <td>
+            <details>
+              <summary style="cursor:pointer;font-size:12.5px;color:var(--text-muted)">Desconto</summary>
+              <form method="post" action="/admin/clientes/<%= c.id %>/desconto" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;min-width:180px">
+                <select name="desconto_tipo" style="background:var(--field-bg);border:1px solid var(--field-border);border-radius:7px;padding:7px;color:var(--text);font-family:inherit;font-size:12.5px">
+                  <option value="" <%= !c.desconto_tipo ? 'selected' : '' %>>Sem desconto</option>
+                  <option value="pct" <%= c.desconto_tipo === 'pct' ? 'selected' : '' %>>Porcentagem (%)</option>
+                  <option value="val" <%= c.desconto_tipo === 'val' ? 'selected' : '' %>>Valor (R$)</option>
+                </select>
+                <select name="desconto_escopo" style="background:var(--field-bg);border:1px solid var(--field-border);border-radius:7px;padding:7px;color:var(--text);font-family:inherit;font-size:12.5px">
+                  <option value="item" <%= c.desconto_escopo !== 'total' ? 'selected' : '' %>>Em cada item</option>
+                  <option value="total" <%= c.desconto_escopo === 'total' ? 'selected' : '' %>>No total</option>
+                </select>
+                <input name="desconto_valor" value="<%= valorHuman %>" placeholder="valor" style="background:var(--field-bg);border:1px solid var(--field-border);border-radius:7px;padding:7px;color:var(--text);font-family:inherit;font-size:12.5px" />
+                <button class="btn sm" type="submit">Salvar desconto</button>
+              </form>
+            </details>
+            <form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin-top:6px"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form>
+          </td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<%- include('../partials/app-close') %>

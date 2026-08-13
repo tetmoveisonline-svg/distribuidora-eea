@@ -1,0 +1,57 @@
+<%- include('../partials/app-open', { titulo: 'Produtos por cliente', ativo: 'liberados' }) %>
+
+<h2 class="title">Produtos por cliente</h2>
+<p class="sub">Libere quais produtos cada cliente pode pedir. O preço é o preço padrão do produto; o desconto do cliente é definido em "Clientes".</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
+<div class="card pad" style="margin-bottom:16px">
+  <form method="get" action="/admin/liberados">
+    <div class="field" style="max-width:340px;margin:0">
+      <label>Cliente</label>
+      <select name="cliente" onchange="this.form.submit()">
+        <% if (clientes.length === 0) { %><option>— nenhum cliente ativo —</option><% } %>
+        <% clientes.forEach(function (c) { %><option value="<%= c.id %>" <%= clienteId === c.id ? 'selected' : '' %>><%= c.nome %></option><% }); %>
+      </select>
+    </div>
+  </form>
+</div>
+
+<% if (clienteId) { %>
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Liberar produto</div>
+    <form method="post" action="/admin/liberados">
+      <input type="hidden" name="cliente_id" value="<%= clienteId %>" />
+      <div class="field"><label>Produto</label>
+        <select name="produto_id">
+          <% if (disponiveis.length === 0) { %><option value="">— todos já liberados / sem produtos —</option><% } %>
+          <% disponiveis.forEach(function (p) { %><option value="<%= p.id %>"><%= p.nome %> — <%= formatBRL(p.preco_padrao_centavos) %></option><% }); %>
+        </select>
+      </div>
+      <button class="btn block" type="submit">Liberar</button>
+    </form>
+  </div>
+  <div class="card pad">
+    <div class="section-title">Produtos liberados para <%= clienteNome %></div>
+    <% if (liberados.length === 0) { %><div class="empty">Nenhum produto liberado para este cliente.</div><% } else { %>
+    <table>
+      <thead><tr><th>Produto</th><th class="num">Preço padrão</th><th></th></tr></thead>
+      <tbody>
+        <% liberados.forEach(function (i) { %>
+          <tr>
+            <td><%= i.nome %></td>
+            <td class="num"><%= formatBRL(i.preco_padrao_centavos) %></td>
+            <td><form method="post" action="/admin/liberados/<%= i.id %>/remove" style="margin:0"><button class="btn ghost sm" type="submit">Remover</button></form></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <% } %>
+  </div>
+</div>
+<% } else { %>
+  <div class="card pad"><div class="empty">Cadastre um cliente ativo para liberar produtos.</div></div>
+<% } %>
+
+<%- include('../partials/app-close') %>

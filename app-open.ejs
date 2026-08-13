@@ -1,0 +1,36 @@
+<%- include('head', { titulo: titulo }) %>
+<div class="topbar">
+  <div class="brand"><span class="dot"></span> <%= empresa.nome %></div>
+  <div class="top-right">
+    <%- include('theme-select') %>
+    <div class="user-menu">
+      <span class="uname"><%= user.nome %></span>
+      <form method="post" action="/logout"><button class="btn ghost sm" type="submit">Sair</button></form>
+    </div>
+  </div>
+</div>
+<div class="shell">
+  <aside class="side">
+    <% if (user.papel === 'cliente') { %>
+      <div class="grp">Cliente</div>
+      <a class="nav-item <%= ativo === 'novo' ? 'on' : '' %>" href="/novo"><span class="ico">&#8593;</span> Novo envio</a>
+      <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
+    <% } else if (user.papel === 'representante') { %>
+      <div class="grp">Representante</div>
+      <a class="nav-item <%= ativo === 'rep' ? 'on' : '' %>" href="/rep/pedidos"><span class="ico">&#9776;</span> Meus pedidos</a>
+    <% } else if (user.papel === 'funcionario') { %>
+      <div class="grp">Funcionário</div>
+      <a class="nav-item <%= ativo === 'func' ? 'on' : '' %>" href="/func/pedidos"><span class="ico">&#9776;</span> Pedidos e taxas</a>
+    <% } else { %>
+      <div class="grp">Operação</div>
+      <a class="nav-item <%= ativo === 'pedidos' ? 'on' : '' %>" href="/admin/pedidos"><span class="ico">&#9776;</span> Pedidos recebidos</a>
+      <span class="nav-item disabled"><span class="ico">&#8942;</span> Bipagem <span class="soon">em breve</span></span>
+      <div class="grp">Cadastros</div>
+      <a class="nav-item <%= ativo === 'clientes' ? 'on' : '' %>" href="/admin/clientes"><span class="ico">&#9787;</span> Clientes</a>
+      <a class="nav-item <%= ativo === 'reps' ? 'on' : '' %>" href="/admin/representantes"><span class="ico">&#9733;</span> Representantes</a>
+      <a class="nav-item <%= ativo === 'funcs' ? 'on' : '' %>" href="/admin/funcionarios"><span class="ico">&#9814;</span> Funcionários</a>
+      <a class="nav-item <%= ativo === 'produtos' ? 'on' : '' %>" href="/admin/produtos"><span class="ico">&#9635;</span> Produtos</a>
+      <a class="nav-item <%= ativo === 'liberados' ? 'on' : '' %>" href="/admin/liberados"><span class="ico">&#9873;</span> Produtos por cliente</a>
+    <% } %>
+  </aside>
+  <main class="main">

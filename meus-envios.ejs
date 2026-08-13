@@ -1,0 +1,34 @@
+<%- include('../partials/app-open', { titulo: 'Meus envios', ativo: 'envios' }) %>
+
+<h2 class="title">Meus envios</h2>
+<p class="sub">Acompanhe o andamento de cada pedido. As etiquetas expiram em 72h; o comprovante é permanente.</p>
+
+<% if (pedidos.length === 0) { %>
+  <div class="card pad"><div class="empty">Você ainda não tem envios. Comece em "Novo envio".</div></div>
+<% } else { %>
+  <% pedidos.forEach(function (p) { %>
+    <div class="card pad" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap">
+        <div><b><%= p.numero %></b> <span class="dim" style="font-size:12px">· <%= formatDateTime(p.aceite_em) %> · <%= p.total_etiquetas %> etiquetas · <%= formatBRL(p.total_centavos) %></span></div>
+        <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
+        <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
+        <% } else { %><span class="badge warn">Aguardando despacho</span><% } %>
+      </div>
+
+      <%- include('../partials/timeline', { passos: p.passos }) %>
+
+      <div class="actions-inline" style="margin-top:16px">
+        <% if (p.expirado) { %>
+          <span class="doc-link off">Etiquetas expiradas</span>
+        <% } else { %>
+          <a class="doc-link" href="/pedido/<%= p.id %>/etiquetas">Etiquetas <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span></a>
+        <% } %>
+        <a class="doc-link" href="/pedido/<%= p.id %>/comprovante">Comprovante</a>
+      </div>
+    </div>
+  <% }); %>
+<% } %>
+
+<div class="hint-box">Quando as etiquetas expiram (após 72h), o link fica indisponível e você precisa reenviar. O comprovante permanece como prova do aceite.</div>
+
+<%- include('../partials/app-close') %>

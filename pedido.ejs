@@ -1,0 +1,136 @@
+<%- include('../partials/app-open', { titulo: 'Pedido ' + pedido.numero, ativo: 'pedidos' }) %>
+<%
+  function humano(tipo, valor) {
+    if (!tipo || !valor) return '';
+    if (tipo === 'pct') return (valor/100).toString().replace('.', ',');
+    return (valor/100).toFixed(2).replace('.', ',');
+  }
+%>
+
+<h2 class="title">Pedido <%= pedido.numero %></h2>
+<p class="sub">Cliente: <%= pedido.cliente_nome %><%= pedido.cliente_email ? ' · ' + pedido.cliente_email : '' %> · aceito em <%= formatDateTime(pedido.aceite_em) %></p>
+
+<div class="card pad" style="margin-bottom:16px">
+  <%- include('../partials/timeline', { passos: passos }) %>
+</div>
+
+<!-- Itens + desconto -->
+<form method="post" action="/admin/pedido/<%= pedido.id %>/desconto">
+<div class="card pad" style="margin-bottom:16px">
+  <div class="section-title">Itens e desconto</div>
+  <table>
+    <thead><tr><th>Produto (cor)</th><th class="num">Qtd</th><th class="num">Preço unit.</th><th>Desconto do item</th><th class="num">Subtotal</th></tr></thead>
+    <tbody>
+      <% linhas.forEach(function (l) { %>
+        <tr>
+          <td><%= l.item_nome %><%= l.cor_nome ? ' (' + l.cor_nome + ')' : '' %></td>
+          <td class="num"><%= l.quantidade %></td>
+          <td class="num"><%= formatBRL(l.preco_centavos) %></td>
+          <td>
+            <div class="disc-cell">
+              <input name="dvalor_<%= l.id %>" value="<%= humano(l.desconto_tipo, l.desconto_valor) %>" placeholder="0" />
+              <select name="dtipo_<%= l.id %>">
+                <option value="" <%= !l.desconto_tipo ? 'selected' : '' %>>—</option>
+                <option value="pct" <%= l.desconto_tipo === 'pct' ? 'selected' : '' %>>%</option>
+                <option value="val" <%= l.desconto_tipo === 'val' ? 'selected' : '' %>>R$</option>
+              </select>
+            </div>
+          </td>
+          <td class="num">
+            <div><%= formatBRL(l.total_centavos) %></div>
+            <% if (l.desconto_centavos > 0) { %><div class="strike"><%= formatBRL(l.bruto_centavos) %></div><% } %>
+          </td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-top:16px">
+    <div>
+      <div class="section-title">Desconto no total da compra</div>
+      <div class="disc-cell">
+        <input name="total_valor" value="<%= humano(pedido.desconto_total_tipo, pedido.desconto_total_valor) %>" placeholder="0" />
+        <select name="total_tipo">
+          <option value="" <%= !pedido.desconto_total_tipo ? 'selected' : '' %>>—</option>
+          <option value="pct" <%= pedido.desconto_total_tipo === 'pct' ? 'selected' : '' %>>%</option>
+          <option value="val" <%= pedido.desconto_total_tipo === 'val' ? 'selected' : '' %>>R$</option>
+        </select>
+        <span class="dim" style="font-size:11.5px">sobre o subtotal</span>
+      </div>
+    </div>
+    <div style="min-width:280px;flex:1;max-width:360px">
+      <div class="totrow"><span class="muted">Subtotal (<%= pedido.total_etiquetas %> etiquetas)</span><span><%= formatBRL(pedido.subtotal_centavos) %></span></div>
+      <div class="totrow"><span class="muted">Descontos por item</span><span style="color:var(--gold)">– <%= formatBRL(pedido.desconto_itens_centavos) %></span></div>
+      <div class="totrow"><span class="muted">Desconto no total</span><span style="color:var(--gold)">– <%= formatBRL(pedido.desconto_total_centavos) %></span></div>
+      <div class="totrow big"><span>Total final</span><span><%= formatBRL(pedido.total_centavos) %></span></div>
+    </div>
+  </div>
+  <div style="margin-top:14px"><button class="btn" type="submit">Salvar desconto</button></div>
+</div>
+</form>
+
+<div class="card pad" style="margin-bottom:16px">
+  <div class="actions-inline">
+    <% if (expirado) { %>
+      <span class="doc-link off">Etiquetas expiradas</span>
+    <% } else { %>
+      <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/etiquetas">Etiquetas (térmico) <span class="badge <%= horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(horas)) %>h</span></a>
+    <% } %>
+    <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/comprovante">Relatório / comprovante</a>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="comm-box">
+    <div class="section-title">Representante e comissão</div>
+    <form method="post" action="/admin/pedido/<%= pedido.id %>/comissao">
+      <div class="field"><label>Representante deste pedido</label>
+        <select name="representante_id">
+          <option value="">— sem representante —</option>
+          <% reps.forEach(function (r) { %>
+            <option value="<%= r.id %>" <%= pedido.representante_id === r.id ? 'selected' : '' %>><%= r.nome %> (padrão <%= formatPercent(r.comissao_bps) %>)</option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="row-3">
+        <div class="field" style="margin:0"><label>Base</label><input value="<%= formatBRL(pedido.total_centavos) %>" disabled /></div>
+        <div class="field" style="margin:0"><label>%</label><input name="percent" placeholder="ex.: 5" value="<%= pedido.comissao_bps ? (pedido.comissao_bps/100) : '' %>" /></div>
+        <div class="field" style="margin:0"><label>Comissão</label><input value="<%= pedido.comissao_centavos ? formatBRL(pedido.comissao_centavos) : 'R$ 0,00' %>" disabled /></div>
+      </div>
+      <button class="btn" type="submit" style="margin-top:6px">Salvar comissão</button>
+    </form>
+    <div class="hint-box" style="margin-top:14px">Deixe a % em branco para usar a comissão padrão do representante. A comissão é sobre o total já com desconto.</div>
+  </div>
+
+  <div class="comm-box">
+    <div class="section-title">Funcionário (taxa por etiqueta)</div>
+    <table>
+      <tbody>
+        <tr><td>Etiquetas</td><td class="num"><%= pedido.total_etiquetas %></td></tr>
+        <% if (funcRef) { %>
+          <tr><td>Taxa por etiqueta (<%= funcRef.nome %>)</td><td class="num"><%= formatBRL(funcRef.taxa_etiqueta_centavos) %></td></tr>
+          <tr><td><b>Taxa do funcionário</b></td><td class="num"><b><%= formatBRL(taxaFuncCentavos) %></b></td></tr>
+        <% } else { %>
+          <tr><td colspan="2" class="dim" style="font-size:12px">O valor de cada funcionário aparece na área dele. Aqui só aparece quando há um único funcionário ativo.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+
+    <div class="section-title" style="margin-top:18px">Andamento</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <% if (pedido.status === 'aguardando') { %>
+        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="preparar" /><button class="btn ghost" type="submit">Iniciar preparação</button></form>
+        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="despachar" /><button class="btn" type="submit">Marcar despachado</button></form>
+      <% } else if (pedido.status === 'preparando') { %>
+        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="despachar" /><button class="btn" type="submit">Marcar despachado</button></form>
+      <% } else { %>
+        <span class="badge ok" style="align-self:center">Despachado <%= formatDateTime(pedido.despachado_em) %></span>
+        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="reabrir" /><button class="btn ghost" type="submit">Reabrir</button></form>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:18px"><a class="btn ghost" href="/admin/pedidos">Voltar aos pedidos</a></div>
+
+<%- include('../partials/app-close') %>

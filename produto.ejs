@@ -1,0 +1,54 @@
+<%- include('../partials/app-open', { titulo: 'Produto', ativo: 'produtos' }) %>
+
+<h2 class="title">Editar produto</h2>
+<p class="sub">Ajuste o preço padrão e o estoque de cada cor. O estoque é usado na baixa automática dos pedidos.</p>
+
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Dados do produto</div>
+    <form method="post" action="/admin/produto/<%= produto.id %>">
+      <div class="field"><label>Nome do produto</label><input name="nome" value="<%= produto.nome %>" /></div>
+      <div class="field"><label>Preço padrão (R$)</label><input name="preco" value="<%= (produto.preco_padrao_centavos/100).toFixed(2).replace('.', ',') %>" /></div>
+      <div class="field"><label>Descrição (opcional)</label><input name="descricao" value="<%= produto.descricao || '' %>" /></div>
+      <button class="btn" type="submit">Salvar dados</button>
+    </form>
+    <div class="divider"></div>
+    <form method="post" action="/admin/produtos/<%= produto.id %>/toggle" style="margin:0">
+      <button class="btn ghost sm" type="submit"><%= produto.ativo ? 'Desativar produto' : 'Ativar produto' %></button>
+    </form>
+  </div>
+
+  <div class="card pad">
+    <div class="section-title">Cores e estoque</div>
+    <% if (cores.length === 0) { %><div class="empty">Nenhuma cor cadastrada.</div><% } else { %>
+    <table>
+      <thead><tr><th>Cor</th><th class="num">Estoque</th><th></th></tr></thead>
+      <tbody>
+        <% cores.forEach(function (c) { %>
+          <tr>
+            <td><%= c.nome %></td>
+            <td class="num" style="width:150px">
+              <form method="post" action="/admin/cor/<%= c.id %>/estoque" style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin:0">
+                <input name="estoque" value="<%= c.estoque %>" inputmode="numeric" style="width:80px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:7px;padding:8px;color:var(--text);text-align:right;font-family:inherit" />
+                <button class="btn sm" type="submit">Salvar</button>
+              </form>
+            </td>
+            <td><form method="post" action="/admin/cor/<%= c.id %>/remove" style="margin:0"><button class="btn ghost sm" type="submit">Remover</button></form></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <% } %>
+
+    <div class="section-title" style="margin-top:18px">Adicionar cor</div>
+    <form method="post" action="/admin/produto/<%= produto.id %>/cor" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="margin:0;flex:1;min-width:160px"><label>Cor</label><input name="cor_nome" placeholder="ex.: Amadeirado" /></div>
+      <div class="field" style="margin:0;width:110px"><label>Estoque</label><input name="cor_estoque" placeholder="0" inputmode="numeric" /></div>
+      <button class="btn" type="submit">Adicionar</button>
+    </form>
+  </div>
+</div>
+
+<div style="margin-top:18px"><a class="btn ghost" href="/admin/produtos">Voltar aos produtos</a></div>
+
+<%- include('../partials/app-close') %>

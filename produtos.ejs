@@ -1,0 +1,62 @@
+<%- include('../partials/app-open', { titulo: 'Produtos', ativo: 'produtos' }) %>
+
+<h2 class="title">Produtos</h2>
+<p class="sub">Cada produto tem preço padrão (igual para todos) e uma lista de cores com estoque. O estoque baixa sozinho quando um pedido é aceito para aquela cor.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Novo produto</div>
+    <form method="post" action="/admin/produtos">
+      <div class="field"><label>Nome do produto</label><input name="nome" placeholder="Penteadeira Dulce" /></div>
+      <div class="field"><label>Preço padrão (R$)</label><input name="preco" placeholder="250,00" /></div>
+      <div class="field"><label>Descrição (opcional)</label><input name="descricao" placeholder="Penteadeira com espelho e gavetas" /></div>
+
+      <div class="section-title" style="margin-top:4px">Cores e estoque</div>
+      <div class="cor-lbl"><span>Cor</span><span>Estoque</span><span></span></div>
+      <div id="cores">
+        <div class="cor-row"><input name="cor_nome" placeholder="ex.: Branco" /><input name="cor_estoque" placeholder="0" inputmode="numeric" /><button class="cor-del" type="button">&times;</button></div>
+      </div>
+      <button class="add-cor" type="button" id="addCor">+ Adicionar cor</button>
+
+      <button class="btn block" type="submit">Salvar produto</button>
+    </form>
+  </div>
+
+  <div class="card pad">
+    <div class="section-title">Catálogo</div>
+    <% if (produtos.length === 0) { %><div class="empty">Nenhum produto ainda.</div><% } else { %>
+    <table>
+      <thead><tr><th>Produto</th><th class="num">Preço</th><th>Cores / estoque</th><th></th></tr></thead>
+      <tbody>
+        <% produtos.forEach(function (p) { %>
+          <tr>
+            <td><a class="link-row" href="/admin/produto/<%= p.id %>"><b><%= p.nome %></b></a><% if (!p.ativo) { %> <span class="badge neutral">Inativo</span><% } %></td>
+            <td class="num"><%= formatBRL(p.preco_padrao_centavos) %></td>
+            <td>
+              <% if (p.cores.length === 0) { %><span class="dim">sem cores</span><% } %>
+              <% p.cores.forEach(function (c) { %>
+                <span class="badge <%= c.estoque > 0 ? 'stock' : 'zero' %>"><%= c.nome %>: <%= c.estoque > 0 ? c.estoque : 'esgotado' %></span>
+              <% }); %>
+            </td>
+            <td><a class="btn ghost sm" href="/admin/produto/<%= p.id %>">Editar</a></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <% } %>
+  </div>
+</div>
+
+<script>
+  var cores = document.getElementById('cores');
+  document.getElementById('addCor').addEventListener('click', function () {
+    var r = document.createElement('div'); r.className = 'cor-row';
+    r.innerHTML = '<input name="cor_nome" placeholder="cor" /><input name="cor_estoque" placeholder="0" inputmode="numeric" /><button class="cor-del" type="button">&times;</button>';
+    cores.appendChild(r); r.querySelector('input').focus();
+  });
+  cores.addEventListener('click', function (e) { var b = e.target.closest('.cor-del'); if (b && cores.children.length > 1) b.parentElement.remove(); });
+</script>
+
+<%- include('../partials/app-close') %>

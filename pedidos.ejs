@@ -1,0 +1,42 @@
+<%- include('../partials/app-open', { titulo: 'Meus pedidos', ativo: 'rep' }) %>
+
+<h2 class="title">Meus pedidos e comissões</h2>
+<p class="sub">Só aparecem os pedidos em que você foi atribuído. Você vê a sua comissão e também a taxa do funcionário.</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="kl">Pedidos</div><div class="kv"><%= totais.pedidos %></div></div>
+  <div class="kpi"><div class="kl">Base (valor dos pedidos)</div><div class="kv"><%= formatBRL(totais.base) %></div></div>
+  <div class="kpi gold"><div class="kl">Comissão a receber</div><div class="kv"><%= formatBRL(totais.comissao) %></div></div>
+</div>
+
+<div class="card pad">
+  <% if (pedidos.length === 0) { %>
+    <div class="empty">Você ainda não tem pedidos atribuídos.</div>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Pedido</th><th>Cliente</th><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><th class="num">Taxa func.</th><th>Status</th></tr></thead>
+      <tbody>
+        <% pedidos.forEach(function (p) { %>
+          <tr>
+            <td><%= p.numero %></td>
+            <td><%= p.cliente_nome %></td>
+            <td><%= formatDateTime(p.aceite_em) %></td>
+            <td class="num"><%= formatBRL(p.total_centavos) %></td>
+            <td class="num"><%= p.comissao_bps ? formatPercent(p.comissao_bps) : '—' %></td>
+            <td class="num"><b><%= formatBRL(p.comissao_centavos || 0) %></b></td>
+            <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
+            <td>
+              <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
+              <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
+              <% } else { %><span class="badge warn">Aguardando</span><% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<% if (!temTaxaFunc) { %><div class="hint-box">A coluna "Taxa func." mostra o ganho do funcionário quando há um único funcionário ativo cadastrado.</div><% } %>
+
+<%- include('../partials/app-close') %>
