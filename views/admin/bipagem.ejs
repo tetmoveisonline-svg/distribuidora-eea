@@ -1,0 +1,165 @@
+<%- include('../partials/app-open', { titulo: 'Bipagem', ativo: 'bipagem' }) %>
+
+<h2 class="title">Bipagem</h2>
+<p class="sub">Selecione o pedido, bipe na separação e depois no despacho. O status do pedido é atualizado sozinho — não há botão manual.</p>
+
+<div class="card pad" style="margin-bottom:16px">
+  <div class="field" style="margin-bottom:0">
+    <label>Pedido</label>
+    <select id="pedidoSel">
+      <option value="">— escolha um pedido —</option>
+      <% pedidos.forEach(function (p) { %>
+        <option value="<%= p.id %>" <%= (selecionado === p.id) ? 'selected' : '' %>><%= p.numero %> · <%= p.cliente_nome %> · <%= p.total_etiquetas %> etiquetas</option>
+      <% }); %>
+    </select>
+    <% if (pedidos.length === 0) { %>
+      <div class="empty" style="margin-top:10px">Nenhum pedido em aberto para bipar.</div>
+    <% } %>
+  </div>
+</div>
+
+<div id="estacao" style="display:none">
+  <div class="card pad" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div><b id="pedNumero">—</b> <span class="dim" style="font-size:12px" id="pedResumo"></span></div>
+      <span class="badge neutral" id="pedStatus">—</span>
+    </div>
+
+    <div class="bip-modes">
+      <button type="button" class="bip-mode on" data-modo="separacao" id="btnSep">Separação</button>
+      <button type="button" class="bip-mode" data-modo="despacho" id="btnDesp">Despacho (caminhão)</button>
+    </div>
+    <div class="dim" style="font-size:12px;margin:10px 0 0" id="modoDica">Bipe cada etiqueta conforme imprime e passa para a expedição.</div>
+  </div>
+
+  <div class="card pad" style="margin-bottom:16px">
+    <div class="field" style="margin-bottom:12px">
+      <label>Bipe o código de barras da etiqueta</label>
+      <input id="scanInput" type="text" autocomplete="off" placeholder="Aponte o leitor e bipe (ou digite e Enter)" />
+    </div>
+    <div id="feedback" class="bip-feedback" style="display:none"></div>
+
+    <div class="bip-bar-wrap">
+      <div class="bip-bar-head"><span>Separação</span> <span id="sepCount">0/0</span></div>
+      <div class="bip-bar"><div class="bip-bar-fill sep" id="sepFill" style="width:0%"></div></div>
+    </div>
+    <div class="bip-bar-wrap" style="margin-top:14px">
+      <div class="bip-bar-head"><span>Despacho</span> <span id="despCount">0/0</span></div>
+      <div class="bip-bar"><div class="bip-bar-fill desp" id="despFill" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:6px"><a class="btn ghost" href="/admin/pedidos">Voltar aos pedidos</a></div>
+
+<style>
+  .bip-modes { display:flex; gap:8px; flex-wrap:wrap; }
+  .bip-mode { background:var(--field-bg); color:var(--text-muted); border:1px solid var(--field-border); border-radius:9px; padding:10px 16px; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; }
+  .bip-mode:hover { color:var(--text); }
+  .bip-mode.on { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
+  .bip-bar-wrap { margin-top:4px; }
+  .bip-bar-head { display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-muted); margin-bottom:6px; font-variant-numeric:tabular-nums; }
+  .bip-bar { height:12px; background:var(--field-bg); border:1px solid var(--field-border); border-radius:20px; overflow:hidden; }
+  .bip-bar-fill { height:100%; width:0; transition:width .2s ease; border-radius:20px; }
+  .bip-bar-fill.sep { background:var(--accent); }
+  .bip-bar-fill.desp { background:var(--ok); }
+  .bip-feedback { border-radius:9px; padding:10px 13px; font-size:13px; margin-bottom:16px; }
+  .bip-feedback.ok { background:var(--ok-soft); color:var(--ok); }
+  .bip-feedback.err { background:var(--danger-soft); color:var(--danger); }
+  .bip-feedback.info { background:var(--field-bg); color:var(--text-muted); border:1px solid var(--field-border); }
+</style>
+
+<script>
+(function () {
+  var sel = document.getElementById('pedidoSel');
+  var estacao = document.getElementById('estacao');
+  var scan = document.getElementById('scanInput');
+  var fb = document.getElementById('feedback');
+  var btnSep = document.getElementById('btnSep');
+  var btnDesp = document.getElementById('btnDesp');
+  var modoDica = document.getElementById('modoDica');
+  var modo = 'separacao';
+  var pedidoId = null;
+  var travado = false;
+
+  function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) : 0; }
+
+  function mostrarFeedback(tipo, msg) {
+    fb.className = 'bip-feedback ' + tipo;
+    fb.textContent = msg;
+    fb.style.display = 'block';
+  }
+  function limparFeedback() { fb.style.display = 'none'; fb.textContent = ''; }
+
+  function pintar(est) {
+    document.getElementById('pedNumero').textContent = est.numero;
+    document.getElementById('pedResumo').textContent = '· ' + est.total + ' etiquetas';
+    var badge = document.getElementById('pedStatus');
+    badge.textContent = est.rotulo;
+    badge.className = 'badge ' + (est.status === 'despachado' ? 'ok' : (est.status === 'aguardando' ? 'warn' : 'neutral'));
+    document.getElementById('sepCount').textContent = est.separados + '/' + est.total;
+    document.getElementById('despCount').textContent = est.despachados + '/' + est.total;
+    document.getElementById('sepFill').style.width = pct(est.separados, est.total) + '%';
+    document.getElementById('despFill').style.width = pct(est.despachados, est.total) + '%';
+  }
+
+  function aplicarModo() {
+    btnSep.classList.toggle('on', modo === 'separacao');
+    btnDesp.classList.toggle('on', modo === 'despacho');
+    modoDica.textContent = modo === 'separacao'
+      ? 'Bipe cada etiqueta conforme imprime e passa para a expedição.'
+      : 'Bipe as etiquetas no caminhão. Só libera após a separação estar concluída.';
+    limparFeedback();
+    focar();
+  }
+  function focar() { if (pedidoId) setTimeout(function () { scan.focus(); }, 30); }
+
+  function carregarPedido(id) {
+    pedidoId = id || null;
+    if (!pedidoId) { estacao.style.display = 'none'; return; }
+    fetch('/admin/bipagem/pedido/' + pedidoId)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { estacao.style.display = 'none'; alert(d.erro || 'Falha ao carregar.'); return; }
+        estacao.style.display = 'block';
+        limparFeedback();
+        pintar(d.estado);
+        focar();
+      })
+      .catch(function () { alert('Falha de conexão ao carregar o pedido.'); });
+  }
+
+  function enviarScan(codigo) {
+    if (travado || !pedidoId) return;
+    travado = true;
+    fetch('/admin/bipagem/scan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pedidoId: pedidoId, modo: modo, codigo: codigo })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, d: d }; }); })
+      .then(function (res) {
+        var d = res.d;
+        if (res.status >= 400 || d.erro) { mostrarFeedback('err', d.erro || 'Erro ao bipar.'); }
+        else if (d.jaCompleto) { mostrarFeedback('info', d.mensagem || 'Etapa já concluída.'); if (d.estado) pintar(d.estado); }
+        else { if (d.estado) pintar(d.estado); mostrarFeedback(d.aviso ? 'ok' : 'ok', d.aviso || ('Bipado: ' + codigo)); }
+      })
+      .catch(function () { mostrarFeedback('err', 'Falha de conexão.'); })
+      .finally(function () { travado = false; scan.value = ''; focar(); });
+  }
+
+  sel.addEventListener('change', function () { carregarPedido(parseInt(sel.value, 10)); });
+  btnSep.addEventListener('click', function () { modo = 'separacao'; aplicarModo(); });
+  btnDesp.addEventListener('click', function () { modo = 'despacho'; aplicarModo(); });
+  scan.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var v = scan.value.trim();
+      if (v) enviarScan(v);
+    }
+  });
+
+  if (sel.value) carregarPedido(parseInt(sel.value, 10));
+})();
+</script>
+
+<%- include('../partials/app-close') %>

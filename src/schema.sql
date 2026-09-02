@@ -74,16 +74,18 @@ CREATE TABLE IF NOT EXISTS pedidos (
   criado_em          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Status aceitos: aguardando -> preparando -> despachado.
+-- Status aceitos: aguardando -> separacao -> despachado.
+-- Mantemos 'preparando' na lista por compatibilidade com pedidos antigos (evita falha na constraint no boot).
 ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_status_check;
 ALTER TABLE pedidos ADD CONSTRAINT pedidos_status_check
-  CHECK (status IN ('aguardando','preparando','despachado'));
+  CHECK (status IN ('aguardando','preparando','separacao','despachado'));
 
 -- Comissao do representante (definida no pedido pelo admin).
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS representante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_bps INTEGER;          -- % aplicada neste pedido (pontos-base)
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_centavos INTEGER;     -- valor da comissao calculado
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS preparando_em TIMESTAMPTZ;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS separacao_em TIMESTAMPTZ;   -- quando a separacao (bipagem) foi concluida
 
 -- Arquivos de etiqueta enviados.
 CREATE TABLE IF NOT EXISTS arquivos (
@@ -120,6 +122,9 @@ CREATE TABLE IF NOT EXISTS etiquetas (
   conferido_em TIMESTAMPTZ,
   despachado_em TIMESTAMPTZ
 );
+
+-- Codigo de barras lido na bipagem (o codigo que cada plataforma imprime na etiqueta).
+ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS codigo_externo TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_itens_cliente ON itens(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_pedidos_cliente ON pedidos(cliente_id);

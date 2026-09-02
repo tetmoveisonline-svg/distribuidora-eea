@@ -27,7 +27,7 @@
             <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
             <td>
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
-              <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
+              <% } else if (p.status === 'separacao' || p.status === 'preparando') { %><span class="badge neutral">Em separação</span>
               <% } else { %><span class="badge warn">Aguardando</span><% } %>
             </td>
           </tr>

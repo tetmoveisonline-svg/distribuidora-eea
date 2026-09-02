@@ -66,17 +66,16 @@
     </table>
 
     <div class="section-title" style="margin-top:18px">Andamento</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <% if (pedido.status === 'aguardando') { %>
-        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="preparar" /><button class="btn ghost" type="submit">Iniciar preparação</button></form>
-        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="despachar" /><button class="btn" type="submit">Marcar despachado</button></form>
-      <% } else if (pedido.status === 'preparando') { %>
-        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="despachar" /><button class="btn" type="submit">Marcar despachado</button></form>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <% if (pedido.status === 'despachado') { %>
+        <span class="badge ok">Despachado<%= pedido.despachado_em ? ' · ' + formatDateTime(pedido.despachado_em) : '' %></span>
+      <% } else if (pedido.status === 'separacao' || pedido.status === 'preparando') { %>
+        <span class="badge neutral">Em separação</span>
       <% } else { %>
-        <span class="badge ok" style="align-self:center">Despachado <%= formatDateTime(pedido.despachado_em) %></span>
-        <form method="post" action="/admin/pedido/<%= pedido.id %>/status" style="margin:0"><input type="hidden" name="acao" value="reabrir" /><button class="btn ghost" type="submit">Reabrir</button></form>
+        <span class="badge warn">Aguardando separação</span>
       <% } %>
     </div>
+    <div class="hint-box" style="margin-top:12px">O despacho é automático: as etiquetas mudam de situação ao serem bipadas na separação e no caminhão. <a href="/admin/bipagem?pedido=<%= pedido.id %>">Abrir na Bipagem</a>.</div>
   </div>
 </div>
 

@@ -24,7 +24,7 @@
     <% } else { %>
       <div class="grp">Operação</div>
       <a class="nav-item <%= ativo === 'pedidos' ? 'on' : '' %>" href="/admin/pedidos"><span class="ico">&#9776;</span> Pedidos recebidos</a>
-      <span class="nav-item disabled"><span class="ico">&#8942;</span> Bipagem <span class="soon">em breve</span></span>
+      <a class="nav-item <%= ativo === 'bipagem' ? 'on' : '' %>" href="/admin/bipagem"><span class="ico">&#8942;</span> Bipagem</a>
       <div class="grp">Cadastros</div>
       <a class="nav-item <%= ativo === 'clientes' ? 'on' : '' %>" href="/admin/clientes"><span class="ico">&#9787;</span> Clientes</a>
       <a class="nav-item <%= ativo === 'reps' ? 'on' : '' %>" href="/admin/representantes"><span class="ico">&#9733;</span> Representantes</a>

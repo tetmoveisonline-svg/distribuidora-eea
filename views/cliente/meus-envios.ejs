@@ -11,7 +11,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap">
         <div><b><%= p.numero %></b> <span class="dim" style="font-size:12px">· <%= formatDateTime(p.aceite_em) %> · <%= p.total_etiquetas %> etiquetas · <%= formatBRL(p.total_centavos) %></span></div>
         <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
-        <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
+        <% } else if (p.status === 'separacao' || p.status === 'preparando') { %><span class="badge neutral">Em separação</span>
         <% } else { %><span class="badge warn">Aguardando despacho</span><% } %>
       </div>
 

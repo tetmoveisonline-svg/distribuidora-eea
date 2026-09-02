@@ -67,15 +67,20 @@ function comissaoCentavos(totalCentavos, bps) {
 }
 
 // Etapas do andamento do pedido (para a timeline).
+// Fluxo: Aceito -> Recebido -> Em separação -> Despachado.
+// 'preparando' e preparando_em sao tratados como legado (pedidos antigos) e mapeados para "Em separação".
 function andamento(pedido) {
   const st = pedido.status;
+  const despachado = st === 'despachado';
+  const emSeparacao = st === 'separacao' || st === 'preparando';
+  const sepData = pedido.separacao_em || pedido.preparando_em || null;
   return [
     { chave: 'aceito', label: 'Aceito', data: pedido.aceite_em, done: true },
     { chave: 'recebido', label: 'Recebido', data: pedido.criado_em, done: true },
-    { chave: 'preparando', label: 'Em preparação', data: pedido.preparando_em,
-      done: st === 'despachado', current: st === 'preparando' },
+    { chave: 'separacao', label: 'Em separação', data: sepData,
+      done: emSeparacao || despachado, current: emSeparacao && !despachado },
     { chave: 'despachado', label: 'Despachado', data: pedido.despachado_em,
-      done: st === 'despachado', current: false },
+      done: despachado, current: false },
   ];
 }
 

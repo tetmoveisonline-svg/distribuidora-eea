@@ -46,6 +46,7 @@ app.use((req, res, next) => {
 const authRoutes = require('./routes/auth');
 app.use('/', authRoutes);
 app.use('/', require('./routes/cliente'));
+app.use('/admin/bipagem', require('./routes/bipagem'));
 app.use('/admin', require('./routes/admin'));
 app.use('/rep', require('./routes/rep'));
 app.use('/func', require('./routes/func'));
