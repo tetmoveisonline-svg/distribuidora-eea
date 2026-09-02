@@ -25,6 +25,8 @@
     <% } %>
     <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/comprovante">Relatório / comprovante</a>
   </div>
+
+  <%- include('../partials/etiquetas-detalhe', { pid: pedido.id, etqs: etiquetas, desp: etqDespachadas, tot: etqTotal, admin: true, formatDateTime: formatDateTime }) %>
 </div>
 
 <div class="grid2">

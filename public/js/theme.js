@@ -12,3 +12,11 @@
     });
   }
 })();
+
+// Abre/fecha o detalhe por etiqueta (bipe de despacho). Delegado: funciona para varios blocos na pagina.
+document.addEventListener('click', function (ev) {
+  var h = ev.target.closest ? ev.target.closest('.disc-head') : null;
+  if (h && h.parentElement && h.parentElement.classList.contains('disc')) {
+    h.parentElement.classList.toggle('open');
+  }
+});

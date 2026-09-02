@@ -57,10 +57,17 @@ router.get('/pedido/:id', async (req, res, next) => {
     const linhas = await db.query('SELECT * FROM linhas WHERE pedido_id = $1 ORDER BY id', [pedido.id]);
     const reps = await db.query("SELECT id, nome, comissao_bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE ORDER BY nome");
     const fr = await funcRef();
+    const etqs = await db.query(
+      `SELECT e.indice, e.codigo, e.codigo_externo, e.status, e.despachado_em, l.item_nome
+       FROM etiquetas e LEFT JOIN linhas l ON l.id = e.linha_id
+       WHERE e.pedido_id = $1 ORDER BY e.indice`, [pedido.id]
+    );
+    const etqDespachadas = etqs.rows.filter((e) => e.status === 'despachado').length;
     res.render('admin/pedido', {
       pedido, linhas: linhas.rows, reps: reps.rows, funcRef: fr,
       taxaFuncCentavos: fr ? fr.taxa_etiqueta_centavos * pedido.total_etiquetas : null,
       passos: andamentoDisplay(pedido),
+      etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
       expirado: etiquetasExpiradas(pedido.etiquetas_expira_em), horas: horasRestantes(pedido.etiquetas_expira_em),
       formatBRL, formatDateTime, formatPercent,
     });

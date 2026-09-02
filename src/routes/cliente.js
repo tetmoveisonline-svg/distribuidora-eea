@@ -143,6 +143,28 @@ router.get('/meus-envios', exigeCliente, async (req, res, next) => {
        FROM pedidos WHERE cliente_id = $1 ORDER BY id DESC`, [req.session.user.clienteId]
     );
     const pedidos = r.rows.map((p) => ({ ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em), passos: andamentoDisplay(p) }));
+
+    // Detalhe por etiqueta (horario do bipe de despacho) de todos os pedidos, numa unica consulta.
+    const ids = pedidos.map((p) => p.id);
+    const etqMap = new Map();
+    if (ids.length > 0) {
+      const er = await db.query(
+        `SELECT e.pedido_id, e.indice, e.status, e.despachado_em, l.item_nome
+         FROM etiquetas e LEFT JOIN linhas l ON l.id = e.linha_id
+         WHERE e.pedido_id = ANY($1::int[]) ORDER BY e.pedido_id, e.indice`, [ids]
+      );
+      for (const row of er.rows) {
+        if (!etqMap.has(row.pedido_id)) etqMap.set(row.pedido_id, []);
+        etqMap.get(row.pedido_id).push(row);
+      }
+    }
+    pedidos.forEach((p) => {
+      const arr = etqMap.get(p.id) || [];
+      p.etiquetas = arr;
+      p.etqDespachadas = arr.filter((e) => e.status === 'despachado').length;
+      p.etqTotal = arr.length;
+    });
+
     res.render('cliente/meus-envios', { pedidos, formatBRL, formatDateTime });
   } catch (e) { next(e); }
 });

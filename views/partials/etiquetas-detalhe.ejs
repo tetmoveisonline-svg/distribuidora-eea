@@ -1,0 +1,63 @@
+<%
+  // Parametros esperados:
+  //   pid   -> id do pedido (para id unico do bloco)
+  //   etqs  -> array de etiquetas { indice, codigo_externo, item_nome, status, despachado_em }
+  //   desp  -> quantas ja foram despachadas
+  //   tot   -> total de etiquetas
+  //   admin -> true mostra a coluna "Código lido"
+  //   formatDateTime -> helper de data/hora
+  var _pct = (tot > 0) ? Math.round((desp / tot) * 100) : 0;
+  var _pend = Math.max(0, tot - desp);
+%>
+<div class="disc" id="disc-<%= pid %>">
+  <div class="disc-head">
+    <div class="left"><span class="chev">&#9656;</span> Etiquetas e horário do bipe</div>
+    <% if (tot > 0 && desp >= tot) { %>
+      <span class="badge ok">Despacho completo: <%= desp %> de <%= tot %></span>
+    <% } else if (desp > 0) { %>
+      <span class="badge warn">Despacho parcial: <%= desp %> de <%= tot %></span>
+    <% } else { %>
+      <span class="badge neutral">Nenhuma despachada ainda</span>
+    <% } %>
+  </div>
+  <div class="disc-body">
+    <div class="partial">
+      <div class="pbar"><div class="pfill" style="width:<%= _pct %>%"></div></div>
+      <span class="pcount"><b style="color:var(--text)"><%= desp %></b> despachadas · <%= _pend %> pendentes</span>
+    </div>
+    <% if (tot === 0) { %>
+      <div class="empty">Este pedido ainda não tem etiquetas geradas.</div>
+    <% } else { %>
+      <div style="overflow-x:auto">
+        <table class="etq-table">
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <% if (admin) { %><th>Código lido</th><% } %>
+              <th>Produto</th>
+              <th>Situação</th>
+              <th>Bipe do despacho</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% etqs.forEach(function (e) { %>
+              <tr>
+                <td class="num"><%= e.indice %></td>
+                <% if (admin) { %><td class="mono"><%= e.codigo_externo ? e.codigo_externo : '—' %></td><% } %>
+                <td><%= e.item_nome ? e.item_nome : '—' %></td>
+                <td>
+                  <% if (e.status === 'despachado') { %>
+                    <span class="dot-ok">&#10003; Despachada</span>
+                  <% } else { %>
+                    <span class="dot-wait">&#9679; Aguardando</span>
+                  <% } %>
+                </td>
+                <td class="hora"><%= (e.status === 'despachado' && e.despachado_em) ? formatDateTime(e.despachado_em) : '—' %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>

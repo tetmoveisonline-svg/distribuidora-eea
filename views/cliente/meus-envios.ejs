@@ -25,6 +25,8 @@
         <% } %>
         <a class="doc-link" href="/pedido/<%= p.id %>/comprovante">Comprovante</a>
       </div>
+
+      <%- include('../partials/etiquetas-detalhe', { pid: p.id, etqs: p.etiquetas, desp: p.etqDespachadas, tot: p.etqTotal, admin: false, formatDateTime: formatDateTime }) %>
     </div>
   <% }); %>
 <% } %>
