@@ -1,164 +1,215 @@
 <%- include('../partials/app-open', { titulo: 'Bipagem', ativo: 'bipagem' }) %>
 
 <h2 class="title">Bipagem</h2>
-<p class="sub">Selecione o pedido, bipe na separação e depois no despacho. O status do pedido é atualizado sozinho — não há botão manual.</p>
+<p class="sub">Escolha o cliente e bipe as etiquetas dele (de todos os pedidos juntos). O sistema descobre de qual pedido é cada etiqueta pelo código. Sem escolher pedido.</p>
 
 <div class="card pad" style="margin-bottom:16px">
   <div class="field" style="margin-bottom:0">
-    <label>Pedido</label>
-    <select id="pedidoSel">
-      <option value="">— escolha um pedido —</option>
-      <% pedidos.forEach(function (p) { %>
-        <option value="<%= p.id %>" <%= (selecionado === p.id) ? 'selected' : '' %>><%= p.numero %> · <%= p.cliente_nome %> · <%= p.total_etiquetas %> etiquetas</option>
+    <label>Cliente</label>
+    <select id="cliSel">
+      <option value="">— escolha um cliente —</option>
+      <% clientes.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= (selecionado === c.id) ? 'selected' : '' %>><%= c.nome %> · <%= c.abertas %> etiquetas em aberto</option>
       <% }); %>
     </select>
-    <% if (pedidos.length === 0) { %>
-      <div class="empty" style="margin-top:10px">Nenhum pedido em aberto para bipar.</div>
+    <% if (clientes.length === 0) { %>
+      <div class="empty" style="margin-top:10px">Nenhum cliente com etiquetas em aberto.</div>
     <% } %>
   </div>
 </div>
 
 <div id="estacao" style="display:none">
   <div class="card pad" style="margin-bottom:16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-      <div><b id="pedNumero">—</b> <span class="dim" style="font-size:12px" id="pedResumo"></span></div>
-      <span class="badge neutral" id="pedStatus">—</span>
-    </div>
-
     <div class="bip-modes">
       <button type="button" class="bip-mode on" data-modo="separacao" id="btnSep">Separação</button>
       <button type="button" class="bip-mode" data-modo="despacho" id="btnDesp">Despacho (caminhão)</button>
     </div>
-    <div class="dim" style="font-size:12px;margin:10px 0 0" id="modoDica">Bipe cada etiqueta conforme imprime e passa para a expedição.</div>
-  </div>
-
-  <div class="card pad" style="margin-bottom:16px">
-    <div class="field" style="margin-bottom:12px">
-      <label>Bipe o código de barras da etiqueta</label>
-      <input id="scanInput" type="text" autocomplete="off" placeholder="Aponte o leitor e bipe (ou digite e Enter)" />
+    <div class="field" style="margin:14px 0 0">
+      <label id="scanLbl">Bipe o código de barras da etiqueta (separação)</label>
+      <input id="scanInput" type="text" autocomplete="off" placeholder="Aponte o leitor e bipe (ou digite e Enter)" style="font-family:var(--mono)" />
     </div>
     <div id="feedback" class="bip-feedback" style="display:none"></div>
+  </div>
 
-    <div class="bip-bar-wrap">
-      <div class="bip-bar-head"><span>Separação</span> <span id="sepCount">0/0</span></div>
-      <div class="bip-bar"><div class="bip-bar-fill sep" id="sepFill" style="width:0%"></div></div>
+  <div class="kpis3">
+    <div class="kpi3"><div class="n" id="kSep">0/0</div><div class="l">Separadas</div></div>
+    <div class="kpi3"><div class="n" id="kDesp">0/0</div><div class="l">Despachadas</div></div>
+    <div class="kpi3"><div class="n" id="kPed">0</div><div class="l">Pedidos do cliente</div></div>
+  </div>
+  <div class="bip-bar" style="margin-top:12px"><div class="bip-bar-fill" id="pfill" style="width:0%"></div></div>
+
+  <div class="card pad" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px;flex-wrap:wrap">
+      <b id="cliNome">—</b>
+      <span class="dim" style="font-size:12px" id="cliSub"></span>
     </div>
-    <div class="bip-bar-wrap" style="margin-top:14px">
-      <div class="bip-bar-head"><span>Despacho</span> <span id="despCount">0/0</span></div>
-      <div class="bip-bar"><div class="bip-bar-fill desp" id="despFill" style="width:0%"></div></div>
+    <div id="grupos"></div>
+
+    <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+      <button type="button" class="btn" id="btnFinalizar">Finalizar / atualizar para o cliente</button>
+      <a class="btn ghost" href="/admin/bipagem">Trocar de cliente</a>
     </div>
+  </div>
+
+  <div class="hint-box" style="margin-top:16px">
+    Ao bipar a primeira etiqueta de um pedido, o cliente já vê “Em separação”. Quando todas as etiquetas de um pedido são despachadas, ele vira “Despachado” sozinho.
+    <b>Finalizar / atualizar</b> confirma o parcial agora e deixa o pedido aberto para despachar o resto depois.
   </div>
 </div>
 
-<div style="margin-top:6px"><a class="btn ghost" href="/admin/pedidos">Voltar aos pedidos</a></div>
+<div style="margin-top:16px"><a class="btn ghost" href="/admin/pedidos">Voltar aos pedidos</a></div>
 
 <style>
   .bip-modes { display:flex; gap:8px; flex-wrap:wrap; }
-  .bip-mode { background:var(--field-bg); color:var(--text-muted); border:1px solid var(--field-border); border-radius:9px; padding:10px 16px; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; }
+  .bip-mode { background:var(--field-bg); color:var(--text-muted); border:1px solid var(--field-border); border-radius:9px; padding:10px 18px; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; }
   .bip-mode:hover { color:var(--text); }
   .bip-mode.on { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
-  .bip-bar-wrap { margin-top:4px; }
-  .bip-bar-head { display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-muted); margin-bottom:6px; font-variant-numeric:tabular-nums; }
   .bip-bar { height:12px; background:var(--field-bg); border:1px solid var(--field-border); border-radius:20px; overflow:hidden; }
-  .bip-bar-fill { height:100%; width:0; transition:width .2s ease; border-radius:20px; }
-  .bip-bar-fill.sep { background:var(--accent); }
-  .bip-bar-fill.desp { background:var(--ok); }
-  .bip-feedback { border-radius:9px; padding:10px 13px; font-size:13px; margin-bottom:16px; }
+  .bip-bar-fill { height:100%; width:0; background:var(--accent); transition:width .2s ease; border-radius:20px; }
+  .bip-feedback { border-radius:9px; padding:10px 13px; font-size:13px; margin-top:12px; }
   .bip-feedback.ok { background:var(--ok-soft); color:var(--ok); }
   .bip-feedback.err { background:var(--danger-soft); color:var(--danger); }
   .bip-feedback.info { background:var(--field-bg); color:var(--text-muted); border:1px solid var(--field-border); }
+  .kpis3 { display:flex; gap:12px; flex-wrap:wrap; }
+  .kpi3 { flex:1; min-width:140px; background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:13px 16px; }
+  .kpi3 .n { font-size:21px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .kpi3 .l { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+  .grp { margin-top:14px; }
+  .grp-h { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; flex-wrap:wrap; }
+  .grp-h .gl { font-weight:600; font-size:13.5px; }
+  .grp-h .gl .tag { display:inline-block; font-size:11px; padding:2px 8px; border-radius:6px; background:var(--field-bg); border:1px solid var(--field-border); color:var(--text-muted); font-weight:600; margin-right:8px; }
+  .etqt { width:100%; border-collapse:collapse; }
+  .etqt th, .etqt td { text-align:left; padding:8px 10px; font-size:12.5px; border-bottom:1px solid var(--border); }
+  .etqt th { color:var(--text-dim); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.4px; }
+  .etqt td.num, .etqt th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .dot-ok { color:var(--ok); } .dot-wait { color:var(--warn); }
+  .mini { font-size:11.5px; padding:5px 9px; border-radius:7px; border:1px solid var(--border-strong); background:var(--field-bg); color:var(--text); cursor:pointer; font-family:inherit; }
+  .mini:hover { border-color:var(--accent); }
 </style>
 
 <script>
 (function () {
-  var sel = document.getElementById('pedidoSel');
+  var sel = document.getElementById('cliSel');
   var estacao = document.getElementById('estacao');
   var scan = document.getElementById('scanInput');
   var fb = document.getElementById('feedback');
   var btnSep = document.getElementById('btnSep');
   var btnDesp = document.getElementById('btnDesp');
-  var modoDica = document.getElementById('modoDica');
   var modo = 'separacao';
-  var pedidoId = null;
+  var clienteId = null;
   var travado = false;
 
   function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) : 0; }
-
-  function mostrarFeedback(tipo, msg) {
-    fb.className = 'bip-feedback ' + tipo;
-    fb.textContent = msg;
-    fb.style.display = 'block';
-  }
-  function limparFeedback() { fb.style.display = 'none'; fb.textContent = ''; }
-
-  function pintar(est) {
-    document.getElementById('pedNumero').textContent = est.numero;
-    document.getElementById('pedResumo').textContent = '· ' + est.total + ' etiquetas';
-    var badge = document.getElementById('pedStatus');
-    badge.textContent = est.rotulo;
-    badge.className = 'badge ' + (est.status === 'despachado' ? 'ok' : (est.status === 'aguardando' ? 'warn' : 'neutral'));
-    document.getElementById('sepCount').textContent = est.separados + '/' + est.total;
-    document.getElementById('despCount').textContent = est.despachados + '/' + est.total;
-    document.getElementById('sepFill').style.width = pct(est.separados, est.total) + '%';
-    document.getElementById('despFill').style.width = pct(est.despachados, est.total) + '%';
-  }
+  function fbShow(t, m) { fb.className = 'bip-feedback ' + t; fb.textContent = m; fb.style.display = 'block'; }
+  function fbClear() { fb.style.display = 'none'; fb.textContent = ''; }
+  function focar() { if (clienteId) setTimeout(function () { scan.focus(); }, 30); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
 
   function aplicarModo() {
     btnSep.classList.toggle('on', modo === 'separacao');
     btnDesp.classList.toggle('on', modo === 'despacho');
-    modoDica.textContent = modo === 'separacao'
-      ? 'Bipe cada etiqueta conforme imprime e passa para a expedição.'
-      : 'Bipe as etiquetas no caminhão. Só libera após a separação estar concluída.';
-    limparFeedback();
-    focar();
+    document.getElementById('scanLbl').textContent = 'Bipe o código de barras da etiqueta (' + (modo === 'separacao' ? 'separação' : 'despacho') + ')';
+    fbClear(); if (estadoAtual) pintar(estadoAtual); focar();
   }
-  function focar() { if (pedidoId) setTimeout(function () { scan.focus(); }, 30); }
 
-  function carregarPedido(id) {
-    pedidoId = id || null;
-    if (!pedidoId) { estacao.style.display = 'none'; return; }
-    fetch('/admin/bipagem/pedido/' + pedidoId)
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (!d.ok) { estacao.style.display = 'none'; alert(d.erro || 'Falha ao carregar.'); return; }
-        estacao.style.display = 'block';
-        limparFeedback();
-        pintar(d.estado);
-        focar();
-      })
-      .catch(function () { alert('Falha de conexão ao carregar o pedido.'); });
+  var estadoAtual = null;
+  function pintar(est) {
+    estadoAtual = est;
+    document.getElementById('cliNome').textContent = est.nome;
+    document.getElementById('cliSub').textContent = est.total + ' etiquetas · ' + est.pedidos.length + ' pedido(s) em aberto';
+    document.getElementById('kSep').textContent = est.separadas + '/' + est.total;
+    document.getElementById('kDesp').textContent = est.despachadas + '/' + est.total;
+    document.getElementById('kPed').textContent = est.pedidos.length;
+    var val = modo === 'separacao' ? est.separadas : est.despachadas;
+    var pf = document.getElementById('pfill');
+    pf.style.width = pct(val, est.total) + '%';
+    pf.style.background = modo === 'separacao' ? 'var(--accent)' : 'var(--ok)';
+
+    var html = '';
+    est.pedidos.forEach(function (p) {
+      var badge;
+      if (p.despachadas >= p.total) badge = '<span class="badge ok">Despachado</span>';
+      else if (p.despachadas > 0) badge = '<span class="badge warn">Despacho ' + p.despachadas + '/' + p.total + '</span>';
+      else if (p.separadas >= p.total) badge = '<span class="badge neutral">Em separação</span>';
+      else if (p.separadas > 0) badge = '<span class="badge warn">Separação ' + p.separadas + '/' + p.total + '</span>';
+      else badge = '<span class="badge neutral">Aguardando</span>';
+      html += '<div class="grp"><div class="grp-h"><div class="gl"><span class="tag">' + esc(p.numero) + '</span></div>' + badge + '</div>';
+      html += '<div style="overflow-x:auto"><table class="etqt"><thead><tr><th class="num">#</th><th>Produto</th><th>Separação</th><th>Despacho</th></tr></thead><tbody>';
+      p.etiquetas.forEach(function (e) {
+        var sp = (e.status === 'conferido' || e.status === 'despachado') ? '<span class="dot-ok">&#10003; Separada</span>' : '<span class="dot-wait">&#9679; —</span>';
+        var dp = (e.status === 'despachado') ? ('<span class="dot-ok">&#10003; ' + (e.despachado_em || 'Despachada') + '</span>') : '<span class="dim">—</span>';
+        // etiqueta sem codigo: oferece marcar manual
+        if (!e.temCodigo) {
+          if (modo === 'separacao' && e.status === 'pendente') sp = '<button class="mini" data-marcar="' + e.id + '" data-modo="separacao">marcar separada</button>';
+          else if (modo === 'despacho' && e.status === 'conferido') dp = '<button class="mini" data-marcar="' + e.id + '" data-modo="despacho">marcar despachada</button>';
+        }
+        html += '<tr><td class="num">' + e.indice + '</td><td>' + esc(e.item_nome) + (e.temCodigo ? '' : ' <span class="dim" style="font-size:11px">(sem código)</span>') + '</td><td>' + sp + '</td><td>' + dp + '</td></tr>';
+      });
+      html += '</tbody></table></div></div>';
+    });
+    if (est.pedidos.length === 0) html = '<div class="empty">Nada em aberto para este cliente.</div>';
+    document.getElementById('grupos').innerHTML = html;
+
+    document.querySelectorAll('[data-marcar]').forEach(function (b) {
+      b.addEventListener('click', function () { marcar(parseInt(b.getAttribute('data-marcar'), 10), b.getAttribute('data-modo')); });
+    });
+  }
+
+  function carregar(id) {
+    clienteId = id || null;
+    if (!clienteId) { estacao.style.display = 'none'; return; }
+    fetch('/admin/bipagem/cliente/' + clienteId).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) { estacao.style.display = 'none'; alert(d.erro || 'Falha ao carregar.'); return; }
+      estacao.style.display = 'block'; fbClear(); pintar(d.estado); focar();
+    }).catch(function () { alert('Falha de conexão ao carregar o cliente.'); });
   }
 
   function enviarScan(codigo) {
-    if (travado || !pedidoId) return;
+    if (travado || !clienteId) return;
     travado = true;
-    fetch('/admin/bipagem/scan', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pedidoId: pedidoId, modo: modo, codigo: codigo })
-    })
+    fetch('/admin/bipagem/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clienteId: clienteId, modo: modo, codigo: codigo }) })
       .then(function (r) { return r.json().then(function (d) { return { status: r.status, d: d }; }); })
       .then(function (res) {
         var d = res.d;
-        if (res.status >= 400 || d.erro) { mostrarFeedback('err', d.erro || 'Erro ao bipar.'); }
-        else if (d.jaCompleto) { mostrarFeedback('info', d.mensagem || 'Etapa já concluída.'); if (d.estado) pintar(d.estado); }
-        else { if (d.estado) pintar(d.estado); mostrarFeedback(d.aviso ? 'ok' : 'ok', d.aviso || ('Bipado: ' + codigo)); }
+        if (d.estado) pintar(d.estado);
+        if (res.status >= 400 || d.erro) fbShow('err', d.erro || 'Erro ao bipar.');
+        else fbShow('ok', d.aviso || ('Bipado: ' + codigo));
       })
-      .catch(function () { mostrarFeedback('err', 'Falha de conexão.'); })
+      .catch(function () { fbShow('err', 'Falha de conexão.'); })
       .finally(function () { travado = false; scan.value = ''; focar(); });
   }
 
-  sel.addEventListener('change', function () { carregarPedido(parseInt(sel.value, 10)); });
+  function marcar(etqId, m) {
+    if (travado || !clienteId) return;
+    travado = true;
+    fetch('/admin/bipagem/marcar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clienteId: clienteId, etiquetaId: etqId, modo: m }) })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, d: d }; }); })
+      .then(function (res) {
+        var d = res.d;
+        if (d.estado) pintar(d.estado);
+        if (res.status >= 400 || d.erro) fbShow('err', d.erro || 'Erro ao marcar.');
+        else fbShow('ok', d.aviso || 'Marcada.');
+      })
+      .catch(function () { fbShow('err', 'Falha de conexão.'); })
+      .finally(function () { travado = false; focar(); });
+  }
+
+  function finalizar() {
+    if (!clienteId) return;
+    fetch('/admin/bipagem/finalizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clienteId: clienteId }) })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d.estado) pintar(d.estado);
+        if (d.erro) fbShow('err', d.erro); else fbShow('info', d.mensagem || 'Status atualizado para o cliente.');
+      }).catch(function () { fbShow('err', 'Falha de conexão.'); });
+  }
+
+  sel.addEventListener('change', function () { carregar(parseInt(sel.value, 10)); });
   btnSep.addEventListener('click', function () { modo = 'separacao'; aplicarModo(); });
   btnDesp.addEventListener('click', function () { modo = 'despacho'; aplicarModo(); });
-  scan.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      var v = scan.value.trim();
-      if (v) enviarScan(v);
-    }
-  });
+  scan.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var v = scan.value.trim(); if (v) enviarScan(v); } });
+  document.getElementById('btnFinalizar').addEventListener('click', finalizar);
 
-  if (sel.value) carregarPedido(parseInt(sel.value, 10));
+  if (sel.value) carregar(parseInt(sel.value, 10));
 })();
 </script>
 

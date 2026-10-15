@@ -24,26 +24,62 @@
     if (!txt) { uploadMsg.style.display = 'none'; return; }
     uploadMsg.textContent = txt; uploadMsg.style.display = 'block';
   }
+  var lendoMsg = document.getElementById('lendoMsg');
+  function showLendo(txt) {
+    if (!lendoMsg) return;
+    if (!txt) { lendoMsg.style.display = 'none'; return; }
+    lendoMsg.textContent = txt; lendoMsg.style.display = 'block';
+  }
+
+  // Le os codigos das etiquetas (BR... e chave da nota) de cada PDF, no navegador.
+  // Retorna um array alinhado a fileList: cada item e um array de {br,nfe} por pagina.
+  // Se o leitor nao estiver disponivel ou falhar, devolve null para aquele arquivo (o upload segue).
+  function lerCodigos(fileList) {
+    var leitor = window.LeitorEtiquetas;
+    if (!leitor || typeof leitor.lerArquivo !== 'function') {
+      return Promise.resolve(fileList.length ? new Array(fileList.length).fill(null) : []);
+    }
+    var files = Array.prototype.slice.call(fileList);
+    var out = [];
+    var total = files.length;
+    function um(idx) {
+      if (idx >= files.length) { showLendo(''); return Promise.resolve(out); }
+      var f = files[idx];
+      showLendo('Lendo os códigos das etiquetas... arquivo ' + (idx + 1) + ' de ' + total);
+      return leitor.lerArquivo(f, function (pag, tot) {
+        showLendo('Lendo os códigos das etiquetas... arquivo ' + (idx + 1) + ' de ' + total + ' (página ' + pag + '/' + tot + ')');
+      }).then(function (paginas) {
+        out.push(paginas || null);
+        return um(idx + 1);
+      }).catch(function () { out.push(null); return um(idx + 1); });
+    }
+    return um(0);
+  }
 
   // ---------- upload ----------
   function upload(fileList) {
     if (!fileList || fileList.length === 0) return;
     if (ITENS.length === 0) { showUploadMsg('Cadastre itens antes de subir etiquetas.'); return; }
     showUploadMsg('');
-    var fd = new FormData();
-    for (var i = 0; i < fileList.length; i++) fd.append('arquivos', fileList[i]);
     dropzone.classList.add('drag');
-    fetch('/api/upload', { method: 'POST', body: fd })
+    lerCodigos(fileList).then(function (codigosPorArquivo) {
+      var fd = new FormData();
+      for (var i = 0; i < fileList.length; i++) {
+        fd.append('arquivos', fileList[i]);
+        fd.append('codigos', JSON.stringify((codigosPorArquivo && codigosPorArquivo[i]) || []));
+      }
+      return fetch('/api/upload', { method: 'POST', body: fd });
+    })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
-        dropzone.classList.remove('drag');
+        dropzone.classList.remove('drag'); showLendo('');
         if (!res.ok) { showUploadMsg(res.j.erro || 'Falha no upload.'); return; }
         res.j.arquivos.forEach(function (a) {
           rows.push({ arquivoId: a.id, nome: a.nome, paginas: a.paginas, quantidade: a.paginas, itemId: defaultItemId() });
         });
         render();
       })
-      .catch(function () { dropzone.classList.remove('drag'); showUploadMsg('Falha de conexao no upload.'); });
+      .catch(function () { dropzone.classList.remove('drag'); showLendo(''); showUploadMsg('Falha de conexao no upload.'); });
   }
 
   // ---------- render ----------

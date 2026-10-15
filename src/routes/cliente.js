@@ -27,6 +27,25 @@ function enviarPdf(res, filename, buffer) {
 }
 function httpErr(status, msg) { const e = new Error(msg); e.status = status; e.publicMessage = msg; return e; }
 
+// Normaliza os codigos recebidos do navegador em um array [{br,nfe}, ...] com tamanho = paginas.
+// Aceita string JSON ou array ja pronto. Retorna null se nao houver nada util.
+function sanCod(v) { if (v === null || v === undefined) return null; const s = String(v).trim().toUpperCase(); return s ? s.slice(0, 80) : null; }
+function normalizarCodigos(raw, paginas) {
+  let arr = raw;
+  if (typeof raw === 'string') { try { arr = JSON.parse(raw); } catch (e) { arr = null; } }
+  if (!Array.isArray(arr)) return null;
+  const out = [];
+  let algum = false;
+  for (let i = 0; i < paginas; i++) {
+    const p = arr[i] && typeof arr[i] === 'object' ? arr[i] : {};
+    const br = sanCod(p.br);
+    const nfe = sanCod(p.nfe);
+    if (br || nfe) algum = true;
+    out.push({ br: br, nfe: nfe });
+  }
+  return algum ? out : null;
+}
+
 // ---------- Novo envio ----------
 router.get('/novo', exigeCliente, async (req, res, next) => {
   try {
@@ -39,14 +58,19 @@ router.get('/novo', exigeCliente, async (req, res, next) => {
 router.post('/api/upload', exigeCliente, upload.array('arquivos', 30), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ erro: 'Envie ao menos um PDF.' });
+    // Codigos lidos no navegador (um conjunto {br,nfe} por pagina), alinhados aos arquivos.
+    const codigosBody = req.body && req.body.codigos;
+    const codigosArr = Array.isArray(codigosBody) ? codigosBody : (codigosBody !== undefined ? [codigosBody] : []);
     const resultado = [];
-    for (const f of req.files) {
+    for (let fi = 0; fi < req.files.length; fi++) {
+      const f = req.files[fi];
       let paginas = 0;
       try { paginas = await contarPaginas(f.buffer); }
       catch (e) { return res.status(400).json({ erro: 'Nao consegui ler o PDF "' + f.originalname + '". Verifique o arquivo.' }); }
       if (paginas < 1) return res.status(400).json({ erro: 'O arquivo "' + f.originalname + '" nao tem paginas validas.' });
-      const ins = await db.query('INSERT INTO arquivos (usuario_id, nome, paginas, conteudo) VALUES ($1,$2,$3,$4) RETURNING id',
-        [req.session.user.id, f.originalname, paginas, f.buffer]);
+      const codigos = normalizarCodigos(codigosArr[fi], paginas);
+      const ins = await db.query('INSERT INTO arquivos (usuario_id, nome, paginas, conteudo, codigos) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+        [req.session.user.id, f.originalname, paginas, f.buffer, codigos ? JSON.stringify(codigos) : null]);
       resultado.push({ id: ins.rows[0].id, nome: f.originalname, paginas });
     }
     res.json({ arquivos: resultado });
@@ -78,11 +102,11 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       if (!arquivoId || !itemId || !quantidade || quantidade < 1) throw httpErr(400, 'Dados invalidos em uma das linhas.');
       const item = itensMap.get(itemId);
       if (!item) throw httpErr(400, 'Item invalido para este cliente.');
-      const arq = await client.query('SELECT id, nome FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
+      const arq = await client.query('SELECT id, nome, codigos FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
       if (arq.rowCount === 0) throw httpErr(400, 'Arquivo invalido ou ja utilizado.');
       const totalLinha = item.preco_centavos * quantidade;
       totalCentavos += totalLinha; totalEtiquetas += quantidade;
-      linhas.push({ arquivoId, arquivoNome: arq.rows[0].nome, itemId: item.id, itemNome: item.nome, precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha });
+      linhas.push({ arquivoId, arquivoNome: arq.rows[0].nome, codigos: arq.rows[0].codigos || [], itemId: item.id, itemNome: item.nome, precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha });
     }
 
     const seq = await client.query("SELECT 'DS-' || nextval('pedido_numero_seq') AS numero");
@@ -106,9 +130,15 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
         [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos]
       );
       const linhaId = linhaIns.rows[0].id;
+      const cods = Array.isArray(l.codigos) ? l.codigos : [];
       for (let i = 0; i < l.quantidade; i++) {
         indiceGlobal++;
-        await client.query('INSERT INTO etiquetas (pedido_id, linha_id, codigo, indice) VALUES ($1,$2,$3,$4)', [pedidoId, linhaId, numero + '-' + pad2(indiceGlobal), indiceGlobal]);
+        const c = cods[i] && typeof cods[i] === 'object' ? cods[i] : {};
+        const br = c.br || null, nfe = c.nfe || null;
+        await client.query(
+          'INSERT INTO etiquetas (pedido_id, linha_id, codigo, indice, codigo_externo, codigo_nfe) VALUES ($1,$2,$3,$4,$5,$6)',
+          [pedidoId, linhaId, numero + '-' + pad2(indiceGlobal), indiceGlobal, br, nfe]
+        );
       }
     }
 

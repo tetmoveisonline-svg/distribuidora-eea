@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS arquivos (
   conteudo     BYTEA NOT NULL,
   criado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Codigos lidos do PDF no upload (um conjunto por pagina): [{"br":"...","nfe":"..."}, ...]
+ALTER TABLE arquivos ADD COLUMN IF NOT EXISTS codigos JSONB;
 
 -- Linhas do pedido.
 CREATE TABLE IF NOT EXISTS linhas (
@@ -123,8 +125,13 @@ CREATE TABLE IF NOT EXISTS etiquetas (
   despachado_em TIMESTAMPTZ
 );
 
--- Codigo de barras lido na bipagem (o codigo que cada plataforma imprime na etiqueta).
+-- Codigo de barras da etiqueta, lido do PDF no upload (o que o leitor do operador bipa).
+--   codigo_externo = codigo de rastreio (ex.: BR...); codigo_nfe = chave da nota (44 digitos).
+-- Na bipagem aceitamos qualquer um dos dois.
 ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS codigo_externo TEXT;
+ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS codigo_nfe TEXT;
+CREATE INDEX IF NOT EXISTS idx_etiquetas_codigo_externo ON etiquetas(codigo_externo);
+CREATE INDEX IF NOT EXISTS idx_etiquetas_codigo_nfe ON etiquetas(codigo_nfe);
 
 CREATE INDEX IF NOT EXISTS idx_itens_cliente ON itens(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_pedidos_cliente ON pedidos(cliente_id);
