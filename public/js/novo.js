@@ -105,7 +105,8 @@
             '<div class="file-head">' +
               '<div class="file-ico">PDF</div>' +
               '<div><div style="font-size:13.5px;font-weight:500">' + escapeHtml(row.nome) + '</div>' +
-              '<div class="dim" style="font-size:11.5px">' + row.paginas + ' páginas detectadas <span class="badge neutral" style="margin-left:6px">= ' + row.paginas + ' etiquetas</span></div></div>' +
+              '<div class="dim" style="font-size:11.5px">' + row.paginas + ' páginas detectadas <span class="badge neutral" style="margin-left:6px">= ' + row.paginas + ' etiquetas</span>' +
+                (row.quantidade < row.paginas ? ' <span class="badge warn" style="margin-left:6px">vão as páginas 1 a ' + row.quantidade + '; ' + (row.paginas - row.quantidade) + ' ficam de fora</span>' : '') + '</div></div>' +
             '</div>' +
             '<div class="file-controls">' +
               '<div><span class="lbl">Item (preço negociado)</span>' +
@@ -194,7 +195,8 @@
     var btn = document.getElementById('cwAjustar');
     if (cabe >= 1 && cabe < row.quantidade) {
       sug.textContent = 'Com o crédito atual cabem até ' + cabe + ' etiqueta' + (cabe > 1 ? 's' : '') + ' de ' + item.nome +
-        ' (' + brl(cabe * item.preco_centavos) + ') neste arquivo. As outras ' + (row.quantidade - cabe) + ' podem ir num próximo envio.';
+        ' (' + brl(cabe * item.preco_centavos) + ') neste arquivo. Valem sempre as primeiras: o pedido fica com as páginas 1 a ' + cabe +
+        ' do PDF, e as outras ' + (row.quantidade - cabe) + ' (páginas ' + (cabe + 1) + ' a ' + row.quantidade + ') ficam de fora, para um próximo envio.';
       btn.textContent = 'Ajustar para ' + cabe + ' etiqueta' + (cabe > 1 ? 's' : '');
       btn.style.display = 'inline-block';
       linhaSugerida = { idx: idx, qtd: cabe };

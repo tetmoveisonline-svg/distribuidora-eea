@@ -76,13 +76,13 @@
   <div class="dim" id="revisarHint" style="display:none;font-size:12px;text-align:right;margin-top:6px">"Revisar pedido" libera quando o total couber no crédito disponível.</div>
 </div>
 
-<div class="hint-box">A quantidade vem do número de páginas do PDF e pode ser ajustada no &minus; / +. O valor de cada arquivo é quantidade &times; preço negociado do item, e o rodapé soma tudo.</div>
+<div class="hint-box">A quantidade vem do número de páginas do PDF e pode ser ajustada no &minus; / +. Se você reduzir, valem sempre as <b>primeiras</b> etiquetas do arquivo (páginas 1 a N); as demais ficam de fora deste pedido e podem ir num próximo envio. O valor de cada arquivo é quantidade &times; preço negociado do item, e o rodapé soma tudo.</div>
 
 <!-- Modal revisar/aceitar -->
 <div class="overlay" id="overlay">
   <div class="card pad modal">
     <h2 class="title">Revisar pedido</h2>
-    <p class="sub">Confira as etiquetas, os itens e os valores. Ao aceitar, geramos o comprovante em PDF com data e hora.</p>
+    <p class="sub">Confira as etiquetas, os itens e os valores. Ao aceitar, geramos o comprovante em PDF com data e hora. Em arquivos com quantidade menor que o PDF, entram as primeiras páginas.</p>
 
     <table>
       <thead><tr><th>Arquivo</th><th>Item</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th class="num">Total</th></tr></thead>

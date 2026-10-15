@@ -4,7 +4,7 @@ const express = require('express');
 const multer = require('multer');
 const db = require('../db');
 const { exigeCliente } = require('../auth');
-const { contarPaginas, enviarEtiquetas } = require('../etiquetas');
+const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
 const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
@@ -111,11 +111,11 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       if (!arquivoId || !itemId || !quantidade || quantidade < 1) throw httpErr(400, 'Dados invalidos em uma das linhas.');
       const item = itensMap.get(itemId);
       if (!item) throw httpErr(400, 'Item invalido para este cliente.');
-      const arq = await client.query('SELECT id, nome, codigos FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
+      const arq = await client.query('SELECT id, nome, paginas, codigos FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
       if (arq.rowCount === 0) throw httpErr(400, 'Arquivo invalido ou ja utilizado.');
       const totalLinha = item.preco_centavos * quantidade;
       totalCentavos += totalLinha; totalEtiquetas += quantidade;
-      linhas.push({ arquivoId, arquivoNome: arq.rows[0].nome, codigos: arq.rows[0].codigos || [], itemId: item.id, itemNome: item.nome, precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha });
+      linhas.push({ arquivoId, arquivoNome: arq.rows[0].nome, paginas: arq.rows[0].paginas, codigos: arq.rows[0].codigos || [], itemId: item.id, itemNome: item.nome, precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha });
     }
 
     // Limite de credito: o que esta em aberto no financeiro consome o limite; vencido pode bloquear.
@@ -141,6 +141,15 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
 
     let indiceGlobal = 0;
     for (const l of linhas) {
+      // Regra: quantidade menor que o PDF -> valem sempre as PRIMEIRAS paginas. O arquivo guardado
+      // e recortado para essas N paginas, e os codigos lidos seguem alinhados (indices 0..N-1).
+      if (l.paginas && l.quantidade < l.paginas) {
+        const orig = await client.query('SELECT conteudo FROM arquivos WHERE id = $1', [l.arquivoId]);
+        const cortado = await recortarPrimeirasPaginas(orig.rows[0].conteudo, l.quantidade);
+        l.codigos = (Array.isArray(l.codigos) ? l.codigos : []).slice(0, l.quantidade);
+        await client.query('UPDATE arquivos SET conteudo = $1, paginas = $2, codigos = $3 WHERE id = $4',
+          [cortado, l.quantidade, JSON.stringify(l.codigos), l.arquivoId]);
+      }
       await client.query('UPDATE arquivos SET pedido_id = $1 WHERE id = $2', [pedidoId, l.arquivoId]);
       const linhaIns = await client.query(
         `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos)
