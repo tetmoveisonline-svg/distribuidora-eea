@@ -7,17 +7,29 @@ const { exigeCliente } = require('../auth');
 const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
-const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay, precoEfetivo } = require('../util');
+const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay, precoEfetivo, skuCor } = require('../util');
 
-// Itens ativos do cliente com o preco efetivo (promocao aplicada se estiver no periodo).
-const SQL_ITENS = `SELECT id, nome, preco_centavos, promo_tipo, promo_valor,
-                          to_char(promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(promo_fim, 'YYYY-MM-DD') AS promo_fim
-                   FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome`;
+// Itens ativos do cliente com o preco efetivo (promocao aplicada se estiver no periodo)
+// e as cores do produto (cada cor com seu SKU). Produto sem cores = cor unica.
+const SQL_ITENS = `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id, p.sku AS produto_sku,
+                          to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
+                   FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
+                   WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`;
 async function itensComPreco(q, clienteId) {
   const r = await q.query(SQL_ITENS, [clienteId]);
+  const pids = r.rows.map((i) => i.produto_id).filter(Boolean);
+  const coresMap = new Map();
+  if (pids.length) {
+    const c = await q.query('SELECT id, produto_id, nome, sufixo FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
+    for (const row of c.rows) {
+      if (!coresMap.has(row.produto_id)) coresMap.set(row.produto_id, []);
+      coresMap.get(row.produto_id).push(row);
+    }
+  }
   return r.rows.map((i) => {
     const ef = precoEfetivo(i);
-    return { id: i.id, nome: i.nome, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo };
+    const cores = (coresMap.get(i.produto_id) || []).map((c) => ({ id: c.id, nome: c.nome, sku: skuCor(i.produto_sku, c) }));
+    return { id: i.id, nome: i.nome, sku: (i.produto_sku || '').toUpperCase() || null, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo, cores };
   });
 }
 
@@ -123,11 +135,23 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       if (!arquivoId || !itemId || !quantidade || quantidade < 1) throw httpErr(400, 'Dados invalidos em uma das linhas.');
       const item = itensMap.get(itemId);
       if (!item) throw httpErr(400, 'Item invalido para este cliente.');
+      // Cor: obrigatoria quando o produto tem cores cadastradas.
+      let cor = null;
+      if (item.cores.length > 0) {
+        const corId = parseInt(l.corId, 10);
+        cor = item.cores.find((c) => c.id === corId) || null;
+        if (!cor) throw httpErr(400, 'Escolha a cor de "' + item.nome + '" antes de aceitar.');
+      }
       const arq = await client.query('SELECT id, nome, paginas, codigos FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
       if (arq.rowCount === 0) throw httpErr(400, 'Arquivo invalido ou ja utilizado.');
       const totalLinha = item.preco_centavos * quantidade;
       totalCentavos += totalLinha; totalEtiquetas += quantidade;
-      linhas.push({ arquivoId, arquivoNome: arq.rows[0].nome, paginas: arq.rows[0].paginas, codigos: arq.rows[0].codigos || [], itemId: item.id, itemNome: item.nome, precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha });
+      linhas.push({
+        arquivoId, arquivoNome: arq.rows[0].nome, paginas: arq.rows[0].paginas, codigos: arq.rows[0].codigos || [],
+        itemId: item.id, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome,
+        corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : item.sku,
+        precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha,
+      });
     }
 
     // Limite de credito: o que esta em aberto no financeiro consome o limite; vencido pode bloquear.
@@ -164,9 +188,9 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
       await client.query('UPDATE arquivos SET pedido_id = $1 WHERE id = $2', [pedidoId, l.arquivoId]);
       const linhaIns = await client.query(
-        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-        [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos]
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+        [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku]
       );
       const linhaId = linhaIns.rows[0].id;
       const cods = Array.isArray(l.codigos) ? l.codigos : [];
@@ -186,7 +210,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       numero, criadoEm: ped.rows[0].criado_em, aceiteEm: ped.rows[0].aceite_em, aceiteIp: ip,
       empresa: { nome: process.env.EMPRESA_NOME || 'Sua Empresa / Nome', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
       cliente: cli.rows[0] || {},
-      linhas: linhas.map((l) => ({ arquivo_nome: l.arquivoNome, item_nome: l.itemNome, quantidade: l.quantidade, preco_centavos: l.precoCentavos, total_centavos: l.totalCentavos })),
+      linhas: linhas.map((l) => ({ arquivo_nome: l.arquivoNome, item_nome: l.itemNome + (l.sku ? ' [' + l.sku + ']' : ''), quantidade: l.quantidade, preco_centavos: l.precoCentavos, total_centavos: l.totalCentavos })),
       totalEtiquetas, totalCentavos,
       formaPagamento: process.env.COMPROVANTE_FORMA_PAGAMENTO || 'A combinar',
       prazoDespacho: process.env.COMPROVANTE_PRAZO_DESPACHO || 'Ate 1 dia util apos o aceite',

@@ -198,3 +198,21 @@ ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS credito_usado_centavos INTEGER N
 ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS encerrado_em TIMESTAMPTZ;
 UPDATE financeiro f SET valor_original_centavos = f.valor_centavos WHERE f.valor_original_centavos IS NULL;
 UPDATE financeiro f SET etiquetas_total = p.total_etiquetas FROM pedidos p WHERE p.id = f.pedido_id AND f.etiquetas_total IS NULL;
+
+-- ===================== SKU E CORES =====================
+-- SKU base do produto (opcional). Cada cor tem um sufixo e vira um SKU proprio (base-sufixo).
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS sku TEXT;
+CREATE TABLE IF NOT EXISTS produto_cores (
+  id          SERIAL PRIMARY KEY,
+  produto_id  INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+  nome        TEXT NOT NULL,
+  sufixo      TEXT,
+  ordem       INTEGER NOT NULL DEFAULT 0,
+  criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (produto_id, nome)
+);
+CREATE INDEX IF NOT EXISTS idx_produto_cores_produto ON produto_cores(produto_id);
+-- Cor escolhida pelo cliente na linha do pedido (item_nome ja vem como "Produto · Cor").
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_id INTEGER REFERENCES produto_cores(id) ON DELETE SET NULL;
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_nome TEXT;
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sku TEXT;

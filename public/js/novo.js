@@ -1,7 +1,23 @@
 // Tela "Novo envio": upload, deteccao de paginas, escolha de item, quantidade e totais.
 (function () {
   var ITENS = window.ITENS || [];
-  var rows = []; // { arquivoId, nome, paginas, quantidade, itemId }
+  var rows = []; // { arquivoId, nome, paginas, quantidade, itemId, corId }
+
+  function corById(item, id) {
+    if (!item || !item.cores) return null;
+    for (var i = 0; i < item.cores.length; i++) { if (item.cores[i].id === id) return item.cores[i]; }
+    return null;
+  }
+  // Linha com produto que tem cores e nenhuma escolhida.
+  function faltaCor(row) {
+    var item = itemById(row.itemId);
+    return !!(item && item.cores && item.cores.length > 0 && !corById(item, row.corId));
+  }
+  function rotuloItem(row) {
+    var item = itemById(row.itemId) || { nome: '-' };
+    var cor = corById(item, row.corId);
+    return item.nome + (cor ? ' · ' + cor.nome + (cor.sku ? ' (' + cor.sku + ')' : '') : (item.sku ? ' (' + item.sku + ')' : ''));
+  }
 
   var dropzone = document.getElementById('dropzone');
   var fileInput = document.getElementById('fileInput');
@@ -78,7 +94,7 @@
         dropzone.classList.remove('drag'); showLendo('');
         if (!res.ok) { showUploadMsg(res.j.erro || 'Falha no upload.'); return; }
         res.j.arquivos.forEach(function (a) {
-          rows.push({ arquivoId: a.id, nome: a.nome, paginas: a.paginas, quantidade: a.paginas, itemId: defaultItemId() });
+          rows.push({ arquivoId: a.id, nome: a.nome, paginas: a.paginas, quantidade: a.paginas, itemId: defaultItemId(), corId: null });
         });
         render();
       })
@@ -112,6 +128,14 @@
             '<div class="file-controls">' +
               '<div><span class="lbl">Item (preço negociado)</span>' +
                 '<select data-idx="' + idx + '" class="sel-item">' + opts + '</select></div>' +
+              (item.cores && item.cores.length ? (function () {
+                var falta = faltaCor(row);
+                var copts = '<option value="">— escolha a cor —</option>' + item.cores.map(function (c) {
+                  return '<option value="' + c.id + '"' + (c.id === row.corId ? ' selected' : '') + '>' + escapeHtml(c.nome) + (c.sku ? ' · ' + escapeHtml(c.sku) : '') + '</option>';
+                }).join('');
+                return '<div><span class="lbl">Cor</span><select data-idx="' + idx + '" class="sel-cor cor-sel' + (falta ? ' missing' : '') + '">' + copts + '</select>' +
+                  (falta ? '<div class="cor-hint">Informe a cor para revisar</div>' : '') + '</div>';
+              })() : '') +
               '<div><span class="lbl">Quantidade</span>' +
                 '<div class="stepper"><button type="button" class="dec" data-idx="' + idx + '">&minus;</button>' +
                 '<input class="qty" data-idx="' + idx + '" value="' + row.quantidade + '" inputmode="numeric" />' +
@@ -131,7 +155,10 @@
 
   function bind() {
     filesBox.querySelectorAll('.sel-item').forEach(function (el) {
-      el.addEventListener('change', function () { rows[+el.dataset.idx].itemId = parseInt(el.value, 10); render(); });
+      el.addEventListener('change', function () { var r = rows[+el.dataset.idx]; r.itemId = parseInt(el.value, 10); r.corId = null; render(); });
+    });
+    filesBox.querySelectorAll('.sel-cor').forEach(function (el) {
+      el.addEventListener('change', function () { rows[+el.dataset.idx].corId = el.value ? parseInt(el.value, 10) : null; render(); });
     });
     filesBox.querySelectorAll('.inc').forEach(function (el) {
       el.addEventListener('click', function () { var i = +el.dataset.idx; rows[i].quantidade++; render(); });
@@ -166,7 +193,9 @@
     document.getElementById('labelCount').textContent = t.labels;
     document.getElementById('grandTotal').textContent = brl(t.totalC);
     var excede = verificarCredito(t.totalC);
-    revisarBtn.disabled = rows.length === 0 || excede;
+    var semCor = rows.some(faltaCor);
+    revisarBtn.disabled = rows.length === 0 || excede || semCor;
+    revisarBtn.title = semCor ? 'Escolha a cor de cada arquivo para revisar' : '';
   }
 
   // ---------- limite de credito ----------
@@ -268,7 +297,7 @@
     var html = '';
     rows.forEach(function (r) {
       var item = itemById(r.itemId) || { nome: '-', preco_centavos: 0 };
-      html += '<tr><td>' + escapeHtml(r.nome) + '</td><td>' + escapeHtml(item.nome) + '</td>' +
+      html += '<tr><td>' + escapeHtml(r.nome) + '</td><td>' + escapeHtml(rotuloItem(r)) + '</td>' +
         '<td class="num">' + r.quantidade + '</td><td class="num">' + brl(item.preco_centavos) + '</td>' +
         '<td class="num">' + brl(item.preco_centavos * r.quantidade) + '</td></tr>';
     });
@@ -289,7 +318,7 @@
     var payload = {
       aceite: true,
       observacoes: document.getElementById('obs').value || '',
-      itens: rows.map(function (r) { return { arquivoId: r.arquivoId, itemId: r.itemId, quantidade: r.quantidade }; }),
+      itens: rows.map(function (r) { return { arquivoId: r.arquivoId, itemId: r.itemId, corId: r.corId, quantidade: r.quantidade }; }),
     };
     fetch('/api/pedidos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),

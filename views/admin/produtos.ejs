@@ -1,7 +1,7 @@
 <%- include('../partials/app-open', { titulo: 'Produtos', ativo: 'produtos' }) %>
 
 <h2 class="title">Produtos</h2>
-<p class="sub">Catálogo geral. Depois, em "Preços por cliente", você define o preço negociado de cada produto por cliente.</p>
+<p class="sub">Catálogo geral com SKU e cores. Depois, em "Preços por cliente", você define o preço negociado de cada produto por cliente (o preço vale para todas as cores).</p>
 
 <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
 <% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
@@ -10,8 +10,15 @@
   <div class="card pad">
     <div class="section-title">Novo produto</div>
     <form method="post" action="/admin/produtos">
-      <div class="field"><label>Nome do produto</label><input name="nome" placeholder="PAC até 300g" /></div>
-      <div class="field"><label>Descrição (opcional)</label><input name="descricao" placeholder="Encomenda PAC até 300g" /></div>
+      <div class="row-2">
+        <div class="field"><label>Nome do produto</label><input name="nome" placeholder="Dulce" /></div>
+        <div class="field"><label>SKU base (opcional)</label><input name="sku" placeholder="DUL" class="mono-in" /></div>
+      </div>
+      <div class="field"><label>Descrição (opcional)</label><input name="descricao" placeholder="Poltrona Dulce" /></div>
+      <div class="field">
+        <label>Cores (opcional) · separe por vírgula; sufixo do SKU entre parênteses</label>
+        <input name="cores" placeholder="Branco (BR), Preto (PT), Nogueira (NG)" />
+      </div>
       <button class="btn block" type="submit">Salvar produto</button>
     </form>
   </div>
@@ -19,16 +26,39 @@
     <div class="section-title">Catálogo</div>
     <% if (produtos.length === 0) { %><div class="empty">Nenhum produto ainda.</div><% } else { %>
     <table>
-      <thead><tr><th>Produto</th><th>Descrição</th><th class="num">Preços</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>SKU</th><th>Produto</th><th>Cores</th><th class="num">Preços</th><th>Status</th><th></th></tr></thead>
       <tbody>
         <% produtos.forEach(function (p) { %>
           <tr>
-            <td><%= p.nome %></td>
-            <td class="dim"><%= p.descricao || '—' %></td>
+            <td>
+              <form method="post" action="/admin/produtos/<%= p.id %>/sku" class="prazo-form">
+                <input name="sku" class="mono-in" style="width:76px" value="<%= p.sku || '' %>" placeholder="—" title="SKU base" />
+                <button class="btn ghost sm" type="submit">ok</button>
+              </form>
+            </td>
+            <td><%= p.nome %><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %></td>
+            <td>
+              <div class="chips">
+                <% p.cores.forEach(function (c) { %>
+                  <span class="chip"><%= c.nome %><% if (c.sku) { %> <code><%= c.sku %></code><% } %>
+                    <form method="post" action="/admin/produtos/<%= p.id %>/cores/<%= c.id %>/remover" style="display:inline;margin:0"
+                          onsubmit="return confirm('Remover a cor <%= c.nome.replace(/'/g, '') %> de <%= p.nome.replace(/'/g, '') %>? Pedidos antigos não mudam.')">
+                      <button type="submit" class="chip-x" title="remover cor">&times;</button>
+                    </form>
+                  </span>
+                <% }); %>
+                <% if (p.cores.length === 0) { %><span class="dim" style="font-size:12px">cor única</span><% } %>
+              </div>
+              <form method="post" action="/admin/produtos/<%= p.id %>/cores" class="prazo-form" style="margin-top:6px">
+                <input name="nome" placeholder="nova cor" style="width:100px" />
+                <input name="sufixo" class="mono-in" placeholder="suf." style="width:52px" title="sufixo do SKU (opcional)" />
+                <button class="btn ghost sm" type="submit">+ cor</button>
+              </form>
+            </td>
             <td class="num"><%= p.precos %></td>
             <td><% if (p.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
             <td>
-              <div class="actions-inline">
+              <div class="actions-inline" style="flex-wrap:nowrap">
                 <form method="post" action="/admin/produtos/<%= p.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= p.ativo ? 'Desativar' : 'Ativar' %></button></form>
                 <form method="post" action="/admin/produtos/<%= p.id %>/excluir" style="margin:0"
                       onsubmit="return confirm(<%- JSON.stringify('Excluir o produto "' + p.nome + '"?\n\n' + p.precos + ' preço(s) por cliente serão removidos junto. Pedidos já feitos não mudam.\n\nEssa ação não tem volta.').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') %>)">
@@ -44,6 +74,6 @@
   </div>
 </div>
 
-<div class="hint-box">"Desativar" esconde o produto das novas negociações sem apagar nada. "Excluir" remove o produto e os preços por cliente ligados a ele; os pedidos antigos continuam com o nome e o valor da época.</div>
+<div class="hint-box">Cada cor vira um SKU próprio no formato <b>base-sufixo</b> (ex.: DUL-PT). Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
 
 <%- include('../partials/app-close') %>

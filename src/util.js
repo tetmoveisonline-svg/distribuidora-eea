@@ -142,3 +142,12 @@ module.exports = {
   andamento,
   andamentoDisplay,
 };
+
+// SKU de uma cor: base-sufixo. Sem base usa so o sufixo; sem sufixo gera a partir do nome da cor.
+function skuCor(skuBase, cor) {
+  const suf = (cor && cor.sufixo ? String(cor.sufixo) : String((cor && cor.nome) || '').normalize('NFD').replace(/[^A-Za-z0-9]/g, '').slice(0, 3)).toUpperCase();
+  const base = (skuBase || '').toString().trim().toUpperCase();
+  if (base && suf) return base + '-' + suf;
+  return base || suf || null;
+}
+module.exports.skuCor = skuCor;
