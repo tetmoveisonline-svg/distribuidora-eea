@@ -1,7 +1,7 @@
 <%- include('../partials/app-open', { titulo: 'Estoque', ativo: 'estoque' }) %>
 
 <h2 class="title">Estoque</h2>
-<p class="sub">Saldo atual dos produtos que você tem negociação. Atualiza sozinho a cada 30 segundos; cada etiqueta despachada baixa 1 unidade.</p>
+<p class="sub">Preço negociado e saldo atual dos produtos que você tem negociação. Atualiza sozinho a cada 30 segundos; cada etiqueta despachada baixa 1 unidade.</p>
 
 <div class="card pad">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -21,15 +21,19 @@
   var at = document.getElementById('estAtual');
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
   function tag(n) { var cls = n <= 0 ? ' zero' : (n <= 5 ? ' baixo' : ''); return '<span class="saldo-tag' + cls + '">' + n + '</span>'; }
+  function preco(p) {
+    if (p.promo) return '<b style="color:var(--ok)">' + esc(p.preco_txt) + '</b> <span class="badge ok" style="margin-left:4px">' + esc(p.promo_rotulo) + '</span><div class="dim" style="font-size:11px;text-decoration:line-through">' + esc(p.preco_original_txt) + '</div>';
+    return '<b>' + esc(p.preco_txt) + '</b>';
+  }
   function render(produtos) {
     if (!produtos.length) { box.innerHTML = '<div class="empty">Você ainda não tem produtos negociados.</div>'; return; }
-    var h = '<table><thead><tr><th>Produto</th><th>Cor</th><th>SKU</th><th class="num">Saldo</th></tr></thead><tbody>';
+    var h = '<table><thead><tr><th>Produto</th><th class="num">Preço negociado</th><th>Cor</th><th>SKU</th><th class="num">Saldo</th></tr></thead><tbody>';
     produtos.forEach(function (p) {
       if (!p.cores.length) {
-        h += '<tr><td>' + esc(p.nome) + '</td><td class="dim">cor única</td><td class="dim">—</td><td class="num">' + tag(p.saldo) + '</td></tr>';
+        h += '<tr><td>' + esc(p.nome) + '</td><td class="num">' + preco(p) + '</td><td class="dim">cor única</td><td class="dim">—</td><td class="num">' + tag(p.saldo) + '</td></tr>';
       } else {
         p.cores.forEach(function (c, i) {
-          h += '<tr><td>' + (i === 0 ? esc(p.nome) : '') + '</td><td>' + esc(c.nome) + '</td><td class="mono dim">' + esc(c.sku || '—') + '</td><td class="num">' + tag(c.saldo) + '</td></tr>';
+          h += '<tr><td>' + (i === 0 ? esc(p.nome) : '') + '</td><td class="num">' + (i === 0 ? preco(p) : '') + '</td><td>' + esc(c.nome) + '</td><td class="mono dim">' + esc(c.sku || '—') + '</td><td class="num">' + tag(c.saldo) + '</td></tr>';
         });
       }
     });

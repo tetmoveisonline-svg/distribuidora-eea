@@ -43,12 +43,21 @@ async function baixarEtiqueta(client, etiquetaId, usuarioId) {
 
 // Saldos dos produtos que o cliente tem preco negociado: [{ produto, cores:[{nome, sku, saldo}] | saldo }]
 async function saldosParaCliente(clienteId) {
+  const { precoEfetivo, formatBRL } = require('./util');
   const p = await db.query(
-    `SELECT DISTINCT p.id, p.nome, p.descricao, p.saldo
+    `SELECT DISTINCT ON (p.id) p.id, p.nome, p.descricao, p.saldo,
+            i.preco_centavos, i.promo_tipo, i.promo_valor,
+            to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
      FROM itens i JOIN produtos p ON p.id = i.produto_id
-     WHERE i.cliente_id = $1 AND i.ativo = TRUE AND p.ativo = TRUE ORDER BY p.nome`, [clienteId]
+     WHERE i.cliente_id = $1 AND i.ativo = TRUE AND p.ativo = TRUE ORDER BY p.id, i.id DESC`, [clienteId]
   );
-  return anexarCores(p.rows);
+  const rows = p.rows.map((x) => {
+    const ef = precoEfetivo(x);
+    return { id: x.id, nome: x.nome, descricao: x.descricao, saldo: x.saldo,
+      preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo,
+      preco_txt: formatBRL(ef.preco_centavos), preco_original_txt: formatBRL(ef.preco_original) };
+  }).sort((a, b) => a.nome.localeCompare(b.nome));
+  return anexarCores(rows);
 }
 async function saldosTodos() {
   const p = await db.query('SELECT id, nome, descricao, saldo, ativo FROM produtos ORDER BY nome');
