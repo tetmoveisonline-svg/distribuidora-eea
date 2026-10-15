@@ -318,7 +318,7 @@ router.get('/produtos', async (req, res, next) => {
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
     );
-    const cores = await db.query('SELECT id, produto_id, nome, sufixo FROM produto_cores ORDER BY produto_id, ordem, id');
+    const cores = await db.query('SELECT id, produto_id, nome, sku FROM produto_cores ORDER BY produto_id, ordem, id');
     const coresMap = new Map();
     for (const c of cores.rows) {
       if (!coresMap.has(c.produto_id)) coresMap.set(c.produto_id, []);
@@ -332,39 +332,38 @@ router.post('/produtos', async (req, res, next) => {
   try {
     const nome = (req.body.nome || '').trim();
     if (!nome) throw new Error('Informe o nome do produto.');
-    const sku = normSku(req.body.sku);
-    const ins = await db.query('INSERT INTO produtos (nome, sku, descricao) VALUES ($1,$2,$3) RETURNING id', [nome, sku, (req.body.descricao || '').trim() || null]);
-    // Cores iniciais: "Branco (BR), Preto (PT), Nogueira" -> sufixo opcional entre parenteses
+    const ins = await db.query('INSERT INTO produtos (nome, descricao) VALUES ($1,$2) RETURNING id', [nome, (req.body.descricao || '').trim() || null]);
+    // Cores iniciais: "Branco (SKU123), Preto (SKU124)" -> SKU da cor entre parenteses
     const cores = parseCores(req.body.cores);
     for (let i = 0; i < cores.length; i++) {
-      await db.query('INSERT INTO produto_cores (produto_id, nome, sufixo, ordem) VALUES ($1,$2,$3,$4) ON CONFLICT (produto_id, nome) DO NOTHING', [ins.rows[0].id, cores[i].nome, cores[i].sufixo, i]);
+      await db.query('INSERT INTO produto_cores (produto_id, nome, sku, ordem) VALUES ($1,$2,$3,$4) ON CONFLICT (produto_id, nome) DO NOTHING', [ins.rows[0].id, cores[i].nome, cores[i].sku, i]);
     }
     res.redirect('/admin/produtos');
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); }
 });
-function normSku(v) { const s = (v || '').toString().trim().toUpperCase().replace(/[^A-Z0-9\-_.]/g, '').slice(0, 30); return s || null; }
+function normSku(v) { const s = (v || '').toString().trim().toUpperCase().replace(/[^A-Z0-9\-_.\/]/g, '').slice(0, 40); return s || null; }
 function parseCores(txt) {
   return (txt || '').toString().split(/[,;\n]/).map((s) => s.trim()).filter(Boolean).map((s) => {
     const m = s.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
     const nome = (m ? m[1] : s).trim().slice(0, 40);
-    const sufixo = m ? normSku(m[2]) : null;
-    return { nome, sufixo };
+    const sku = m ? normSku(m[2]) : null;
+    return { nome, sku };
   }).filter((c) => c.nome);
 }
-// SKU base (edicao inline)
-router.post('/produtos/:id/sku', async (req, res, next) => {
-  try { await db.query('UPDATE produtos SET sku = $2 WHERE id = $1', [pInt(req.params.id), normSku(req.body.sku)]); res.redirect('/admin/produtos'); } catch (e) { next(e); }
-});
-// Cores do produto
+// Cores do produto (cada cor com seu SKU completo)
 router.post('/produtos/:id/cores', async (req, res, next) => {
   try {
     const pid = pInt(req.params.id);
-    const cores = parseCores(req.body.nome ? (req.body.nome + (req.body.sufixo ? ' (' + req.body.sufixo + ')' : '')) : '');
-    if (cores.length === 0) throw new Error('Informe o nome da cor.');
+    const nome = (req.body.nome || '').toString().trim().slice(0, 40);
+    if (!nome) throw new Error('Informe o nome da cor.');
     const ord = await db.query('SELECT COALESCE(max(ordem), -1) + 1 AS o FROM produto_cores WHERE produto_id = $1', [pid]);
-    await db.query('INSERT INTO produto_cores (produto_id, nome, sufixo, ordem) VALUES ($1,$2,$3,$4)', [pid, cores[0].nome, cores[0].sufixo, ord.rows[0].o]);
+    await db.query('INSERT INTO produto_cores (produto_id, nome, sku, ordem) VALUES ($1,$2,$3,$4)', [pid, nome, normSku(req.body.sku), ord.rows[0].o]);
     res.redirect('/admin/produtos');
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.code === '23505' ? 'Essa cor já existe neste produto.' : msgErro(e))); }
+});
+// Editar o SKU de uma cor
+router.post('/produtos/:id/cores/:cid/sku', async (req, res, next) => {
+  try { await db.query('UPDATE produto_cores SET sku = $3 WHERE id = $1 AND produto_id = $2', [pInt(req.params.cid), pInt(req.params.id), normSku(req.body.sku)]); res.redirect('/admin/produtos'); } catch (e) { next(e); }
 });
 router.post('/produtos/:id/cores/:cid/remover', async (req, res, next) => {
   try { await db.query('DELETE FROM produto_cores WHERE id = $1 AND produto_id = $2', [pInt(req.params.cid), pInt(req.params.id)]); res.redirect('/admin/produtos'); } catch (e) { next(e); }

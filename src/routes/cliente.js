@@ -20,7 +20,7 @@ async function itensComPreco(q, clienteId) {
   const pids = r.rows.map((i) => i.produto_id).filter(Boolean);
   const coresMap = new Map();
   if (pids.length) {
-    const c = await q.query('SELECT id, produto_id, nome, sufixo FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
+    const c = await q.query('SELECT id, produto_id, nome, sku FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
     for (const row of c.rows) {
       if (!coresMap.has(row.produto_id)) coresMap.set(row.produto_id, []);
       coresMap.get(row.produto_id).push(row);
@@ -29,7 +29,7 @@ async function itensComPreco(q, clienteId) {
   return r.rows.map((i) => {
     const ef = precoEfetivo(i);
     const cores = (coresMap.get(i.produto_id) || []).map((c) => ({ id: c.id, nome: c.nome, sku: skuCor(i.produto_sku, c) }));
-    return { id: i.id, nome: i.nome, sku: (i.produto_sku || '').toUpperCase() || null, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo, cores };
+    return { id: i.id, nome: i.nome, sku: null, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo, cores };
   });
 }
 

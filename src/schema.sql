@@ -216,3 +216,8 @@ CREATE INDEX IF NOT EXISTS idx_produto_cores_produto ON produto_cores(produto_id
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_id INTEGER REFERENCES produto_cores(id) ON DELETE SET NULL;
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_nome TEXT;
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sku TEXT;
+
+-- O SKU e da cor (codigo completo), nao do produto. Migra o que ja foi cadastrado como base-sufixo.
+ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS sku TEXT;
+UPDATE produto_cores c SET sku = CASE WHEN p.sku IS NOT NULL AND p.sku <> '' AND c.sufixo IS NOT NULL THEN p.sku || '-' || c.sufixo ELSE c.sufixo END
+  FROM produtos p WHERE p.id = c.produto_id AND c.sku IS NULL AND c.sufixo IS NOT NULL;

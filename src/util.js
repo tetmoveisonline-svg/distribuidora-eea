@@ -143,11 +143,10 @@ module.exports = {
   andamentoDisplay,
 };
 
-// SKU de uma cor: base-sufixo. Sem base usa so o sufixo; sem sufixo gera a partir do nome da cor.
-function skuCor(skuBase, cor) {
-  const suf = (cor && cor.sufixo ? String(cor.sufixo) : String((cor && cor.nome) || '').normalize('NFD').replace(/[^A-Za-z0-9]/g, '').slice(0, 3)).toUpperCase();
-  const base = (skuBase || '').toString().trim().toUpperCase();
-  if (base && suf) return base + '-' + suf;
-  return base || suf || null;
+// SKU de uma cor: e o codigo completo cadastrado na propria cor (campo sku).
+// O primeiro parametro (SKU do produto) fica so por compatibilidade e nao e usado.
+function skuCor(_skuBase, cor) {
+  const s = cor && cor.sku ? String(cor.sku).trim().toUpperCase() : '';
+  return s || null;
 }
 module.exports.skuCor = skuCor;
