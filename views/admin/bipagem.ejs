@@ -136,7 +136,9 @@
       html += '<div class="grp"><div class="grp-h"><div class="gl"><span class="tag">' + esc(p.numero) + '</span></div>' + badge + '</div>';
       html += '<div style="overflow-x:auto"><table class="etqt"><thead><tr><th class="num">#</th><th>Produto</th><th>Separação</th><th>Despacho</th></tr></thead><tbody>';
       p.etiquetas.forEach(function (e) {
-        var sp = (e.status === 'conferido' || e.status === 'despachado') ? '<span class="dot-ok">&#10003; Separada</span>' : '<span class="dot-wait">&#9679; —</span>';
+        // depois do bipe, mostra o codigo lido (BR... ou chave da nota) em verde no lugar de "Separada"
+        var codLido = e.codigo_externo || e.codigo_nfe || 'Separada';
+        var sp = (e.status === 'conferido' || e.status === 'despachado') ? '<span class="dot-ok mono">&#10003; ' + esc(codLido) + '</span>' : '<span class="dot-wait">&#9679; —</span>';
         var dp = (e.status === 'despachado') ? ('<span class="dot-ok">&#10003; ' + (e.despachado_em || 'Despachada') + '</span>') : '<span class="dim">—</span>';
         // etiqueta sem codigo: oferece marcar manual
         if (!e.temCodigo) {

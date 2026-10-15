@@ -30,7 +30,7 @@ async function estadoCliente(clienteId) {
   if (c.rowCount === 0) return null;
   const r = await db.query(
     `SELECT p.id AS pedido_id, p.numero, p.status AS pstatus,
-            e.id AS etq_id, e.indice, e.status AS estatus, e.codigo_externo, e.despachado_em, l.item_nome
+            e.id AS etq_id, e.indice, e.status AS estatus, e.codigo_externo, e.codigo_nfe, e.despachado_em, l.item_nome
      FROM pedidos p
      JOIN etiquetas e ON e.pedido_id = p.id
      LEFT JOIN linhas l ON l.id = e.linha_id
@@ -52,7 +52,8 @@ async function estadoCliente(clienteId) {
     const desp = row.estatus === 'despachado';
     ped.etiquetas.push({
       id: row.etq_id, indice: row.indice, item_nome: row.item_nome || '-',
-      status: row.estatus, temCodigo: !!row.codigo_externo, codigo_externo: row.codigo_externo || null,
+      status: row.estatus, temCodigo: !!(row.codigo_externo || row.codigo_nfe),
+      codigo_externo: row.codigo_externo || null, codigo_nfe: row.codigo_nfe || null,
       despachado_em: row.despachado_em ? formatDateTime(row.despachado_em) : null,
     });
     ped.total++; total++;

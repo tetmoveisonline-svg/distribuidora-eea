@@ -209,3 +209,5 @@ tr:last-child td { border-bottom:none; }
 .etq-table td.hora { font-variant-numeric:tabular-nums; }
 .dot-ok { color:var(--ok); }
 .dot-wait { color:var(--warn); }
+.dot-sep { color:var(--accent); }
+.dot-ok.mono { font-family:var(--mono); font-size:12px; }

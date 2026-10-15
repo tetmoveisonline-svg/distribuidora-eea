@@ -8,22 +8,30 @@
   //   formatDateTime -> helper de data/hora
   var _pct = (tot > 0) ? Math.round((desp / tot) * 100) : 0;
   var _pend = Math.max(0, tot - desp);
+  // Vocabulario: o admin fala em "despacho"; o cliente ve "coleta".
+  var _sep = admin ? 'Separada' : 'Separando';
+  var _fim = admin ? 'Despachada' : 'Coletado';
+  var _fimPl = admin ? 'despachadas' : 'coletadas';
+  var _bipe = admin ? 'Bipe do despacho' : 'Bipe da coleta';
+  var _sepN = etqs.filter(function (e) { return e.status === 'conferido'; }).length;
 %>
 <div class="disc" id="disc-<%= pid %>">
   <div class="disc-head">
     <div class="left"><span class="chev">&#9656;</span> Etiquetas e horário do bipe</div>
     <% if (tot > 0 && desp >= tot) { %>
-      <span class="badge ok">Despacho completo: <%= desp %> de <%= tot %></span>
+      <span class="badge ok"><%= admin ? 'Despacho' : 'Coleta' %> completa: <%= desp %> de <%= tot %></span>
     <% } else if (desp > 0) { %>
-      <span class="badge warn">Despacho parcial: <%= desp %> de <%= tot %></span>
+      <span class="badge warn"><%= admin ? 'Despacho' : 'Coleta' %> parcial: <%= desp %> de <%= tot %></span>
+    <% } else if (_sepN > 0) { %>
+      <span class="badge warn">Separando: <%= _sepN %> de <%= tot %></span>
     <% } else { %>
-      <span class="badge neutral">Nenhuma despachada ainda</span>
+      <span class="badge neutral">Nenhuma <%= admin ? 'despachada' : 'coletada' %> ainda</span>
     <% } %>
   </div>
   <div class="disc-body">
     <div class="partial">
       <div class="pbar"><div class="pfill" style="width:<%= _pct %>%"></div></div>
-      <span class="pcount"><b style="color:var(--text)"><%= desp %></b> despachadas · <%= _pend %> pendentes</span>
+      <span class="pcount"><b style="color:var(--text)"><%= desp %></b> <%= _fimPl %> · <%= _sepN %> separando · <%= Math.max(0, _pend - _sepN) %> aguardando</span>
     </div>
     <% if (tot === 0) { %>
       <div class="empty">Este pedido ainda não tem etiquetas geradas.</div>
@@ -36,7 +44,7 @@
               <% if (admin) { %><th>Código lido</th><% } %>
               <th>Produto</th>
               <th>Situação</th>
-              <th>Bipe do despacho</th>
+              <th><%= _bipe %></th>
             </tr>
           </thead>
           <tbody>
@@ -47,7 +55,9 @@
                 <td><%= e.item_nome ? e.item_nome : '—' %></td>
                 <td>
                   <% if (e.status === 'despachado') { %>
-                    <span class="dot-ok">&#10003; Despachada</span>
+                    <span class="dot-ok">&#10003; <%= _fim %></span>
+                  <% } else if (e.status === 'conferido') { %>
+                    <span class="dot-sep">&#9679; <%= _sep %></span>
                   <% } else { %>
                     <span class="dot-wait">&#9679; Aguardando</span>
                   <% } %>
