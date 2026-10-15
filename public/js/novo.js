@@ -131,11 +131,14 @@
               (item.cores && item.cores.length ? (function () {
                 var falta = faltaCor(row);
                 var copts = '<option value="">— escolha a cor —</option>' + item.cores.map(function (c) {
-                  return '<option value="' + c.id + '"' + (c.id === row.corId ? ' selected' : '') + '>' + escapeHtml(c.nome) + (c.sku ? ' · ' + escapeHtml(c.sku) : '') + '</option>';
+                  return '<option value="' + c.id + '"' + (c.id === row.corId ? ' selected' : '') + '>' + escapeHtml(c.nome) + (c.sku ? ' · ' + escapeHtml(c.sku) : '') + ' · ' + c.saldo + ' em estoque</option>';
                 }).join('');
+                var corSel = corById(item, row.corId);
+                var avisoEst = (corSel && row.quantidade > corSel.saldo) ? '<div class="cor-hint" style="color:var(--warn)">Estoque: ' + corSel.saldo + '. Passa em ' + (row.quantidade - corSel.saldo) + '; a distribuidora confirma a reposição.</div>' : '';
                 return '<div><span class="lbl">Cor</span><select data-idx="' + idx + '" class="sel-cor cor-sel' + (falta ? ' missing' : '') + '">' + copts + '</select>' +
-                  (falta ? '<div class="cor-hint">Informe a cor para revisar</div>' : '') + '</div>';
-              })() : '') +
+                  (falta ? '<div class="cor-hint">Informe a cor para revisar</div>' : avisoEst) + '</div>';
+              })() : ((item.saldo !== null && item.saldo !== undefined && row.quantidade > item.saldo)
+                ? '<div><span class="lbl">Estoque</span><div class="cor-hint" style="color:var(--warn);padding:8px 0">' + item.saldo + ' em estoque; passa em ' + (row.quantidade - item.saldo) + '.</div></div>' : '')) +
               '<div><span class="lbl">Quantidade</span>' +
                 '<div class="stepper"><button type="button" class="dec" data-idx="' + idx + '">&minus;</button>' +
                 '<input class="qty" data-idx="' + idx + '" value="' + row.quantidade + '" inputmode="numeric" />' +

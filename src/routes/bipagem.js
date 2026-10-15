@@ -14,6 +14,7 @@ const db = require('../db');
 const { exigeAdmin } = require('../auth');
 const { formatDateTime, formatBRL } = require('../util');
 const financeiro = require('../financeiro');
+const estoque = require('../estoque');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -163,6 +164,7 @@ router.post('/scan', async (req, res) => {
       await client.query("UPDATE etiquetas SET status = 'conferido', conferido_em = now() WHERE id = $1", [et.id]);
     } else {
       await client.query("UPDATE etiquetas SET status = 'despachado', despachado_em = now() WHERE id = $1", [et.id]);
+      await estoque.baixarEtiqueta(client, et.id, req.session.user.id); // baixa 1 do estoque da cor
     }
     await aposMarcar(client, et.pedido_id, modo);
     await client.query('COMMIT');
@@ -200,6 +202,7 @@ router.post('/marcar', async (req, res) => {
       if (st === 'pendente') { await client.query('ROLLBACK'); return res.status(409).json({ erro: 'Separe a etiqueta antes de despachar.' }); }
       if (st === 'despachado') { await client.query('ROLLBACK'); return res.status(409).json({ erro: 'Esta etiqueta já foi despachada.' }); }
       await client.query("UPDATE etiquetas SET status = 'despachado', despachado_em = now() WHERE id = $1", [etqId]);
+      await estoque.baixarEtiqueta(client, etqId, req.session.user.id);
     }
     await aposMarcar(client, pedidoId, modo);
     await client.query('COMMIT');

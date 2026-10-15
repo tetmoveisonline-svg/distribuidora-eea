@@ -1,0 +1,53 @@
+<%- include('../partials/app-open', { titulo: 'Estoque', ativo: 'estoque' }) %>
+
+<h2 class="title">Estoque</h2>
+<p class="sub">Saldo por cor e histórico de movimentos. Lançamentos são feitos em Produtos; o despacho na bipagem baixa 1 por etiqueta.</p>
+
+<div class="card pad" style="margin-bottom:16px">
+  <div class="section-title">Saldos</div>
+  <table>
+    <thead><tr><th>Produto</th><th>Cor</th><th>SKU</th><th class="num">Saldo</th></tr></thead>
+    <tbody>
+      <% produtos.forEach(function (p) { %>
+        <% if (p.cores.length === 0) { %>
+          <tr><td><%= p.nome %><% if (!p.ativo) { %> <span class="badge neutral">inativo</span><% } %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><span class="saldo-tag <%= p.saldo <= 0 ? 'zero' : (p.saldo <= 5 ? 'baixo' : '') %>"><%= p.saldo %></span></td></tr>
+        <% } else { p.cores.forEach(function (c, i) { %>
+          <tr><td><%= i === 0 ? p.nome : '' %><% if (i === 0 && !p.ativo) { %> <span class="badge neutral">inativo</span><% } %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><span class="saldo-tag <%= c.saldo <= 0 ? 'zero' : (c.saldo <= 5 ? 'baixo' : '') %>"><%= c.saldo %></span></td></tr>
+        <% }); } %>
+      <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card pad">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="section-title" style="margin:0">Movimentos (últimos 200)</div>
+    <form method="get" action="/admin/estoque" class="fin-filters" style="margin:0">
+      <select name="produto" onchange="this.form.submit()">
+        <option value="">Todos os produtos</option>
+        <% produtos.forEach(function (p) { %><option value="<%= p.id %>" <%= produtoId === p.id ? 'selected' : '' %>><%= p.nome %></option><% }); %>
+      </select>
+    </form>
+  </div>
+  <% if (movs.length === 0) { %><div class="empty">Nenhum movimento ainda.</div><% } else { %>
+  <table>
+    <thead><tr><th>Quando</th><th>Produto</th><th>Cor</th><th>Motivo</th><th class="num">Qtd</th><th class="num">Saldo após</th><th>Pedido</th><th>Quem</th></tr></thead>
+    <tbody>
+      <% movs.forEach(function (m) { %>
+        <tr>
+          <td class="dim"><%= formatDateTime(m.criado_em) %></td>
+          <td><%= m.produto_nome %></td>
+          <td><%= m.cor_nome || '—' %></td>
+          <td><%= m.motivo %><% if (m.observacao) { %> <span class="dim">· <%= m.observacao %></span><% } %></td>
+          <td class="num" style="color:<%= m.quantidade > 0 ? 'var(--ok)' : 'var(--danger)' %>"><%= m.quantidade > 0 ? '+' + m.quantidade : m.quantidade %></td>
+          <td class="num"><%= m.saldo_apos %></td>
+          <td class="dim"><%= m.pedido_numero || '—' %></td>
+          <td class="dim"><%= m.usuario_nome || '—' %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<%- include('../partials/app-close') %>

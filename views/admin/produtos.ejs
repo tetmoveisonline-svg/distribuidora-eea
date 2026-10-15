@@ -29,15 +29,30 @@
           <tr>
             <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %></td>
             <td>
-              <% if (p.cores.length === 0) { %><div class="dim" style="font-size:12px;margin-bottom:6px">cor única (sem SKU)</div><% } %>
+              <% if (p.cores.length === 0) { %>
+                <div class="cor-row"><span class="cor-nome dim">cor única</span>
+                  <span class="saldo-tag <%= p.saldo <= 0 ? 'zero' : (p.saldo <= 5 ? 'baixo' : '') %>" title="saldo em estoque"><%= p.saldo %> un.</span>
+                  <form method="post" action="/admin/produtos/<%= p.id %>/estoque" class="est-form">
+                    <select name="motivo"><% motivos.forEach(function (m) { %><option><%= m %></option><% }); %></select>
+                    <input name="quantidade" type="number" placeholder="qtd" title="quantidade (negativa para saída no Ajuste)" />
+                    <button class="btn ghost sm" type="submit">lançar</button>
+                  </form>
+                </div>
+              <% } %>
               <% p.cores.forEach(function (c) { %>
                 <form method="post" action="/admin/produtos/<%= p.id %>/cores/<%= c.id %>/sku" class="cor-row">
                   <span class="cor-nome"><%= c.nome %></span>
                   <input name="sku" class="mono-in" value="<%= c.sku || '' %>" placeholder="SKU" title="SKU desta cor" />
                   <button class="btn ghost sm" type="submit">ok</button>
+                  <span class="saldo-tag <%= c.saldo <= 0 ? 'zero' : (c.saldo <= 5 ? 'baixo' : '') %>" title="saldo em estoque"><%= c.saldo %> un.</span>
+                  <input type="hidden" name="cor_id" value="<%= c.id %>" />
+                  <select name="motivo" form="est-<%= c.id %>"><% motivos.forEach(function (m) { %><option><%= m %></option><% }); %></select>
+                  <input name="quantidade" form="est-<%= c.id %>" type="number" placeholder="qtd" title="quantidade (negativa para saída no Ajuste)" />
+                  <button class="btn ghost sm" type="submit" form="est-<%= c.id %>">lançar</button>
                   <button class="chip-x" type="submit" formaction="/admin/produtos/<%= p.id %>/cores/<%= c.id %>/remover" formmethod="post" title="remover cor"
                           onclick="return confirm('Remover a cor <%= c.nome.replace(/'/g, '') %> de <%= p.nome.replace(/'/g, '') %>? Pedidos antigos não mudam.')">&times;</button>
                 </form>
+                <form method="post" action="/admin/produtos/<%= p.id %>/estoque" id="est-<%= c.id %>" style="display:none"><input type="hidden" name="cor_id" value="<%= c.id %>" /></form>
               <% }); %>
               <form method="post" action="/admin/produtos/<%= p.id %>/cores" class="cor-row nova">
                 <input name="nome" placeholder="nova cor" class="cor-nome-in" />
@@ -64,6 +79,6 @@
   </div>
 </div>
 
-<div class="hint-box">O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
+<div class="hint-box"><b>Estoque:</b> o saldo fica em cada cor. "Entrada" soma, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Cada etiqueta despachada na bipagem baixa 1 unidade sozinha. Saldo negativo fica em vermelho para acertar. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
 
 <%- include('../partials/app-close') %>

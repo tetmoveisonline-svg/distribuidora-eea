@@ -7,11 +7,12 @@ const { exigeCliente } = require('../auth');
 const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
+const estoque = require('../estoque');
 const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay, precoEfetivo, skuCor } = require('../util');
 
 // Itens ativos do cliente com o preco efetivo (promocao aplicada se estiver no periodo)
 // e as cores do produto (cada cor com seu SKU). Produto sem cores = cor unica.
-const SQL_ITENS = `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id, p.sku AS produto_sku,
+const SQL_ITENS = `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id, p.sku AS produto_sku, p.saldo AS produto_saldo,
                           to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
                    FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
                    WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`;
@@ -20,7 +21,7 @@ async function itensComPreco(q, clienteId) {
   const pids = r.rows.map((i) => i.produto_id).filter(Boolean);
   const coresMap = new Map();
   if (pids.length) {
-    const c = await q.query('SELECT id, produto_id, nome, sku FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
+    const c = await q.query('SELECT id, produto_id, nome, sku, saldo FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
     for (const row of c.rows) {
       if (!coresMap.has(row.produto_id)) coresMap.set(row.produto_id, []);
       coresMap.get(row.produto_id).push(row);
@@ -28,8 +29,8 @@ async function itensComPreco(q, clienteId) {
   }
   return r.rows.map((i) => {
     const ef = precoEfetivo(i);
-    const cores = (coresMap.get(i.produto_id) || []).map((c) => ({ id: c.id, nome: c.nome, sku: skuCor(i.produto_sku, c) }));
-    return { id: i.id, nome: i.nome, sku: null, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo, cores };
+    const cores = (coresMap.get(i.produto_id) || []).map((c) => ({ id: c.id, nome: c.nome, sku: skuCor(i.produto_sku, c), saldo: Number(c.saldo || 0) }));
+    return { id: i.id, nome: i.nome, sku: null, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo, cores, saldo: i.produto_id ? Number(i.produto_saldo || 0) : null };
   });
 }
 
@@ -263,6 +264,20 @@ router.get('/meus-envios', exigeCliente, async (req, res, next) => {
 
     res.render('cliente/meus-envios', { pedidos, formatBRL, formatDateTime });
   } catch (e) { next(e); }
+});
+
+// ---------- Estoque (produtos com preco negociado) ----------
+router.get('/estoque', exigeCliente, async (req, res, next) => {
+  try {
+    const produtos = await estoque.saldosParaCliente(req.session.user.clienteId);
+    res.render('cliente/estoque', { produtos, formatDateTime });
+  } catch (e) { next(e); }
+});
+router.get('/api/estoque', exigeCliente, async (req, res) => {
+  try {
+    const produtos = await estoque.saldosParaCliente(req.session.user.clienteId);
+    res.json({ ok: true, produtos, atualizado_em: formatDateTime(new Date()) });
+  } catch (e) { console.error('Erro estoque cliente:', e); res.status(500).json({ erro: 'Falha ao carregar o estoque.' }); }
 });
 
 // ---------- Financeiro (um lancamento por pedido) ----------

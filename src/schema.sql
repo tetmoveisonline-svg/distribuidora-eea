@@ -221,3 +221,24 @@ ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sku TEXT;
 ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS sku TEXT;
 UPDATE produto_cores c SET sku = CASE WHEN p.sku IS NOT NULL AND p.sku <> '' AND c.sufixo IS NOT NULL THEN p.sku || '-' || c.sufixo ELSE c.sufixo END
   FROM produtos p WHERE p.id = c.produto_id AND c.sku IS NULL AND c.sufixo IS NOT NULL;
+
+-- ===================== ESTOQUE =====================
+-- Saldo por cor (produto com cores) ou no produto (cor unica). Pode ficar negativo se o
+-- despacho passar do estoque lancado: fica em destaque para o admin acertar.
+ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS saldo INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS saldo INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS estoque_mov (
+  id          SERIAL PRIMARY KEY,
+  produto_id  INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+  cor_id      INTEGER REFERENCES produto_cores(id) ON DELETE SET NULL,
+  cor_nome    TEXT,
+  quantidade  INTEGER NOT NULL,            -- positivo entra, negativo sai
+  saldo_apos  INTEGER NOT NULL,
+  motivo      TEXT NOT NULL,               -- Entrada, Ajuste, Saída manual, Despacho
+  observacao  TEXT,
+  pedido_id   INTEGER REFERENCES pedidos(id) ON DELETE SET NULL,
+  etiqueta_id INTEGER REFERENCES etiquetas(id) ON DELETE SET NULL,
+  usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_estoque_mov_produto ON estoque_mov(produto_id, criado_em DESC);

@@ -6,6 +6,7 @@ const db = require('../db');
 const { exigeAdmin } = require('../auth');
 const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
+const estoque = require('../estoque');
 const {
   formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
   horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps, precoEfetivo, brDate, hojeISO, skuCor,
@@ -314,18 +315,18 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
     );
-    const cores = await db.query('SELECT id, produto_id, nome, sku FROM produto_cores ORDER BY produto_id, ordem, id');
+    const cores = await db.query('SELECT id, produto_id, nome, sku, saldo FROM produto_cores ORDER BY produto_id, ordem, id');
     const coresMap = new Map();
     for (const c of cores.rows) {
       if (!coresMap.has(c.produto_id)) coresMap.set(c.produto_id, []);
       coresMap.get(c.produto_id).push(c);
     }
     const produtos = r.rows.map((p) => ({ ...p, cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })) }));
-    res.render('admin/produtos', { produtos, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null });
+    res.render('admin/produtos', { produtos, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null });
   } catch (e) { next(e); }
 });
 router.post('/produtos', async (req, res, next) => {
@@ -360,6 +361,32 @@ router.post('/produtos/:id/cores', async (req, res, next) => {
     await db.query('INSERT INTO produto_cores (produto_id, nome, sku, ordem) VALUES ($1,$2,$3,$4)', [pid, nome, normSku(req.body.sku), ord.rows[0].o]);
     res.redirect('/admin/produtos');
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.code === '23505' ? 'Essa cor já existe neste produto.' : msgErro(e))); }
+});
+// Lancamento de estoque (entrada, ajuste ou saida manual) numa cor ou no produto (cor unica).
+router.post('/produtos/:id/estoque', async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    const pid = pInt(req.params.id), corId = pInt(req.body.cor_id);
+    let qtd = pInt(req.body.quantidade);
+    const motivo = estoque.MOTIVOS.includes(req.body.motivo) ? req.body.motivo : 'Ajuste';
+    if (qtd === null || qtd === 0) throw new Error('Informe a quantidade (ex.: 10 para entrada, -3 para saída).');
+    if (motivo === 'Saída manual' && qtd > 0) qtd = -qtd;
+    if (motivo === 'Entrada' && qtd < 0) qtd = -qtd;
+    await client.query('BEGIN');
+    const saldo = await estoque.movimentar(client, { produtoId: pid, corId, quantidade: qtd, motivo, observacao: (req.body.observacao || '').toString().trim().slice(0, 200) || null, usuarioId: req.session.user.id });
+    await client.query('COMMIT');
+    if (saldo === null) throw new Error('Produto ou cor não encontrados.');
+    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Estoque atualizado: saldo ' + saldo + '.'));
+  } catch (e) { await client.query('ROLLBACK'); res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); } finally { client.release(); }
+});
+// Historico de movimentos
+router.get('/estoque', async (req, res, next) => {
+  try {
+    const produtoId = pInt(req.query.produto);
+    const produtos = await estoque.saldosTodos();
+    const movs = await estoque.historico({ produtoId });
+    res.render('admin/estoque', { ativo: 'estoque', produtos, movs, produtoId, formatDateTime });
+  } catch (e) { next(e); }
 });
 // Editar o SKU de uma cor
 router.post('/produtos/:id/cores/:cid/sku', async (req, res, next) => {

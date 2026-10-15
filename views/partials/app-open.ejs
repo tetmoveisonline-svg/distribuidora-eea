@@ -16,6 +16,7 @@
       <a class="nav-item <%= ativo === 'novo' ? 'on' : '' %>" href="/novo"><span class="ico">&#8593;</span> Novo envio</a>
       <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
       <a class="nav-item <%= ativo === 'financeiro' ? 'on' : '' %>" href="/financeiro"><span class="ico">&#36;</span> Financeiro</a>
+      <a class="nav-item <%= ativo === 'estoque' ? 'on' : '' %>" href="/estoque"><span class="ico">&#9638;</span> Estoque</a>
     <% } else if (user.papel === 'representante') { %>
       <div class="grp">Representante</div>
       <a class="nav-item <%= ativo === 'rep' ? 'on' : '' %>" href="/rep/pedidos"><span class="ico">&#9776;</span> Meus pedidos</a>
@@ -32,6 +33,7 @@
       <a class="nav-item <%= ativo === 'reps' ? 'on' : '' %>" href="/admin/representantes"><span class="ico">&#9733;</span> Representantes</a>
       <a class="nav-item <%= ativo === 'funcs' ? 'on' : '' %>" href="/admin/funcionarios"><span class="ico">&#9814;</span> Funcionários</a>
       <a class="nav-item <%= ativo === 'produtos' ? 'on' : '' %>" href="/admin/produtos"><span class="ico">&#9635;</span> Produtos</a>
+      <a class="nav-item <%= ativo === 'estoque' ? 'on' : '' %>" href="/admin/estoque"><span class="ico">&#9638;</span> Estoque</a>
       <a class="nav-item <%= ativo === 'precos' ? 'on' : '' %>" href="/admin/precos"><span class="ico">&#9873;</span> Preços por cliente</a>
     <% } %>
   </aside>
