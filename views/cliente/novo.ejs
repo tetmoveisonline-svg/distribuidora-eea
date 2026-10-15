@@ -25,7 +25,8 @@
   </div>
 <% } %>
 <% if (credito && credito.bloqueado) { %>
-  <div class="alert err">Há pedido vencido em aberto (<%= credito.maisVencido.numero %>, <%= formatBRL(credito.maisVencido.valor) %>, venceu em <%= credito.maisVencido.vencimento %>). Novos envios ficam liberados após o pagamento.<% if (contato) { %> Contato: <%= contato %>.<% } %></div>
+  <div class="alert err">Há pedido vencido em aberto (<%= credito.maisVencido.numero %>, <%= formatBRL(credito.maisVencido.valor) %>, venceu em <%= credito.maisVencido.vencimento %>). Novos envios ficam liberados após o pagamento.<% if (contato) { %> Contato: <%= contato %>.<% } %>
+    <% if (whatsapp) { %><div style="margin-top:8px"><a class="btn sm whats" id="bloqWhats" href="#" target="_blank" rel="noopener">Falar no WhatsApp</a></div><% } %></div>
 <% } %>
 
 <div class="card pad">
@@ -56,9 +57,11 @@
         <div class="cw-opt-title">Liberar mais saldo</div>
         <div class="cw-opt-text" id="cwSaldo"></div>
         <div class="actions-inline">
-          <% if (contato) { %><span class="doc-link"><%= contato %></span><% } %>
+          <% if (whatsapp) { %><a class="btn sm whats" id="cwWhats" href="#" target="_blank" rel="noopener">Pedir antecipação no WhatsApp</a>
+          <% } else if (contato) { %><span class="doc-link"><%= contato %></span><% } %>
           <a class="doc-link" href="/financeiro">Ver financeiro</a>
         </div>
+        <% if (whatsapp) { %><div class="dim" style="font-size:11.5px;margin-top:8px">Abre o WhatsApp da distribuidora com a mensagem já preenchida. Você só confere e envia.</div><% } %>
       </div>
     </div>
   </div>
@@ -111,7 +114,9 @@
 
 <script>
   window.ITENS = <%- JSON.stringify(itens) %>;
-  window.CREDITO = <%- JSON.stringify(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
+  window.CREDITO = <%- JSON.stringify(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, abertos: credito.abertos, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
+  window.WHATSAPP = <%- JSON.stringify(whatsapp || '') %>;
+  window.CLIENTE = <%- JSON.stringify({ nome: clienteNome, login: clienteLogin }) %>;
 </script>
 <script type="module" src="/js/leitor-etiquetas.js"></script>
 <script src="/js/novo.js"></script>

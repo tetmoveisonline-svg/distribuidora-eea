@@ -248,3 +248,5 @@ tr:last-child td { border-bottom:none; }
 .cw-opt { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:13px; }
 .cw-opt-title { font-weight:600; margin-bottom:4px; }
 .cw-opt-text { color:var(--text-muted); margin-bottom:10px; }
+.btn.whats { background:#25d366; color:#0b2e1a; }
+.btn.whats:hover { background:#1ebe5b; }

@@ -208,8 +208,9 @@
 
     var saldo = document.getElementById('cwSaldo');
     saldo.textContent = CREDITO.proximo
-      ? 'Quite o pedido ' + CREDITO.proximo.numero + ' (' + brl(CREDITO.proximo.valor) + ', vence ' + CREDITO.proximo.vencimento + ') ou fale com a empresa para ampliar o limite.'
+      ? 'Antecipe o pagamento do pedido ' + CREDITO.proximo.numero + ' (' + brl(CREDITO.proximo.valor) + ', vence ' + CREDITO.proximo.vencimento + ') e o crédito volta assim que a distribuidora der baixa. Ou fale com a empresa para ampliar o limite.'
       : 'Fale com a empresa para ampliar o limite de crédito.';
+    atualizarWhats(totalC, excesso, item, row.quantidade);
 
     creditWarn.style.display = 'block';
     if (revisarHint) revisarHint.style.display = 'block';
@@ -220,6 +221,37 @@
     if (revisarHint) revisarHint.style.display = 'none';
     linhaSugerida = null;
   }
+  // ---------- WhatsApp: mensagem padrao de antecipacao de pagamento ----------
+  var WHATSAPP = window.WHATSAPP || '';
+  var CLIENTE = window.CLIENTE || { nome: '', login: '' };
+  function linhaPedido(p) {
+    return '• Pedido em aberto: *' + p.numero + '* – ' + brl(p.valor) + (p.vencido ? ' (venceu ' : ' (vence ') + p.vencimento + ')';
+  }
+  function mensagemWhats(totalC, excesso, item, qtd) {
+    var l = [];
+    l.push('Olá! Sou da *' + CLIENTE.nome + '*' + (CLIENTE.login ? ' (login ' + CLIENTE.login + ')' : '') + '.');
+    l.push('Quero antecipar o pagamento para liberar mais crédito na plataforma.');
+    l.push('');
+    (CREDITO && CREDITO.abertos || []).forEach(function (p) { l.push(linhaPedido(p)); });
+    if (CREDITO && CREDITO.controlado) l.push('• Crédito disponível hoje: ' + brl(CREDITO.disponivel));
+    if (totalC) l.push('• Envio que preciso fazer: ' + brl(totalC) + (item ? ' (' + qtd + ' etiqueta' + (qtd > 1 ? 's' : '') + ' de ' + item.nome + ')' : ''));
+    if (excesso) l.push('• Preciso liberar: *' + brl(excesso) + '*');
+    l.push('');
+    l.push('Podem me passar a chave Pix ou o boleto para antecipar?');
+    return l.join('\n');
+  }
+  function linkWhats(msg) { return 'https://wa.me/' + WHATSAPP + '?text=' + encodeURIComponent(msg); }
+  function atualizarWhats(totalC, excesso, item, qtd) {
+    var a = document.getElementById('cwWhats');
+    if (!a || !WHATSAPP) return;
+    a.href = linkWhats(mensagemWhats(totalC, excesso, item, qtd));
+  }
+  // Bloqueio por vencido: o link ja fica pronto ao abrir a pagina (sem envio em andamento).
+  (function () {
+    var b = document.getElementById('bloqWhats');
+    if (b && WHATSAPP) b.href = linkWhats(mensagemWhats(0, 0, null, 0));
+  })();
+
   document.getElementById('cwAjustar').addEventListener('click', function () {
     if (!linhaSugerida || !rows[linhaSugerida.idx]) return;
     rows[linhaSugerida.idx].quantidade = linhaSugerida.qtd;

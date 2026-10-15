@@ -74,6 +74,7 @@ Veja `.env.example`. Destaques:
 - `SESSION_SECRET` — segredo da sessão (troque por algo aleatório e longo).
 - `ADMIN_LOGIN` / `ADMIN_SENHA` — credenciais criadas pelo seed.
 - `EMPRESA_NOME` / `EMPRESA_CNPJ` / `EMPRESA_CONTATO` — cabeçalho do comprovante.
+- `EMPRESA_WHATSAPP` — WhatsApp da distribuidora (só dígitos, com DDI, ex.: 5511999990000). Mostra o botão "Pedir antecipação no WhatsApp" quando o cliente estoura o limite de crédito.
 - `COMPROVANTE_FORMA_PAGAMENTO` / `COMPROVANTE_PRAZO_DESPACHO` — textos do comprovante.
 
 ## Observações

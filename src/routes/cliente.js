@@ -52,7 +52,14 @@ router.get('/novo', exigeCliente, async (req, res, next) => {
   try {
     const itens = await db.query('SELECT id, nome, preco_centavos FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome', [req.session.user.clienteId]);
     const credito = await financeiro.creditoCliente(req.session.user.clienteId);
-    res.render('cliente/novo', { itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', formatBRL });
+    const cli = await db.query('SELECT nome FROM clientes WHERE id = $1', [req.session.user.clienteId]);
+    // WhatsApp da distribuidora (so digitos, com DDI). Vazio = botao nao aparece.
+    const whatsapp = (process.env.EMPRESA_WHATSAPP || '').replace(/\D/g, '');
+    res.render('cliente/novo', {
+      itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', whatsapp,
+      clienteNome: (cli.rows[0] && cli.rows[0].nome) || req.session.user.nome, clienteLogin: req.session.user.login || '',
+      formatBRL,
+    });
   } catch (e) { next(e); }
 });
 

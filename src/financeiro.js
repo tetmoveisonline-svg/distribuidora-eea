@@ -132,15 +132,17 @@ async function creditoCliente(clienteId) {
      WHERE f.cliente_id = $1 AND f.status = 'aberto' ORDER BY f.vencimento, f.id`, [clienteId]
   );
   let aberto = 0, vencido = 0, proximo = null, maisVencido = null;
+  const abertos = [];
   for (const l of r.rows) {
     aberto += l.valor_centavos;
+    abertos.push({ numero: l.numero, valor: l.valor_centavos, vencimento: l.vencimento_br, vencido: l.vencimento_iso < hoje });
     if (l.vencimento_iso < hoje) { vencido += l.valor_centavos; if (!maisVencido) maisVencido = l; }
     else if (!proximo) proximo = l;
   }
   const limite = cli.limite_centavos === null || cli.limite_centavos === undefined ? null : Number(cli.limite_centavos);
   const disponivel = limite === null ? null : Math.max(0, limite - aberto);
   return {
-    limite, aberto, vencido, disponivel,
+    limite, aberto, vencido, disponivel, abertos,
     controlado: limite !== null,
     bloqueado: !!(cli.bloquear_vencido && vencido > 0),
     proximo: proximo ? { numero: proximo.numero, valor: proximo.valor_centavos, vencimento: proximo.vencimento_br } : null,
