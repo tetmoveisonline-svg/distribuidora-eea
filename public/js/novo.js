@@ -57,9 +57,12 @@
   }
 
   // ---------- upload ----------
-  function upload(fileList) {
-    if (!fileList || fileList.length === 0) return;
+  function upload(fileListOrig) {
+    if (!fileListOrig || fileListOrig.length === 0) return;
     if (ITENS.length === 0) { showUploadMsg('Cadastre itens antes de subir etiquetas.'); return; }
+    // Copia a FileList: o input e limpo logo apos o change (fileInput.value = ''), e a leitura
+    // dos codigos e assincrona. Sem a copia, o FormData seria montado com a lista ja vazia.
+    var fileList = Array.prototype.slice.call(fileListOrig);
     showUploadMsg('');
     dropzone.classList.add('drag');
     lerCodigos(fileList).then(function (codigosPorArquivo) {
