@@ -253,3 +253,16 @@ ALTER TABLE produtos ADD COLUMN IF NOT EXISTS rep_bps INTEGER;   -- % do represe
 -- lidos do cadastro de cada um na hora do calculo.
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS rep_usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS func_usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+
+-- ===================== REPASSES (representante e funcionario) =====================
+-- Funcionario atribuido ao pedido e a taxa por etiqueta na hora da atribuicao.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS funcionario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS taxa_func_centavos INTEGER;
+-- Repasse pago ao representante / funcionario (valor, data e forma). NULL = ainda nao pago.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS rep_pago_em TIMESTAMPTZ;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS rep_pago_forma TEXT;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS rep_pago_centavos INTEGER;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_em TIMESTAMPTZ;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_forma TEXT;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_centavos INTEGER;
+CREATE INDEX IF NOT EXISTS idx_pedidos_funcionario ON pedidos(funcionario_id);

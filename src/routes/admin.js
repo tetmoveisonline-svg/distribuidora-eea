@@ -7,6 +7,44 @@ const { exigeAdmin } = require('../auth');
 const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
+const repasses = require('../repasses');
+
+// Tela de repasses (Representantes / Funcionarios): seletor, cards, abas e tabela por pedido.
+async function telaRepasses(tipo, req, res, next) {
+  try {
+    const lista = await repasses.pessoas(tipo);
+    const param = tipo === 'funcionario' ? 'func' : 'rep';
+    let usuarioId = pInt(req.query[param]);
+    if (!usuarioId && lista.length) usuarioId = (lista.find((x) => x.ativo) || lista[0]).id;
+    const pessoa = lista.find((x) => x.id === usuarioId) || null;
+    const sit = ['todos', 'pendente', 'liberado', 'pago'].includes(req.query.sit) ? req.query.sit : 'todos';
+    const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : '';
+    const todos = pessoa ? await repasses.listar(tipo, pessoa.id) : [];
+    const doMes = mes ? todos.filter((r) => r.aceite_ym === mes) : todos;
+    const contagem = { pendente: 0, liberado: 0, pago: 0 };
+    doMes.forEach((r) => { contagem[r.situacao]++; });
+    res.render('admin/repasses', {
+      tipo, param, ativo: tipo === 'funcionario' ? 'funcs' : 'reps',
+      titulo: tipo === 'funcionario' ? 'Funcionários' : 'Representantes',
+      pessoas: lista, pessoa, linhas: repasses.filtrar(doMes, sit), resumo: repasses.resumo(todos), contagem,
+      meses: repasses.mesesDe(todos),
+      filtro: { usuarioId, sit, mes }, formas: repasses.FORMAS, hoje: hojeISO(),
+      abrirCadastro: req.query.cadastro === '1',
+      ok: req.query.ok || null, erro: req.query.erro || null, formatBRL, formatPercent, formatDateTime,
+    });
+  } catch (e) { next(e); }
+}
+function voltarRepasses(tipo, req, extra) {
+  const q = new URLSearchParams();
+  const b = req.body || {};
+  const param = tipo === 'funcionario' ? 'func' : 'rep';
+  if (b.ret_usuario) q.set(param, b.ret_usuario);
+  if (b.ret_sit) q.set('sit', b.ret_sit);
+  if (b.ret_mes) q.set('mes', b.ret_mes);
+  Object.keys(extra || {}).forEach((k) => q.set(k, extra[k]));
+  const s = q.toString();
+  return '/admin/' + (tipo === 'funcionario' ? 'funcionarios' : 'representantes') + (s ? '?' + s : '');
+}
 const {
   formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
   horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps, precoEfetivo, brDate, hojeISO, skuCor,
@@ -76,6 +114,7 @@ router.get('/pedido/:id', async (req, res, next) => {
     const pedido = pr.rows[0];
     const linhas = await db.query('SELECT * FROM linhas WHERE pedido_id = $1 ORDER BY id', [pedido.id]);
     const reps = await db.query("SELECT id, nome, comissao_bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE ORDER BY nome");
+    const funcs = await db.query("SELECT id, nome, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE ORDER BY nome");
     const fr = await funcRef();
     const etqs = await db.query(
       `SELECT e.indice, e.codigo, e.codigo_externo, e.status, e.despachado_em, l.item_nome
@@ -84,7 +123,7 @@ router.get('/pedido/:id', async (req, res, next) => {
     );
     const etqDespachadas = etqs.rows.filter((e) => e.status === 'despachado').length;
     res.render('admin/pedido', {
-      pedido, linhas: linhas.rows, reps: reps.rows, funcRef: fr,
+      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr,
       taxaFuncCentavos: fr ? fr.taxa_etiqueta_centavos * pedido.total_etiquetas : null,
       passos: andamentoDisplay(pedido),
       etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
@@ -94,6 +133,19 @@ router.get('/pedido/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Funcionario do pedido (taxa por etiqueta gravada na atribuicao).
+router.post('/pedido/:id/funcionario', async (req, res, next) => {
+  try {
+    const funcId = pInt(req.body.funcionario_id);
+    if (!funcId) { await db.query('UPDATE pedidos SET funcionario_id = NULL, taxa_func_centavos = NULL WHERE id = $1', [req.params.id]); return res.redirect('/admin/pedido/' + req.params.id); }
+    const f = await db.query("SELECT taxa_etiqueta_centavos FROM usuarios WHERE id = $1 AND papel = 'funcionario'", [funcId]);
+    if (f.rowCount === 0) return res.redirect('/admin/pedido/' + req.params.id);
+    let taxa = parsePrecoToCentavos(req.body.taxa);
+    if (taxa === null) taxa = f.rows[0].taxa_etiqueta_centavos || 0;
+    await db.query('UPDATE pedidos SET funcionario_id = $1, taxa_func_centavos = $2 WHERE id = $3', [funcId, taxa, req.params.id]);
+    res.redirect('/admin/pedido/' + req.params.id);
+  } catch (e) { next(e); }
+});
 router.post('/pedido/:id/comissao', async (req, res, next) => {
   try {
     const pr = await db.query('SELECT id, total_centavos FROM pedidos WHERE id = $1', [req.params.id]);
@@ -284,15 +336,30 @@ router.post('/clientes/:id/toggle', async (req, res, next) => {
 });
 
 // ===================== REPRESENTANTES =====================
-router.get('/representantes', async (req, res, next) => {
+router.get('/representantes', (req, res, next) => telaRepasses('representante', req, res, next));
+// Repasses: marcar pago / reabrir / pagar todos liberados (tipo = representante | funcionario)
+router.post('/repasses/:tipo/:pedidoId/pagar', async (req, res, next) => {
+  const tipo = req.params.tipo === 'funcionario' ? 'funcionario' : 'representante';
   try {
-    const r = await db.query(
-      `SELECT u.id, u.nome, u.login, u.ativo, u.comissao_bps,
-              (SELECT count(*) FROM pedidos p WHERE p.representante_id = u.id) AS pedidos
-       FROM usuarios u WHERE u.papel = 'representante' ORDER BY u.nome`
-    );
-    res.render('admin/representantes', { reps: r.rows, ativo: 'reps', erro: req.query.erro || null, formatPercent });
-  } catch (e) { next(e); }
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(req.body.pago_em || '') ? req.body.pago_em : hojeISO();
+    const forma = repasses.FORMAS.includes(req.body.forma) ? req.body.forma : 'Outro';
+    const p = await repasses.marcarPago(tipo, pInt(req.params.pedidoId), data, forma);
+    res.redirect(voltarRepasses(tipo, req, { ok: 'Repasse do pedido ' + p.numero + ' (' + formatBRL(p.valor) + ') marcado como pago.' }));
+  } catch (e) { res.redirect(voltarRepasses(tipo, req, { erro: e.message || 'Falha ao marcar.' })); }
+});
+router.post('/repasses/:tipo/:pedidoId/reabrir', async (req, res, next) => {
+  const tipo = req.params.tipo === 'funcionario' ? 'funcionario' : 'representante';
+  try { await repasses.reabrir(tipo, pInt(req.params.pedidoId)); res.redirect(voltarRepasses(tipo, req, { ok: 'Repasse reaberto.' })); }
+  catch (e) { next(e); }
+});
+router.post('/repasses/:tipo/pagar-liberados', async (req, res, next) => {
+  const tipo = req.params.tipo === 'funcionario' ? 'funcionario' : 'representante';
+  try {
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(req.body.pago_em || '') ? req.body.pago_em : hojeISO();
+    const forma = repasses.FORMAS.includes(req.body.forma) ? req.body.forma : 'Outro';
+    const r = await repasses.pagarLiberados(tipo, pInt(req.body.usuario_id), data, forma);
+    res.redirect(voltarRepasses(tipo, req, { ok: r.n + ' repasse(s) marcados como pagos, ' + formatBRL(r.total) + '.' }));
+  } catch (e) { res.redirect(voltarRepasses(tipo, req, { erro: e.message || 'Falha ao marcar.' })); }
 });
 router.post('/representantes', async (req, res, next) => {
   try {
@@ -300,33 +367,45 @@ router.post('/representantes', async (req, res, next) => {
     const bps = parsePercentToBps(req.body.comissao);
     if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
     if (bps === null) throw new Error('Informe a comissão padrão (%).');
-    await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps) VALUES ($1,$2,$3,$4,$5)', [nome, login, await bcrypt.hash(senha, 10), 'representante', bps]);
-    res.redirect('/admin/representantes');
-  } catch (e) { res.redirect('/admin/representantes?erro=' + encodeURIComponent(msgErro(e))); }
+    const ins = await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps) VALUES ($1,$2,$3,$4,$5) RETURNING id', [nome, login, await bcrypt.hash(senha, 10), 'representante', bps]);
+    res.redirect('/admin/representantes?rep=' + ins.rows[0].id + '&ok=' + encodeURIComponent('Representante cadastrado.'));
+  } catch (e) { res.redirect('/admin/representantes?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
 });
 router.post('/representantes/:id/toggle', async (req, res, next) => {
-  try { await db.query('UPDATE usuarios SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/representantes'); } catch (e) { next(e); }
+  try { await db.query('UPDATE usuarios SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/representantes?cadastro=1&rep=' + req.params.id); } catch (e) { next(e); }
+});
+// Comissao padrao / taxa (edicao inline no painel de cadastro)
+router.post('/representantes/:id/comissao', async (req, res, next) => {
+  try {
+    const bps = parsePercentToBps(req.body.comissao);
+    if (bps === null || bps >= 10000) throw new Error('Comissão inválida.');
+    await db.query("UPDATE usuarios SET comissao_bps = $2 WHERE id = $1 AND papel = 'representante'", [pInt(req.params.id), bps]);
+    res.redirect('/admin/representantes?cadastro=1&rep=' + req.params.id + '&ok=' + encodeURIComponent('Comissão padrão atualizada (vale para novos pedidos).'));
+  } catch (e) { res.redirect('/admin/representantes?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
+});
+router.post('/funcionarios/:id/taxa', async (req, res, next) => {
+  try {
+    const taxa = parsePrecoToCentavos(req.body.taxa);
+    if (taxa === null) throw new Error('Taxa inválida.');
+    await db.query("UPDATE usuarios SET taxa_etiqueta_centavos = $2 WHERE id = $1 AND papel = 'funcionario'", [pInt(req.params.id), taxa]);
+    res.redirect('/admin/funcionarios?cadastro=1&func=' + req.params.id + '&ok=' + encodeURIComponent('Taxa atualizada (vale para novos pedidos).'));
+  } catch (e) { res.redirect('/admin/funcionarios?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
 });
 
 // ===================== FUNCIONARIOS =====================
-router.get('/funcionarios', async (req, res, next) => {
-  try {
-    const r = await db.query("SELECT id, nome, login, ativo, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' ORDER BY nome");
-    res.render('admin/funcionarios', { funcs: r.rows, ativo: 'funcs', erro: req.query.erro || null, formatBRL });
-  } catch (e) { next(e); }
-});
+router.get('/funcionarios', (req, res, next) => telaRepasses('funcionario', req, res, next));
 router.post('/funcionarios', async (req, res, next) => {
   try {
     const nome = (req.body.nome || '').trim(), login = (req.body.login || '').trim(), senha = req.body.senha || '';
     const taxa = parsePrecoToCentavos(req.body.taxa);
     if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
     if (taxa === null) throw new Error('Informe a taxa por etiqueta (R$).');
-    await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, taxa_etiqueta_centavos) VALUES ($1,$2,$3,$4,$5)', [nome, login, await bcrypt.hash(senha, 10), 'funcionario', taxa]);
-    res.redirect('/admin/funcionarios');
-  } catch (e) { res.redirect('/admin/funcionarios?erro=' + encodeURIComponent(msgErro(e))); }
+    const ins = await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, taxa_etiqueta_centavos) VALUES ($1,$2,$3,$4,$5) RETURNING id', [nome, login, await bcrypt.hash(senha, 10), 'funcionario', taxa]);
+    res.redirect('/admin/funcionarios?func=' + ins.rows[0].id + '&ok=' + encodeURIComponent('Funcionário cadastrado.'));
+  } catch (e) { res.redirect('/admin/funcionarios?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
 });
 router.post('/funcionarios/:id/toggle', async (req, res, next) => {
-  try { await db.query('UPDATE usuarios SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/funcionarios'); } catch (e) { next(e); }
+  try { await db.query('UPDATE usuarios SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/funcionarios?cadastro=1&func=' + req.params.id); } catch (e) { next(e); }
 });
 
 // ===================== PRODUTOS =====================

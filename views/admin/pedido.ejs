@@ -55,17 +55,23 @@
   <!-- funcionário + andamento -->
   <div class="comm-box">
     <div class="section-title">Funcionário (taxa por etiqueta)</div>
-    <table>
-      <tbody>
-        <tr><td>Etiquetas</td><td class="num"><%= pedido.total_etiquetas %></td></tr>
-        <% if (funcRef) { %>
-          <tr><td>Taxa por etiqueta (<%= funcRef.nome %>)</td><td class="num"><%= formatBRL(funcRef.taxa_etiqueta_centavos) %></td></tr>
-          <tr><td><b>Taxa do funcionário</b></td><td class="num"><b><%= formatBRL(taxaFuncCentavos) %></b></td></tr>
-        <% } else { %>
-          <tr><td colspan="2" class="dim" style="font-size:12px">O valor de cada funcionário aparece na área dele (etiquetas × taxa). Aqui só aparece quando há um único funcionário ativo.</td></tr>
-        <% } %>
-      </tbody>
-    </table>
+    <form method="post" action="/admin/pedido/<%= pedido.id %>/funcionario">
+      <div class="field"><label>Funcionário deste pedido</label>
+        <select name="funcionario_id">
+          <option value="">— sem funcionário —</option>
+          <% funcs.forEach(function (f) { %>
+            <option value="<%= f.id %>" <%= pedido.funcionario_id === f.id ? 'selected' : '' %>><%= f.nome %> (padrão <%= formatBRL(f.taxa_etiqueta_centavos) %>/etiq.)</option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="row-3">
+        <div class="field" style="margin:0"><label>Etiquetas</label><input value="<%= pedido.total_etiquetas %>" disabled /></div>
+        <div class="field" style="margin:0"><label>Taxa R$/etiq.</label><input name="taxa" placeholder="ex.: 0,50" value="<%= pedido.taxa_func_centavos !== null && pedido.taxa_func_centavos !== undefined ? (pedido.taxa_func_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>" /></div>
+        <div class="field" style="margin:0"><label>Taxa (R$)</label><input value="<%= pedido.taxa_func_centavos ? formatBRL(pedido.taxa_func_centavos * pedido.total_etiquetas) : 'R$ 0,00' %>" disabled /></div>
+      </div>
+      <button class="btn" type="submit" style="margin-top:6px">Salvar funcionário</button>
+    </form>
+    <div class="hint-box" style="margin-top:14px">Deixe a taxa em branco para usar a padrão do funcionário. O repasse final é etiquetas despachadas × taxa e aparece em Cadastros › Funcionários.</div>
 
     <div class="section-title" style="margin-top:18px">Andamento</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">

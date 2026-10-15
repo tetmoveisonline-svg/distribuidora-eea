@@ -1,0 +1,180 @@
+<%- include('../partials/app-open', { titulo: titulo, ativo: ativo }) %>
+<%
+  var isFunc = tipo === 'funcionario';
+  var base = isFunc ? '/admin/funcionarios' : '/admin/representantes';
+  function qs(extra) {
+    var q = [];
+    if (filtro.usuarioId) q.push(param + '=' + filtro.usuarioId);
+    var sit = extra && extra.sit !== undefined ? extra.sit : filtro.sit;
+    var mes = extra && extra.mes !== undefined ? extra.mes : filtro.mes;
+    if (sit && sit !== 'todos') q.push('sit=' + sit);
+    if (mes) q.push('mes=' + mes);
+    return base + (q.length ? '?' + q.join('&') : '');
+  }
+  function badgeFin(l) {
+    if (l.fin_sit === 'pago') return '<span class="badge ok">Pago ' + (l.fin_pago_br || '') + '</span>';
+    if (l.fin_sit === 'vencido') return '<span class="badge danger">Vencido · venc. ' + (l.venc_br || '') + '</span>';
+    if (l.fin_sit === 'cancelado') return '<span class="badge neutral">Cancelado</span>';
+    return '<span class="badge warn">Em aberto' + (l.venc_br ? ' · vence ' + l.venc_br : '') + '</span>';
+  }
+%>
+
+<h2 class="title"><%= titulo %></h2>
+<p class="sub"><%= isFunc ? 'Taxa por etiqueta de cada pedido atribuído. O repasse libera quando o cliente paga o pedido.' : 'Comissão de cada pedido atribuído, calculada sobre o valor cobrado. O repasse libera quando o cliente paga o pedido.' %></p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<div class="rep-top">
+  <form method="get" action="<%= base %>" class="rep-sel">
+    <label><%= isFunc ? 'Funcionário' : 'Representante' %></label>
+    <select name="<%= param %>" onchange="this.form.submit()">
+      <% if (pessoas.length === 0) { %><option value="">— nenhum cadastrado —</option><% } %>
+      <% pessoas.forEach(function (p) { %>
+        <option value="<%= p.id %>" <%= filtro.usuarioId === p.id ? 'selected' : '' %>><%= p.nome %> · <%= isFunc ? formatBRL(p.taxa_etiqueta_centavos) + '/etiq.' : formatPercent(p.comissao_bps) %><%= p.ativo ? '' : ' (inativo)' %></option>
+      <% }); %>
+    </select>
+    <span class="dim" style="font-size:12px"><%= pessoas.filter(function (p) { return p.ativo; }).length %> ativo(s) de <%= pessoas.length %></span>
+  </form>
+  <button type="button" class="link-btn" id="cadToggle">+ cadastro</button>
+</div>
+
+<div class="card pad cad-panel" id="cadPanel" style="<%= abrirCadastro ? '' : 'display:none' %>">
+  <div class="grid2">
+    <div>
+      <div class="section-title">Novo <%= isFunc ? 'funcionário' : 'representante' %></div>
+      <form method="post" action="<%= base %>">
+        <div class="field"><label>Nome</label><input name="nome" placeholder="<%= isFunc ? 'João Pereira' : 'Carlos Souza' %>" /></div>
+        <div class="field"><label>Login</label><input name="login" placeholder="<%= isFunc ? 'joao.pereira' : 'carlos.souza' %>" /></div>
+        <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
+        <% if (isFunc) { %>
+          <div class="field"><label>Taxa por etiqueta (R$)</label><input name="taxa" placeholder="0,50" /></div>
+        <% } else { %>
+          <div class="field"><label>Comissão padrão (%)</label><input name="comissao" placeholder="5" /></div>
+        <% } %>
+        <button class="btn block" type="submit">Salvar</button>
+      </form>
+    </div>
+    <div>
+      <div class="section-title">Cadastrados</div>
+      <table>
+        <thead><tr><th>Nome</th><th>Login</th><th><%= isFunc ? 'Taxa/etiq.' : 'Comissão' %></th><th class="num">Pedidos</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <% pessoas.forEach(function (p) { %>
+            <tr>
+              <td><%= p.nome %></td>
+              <td class="dim"><%= p.login %></td>
+              <td>
+                <% if (isFunc) { %>
+                  <form method="post" action="/admin/funcionarios/<%= p.id %>/taxa" class="prazo-form">R$ <input name="taxa" value="<%= (Number(p.taxa_etiqueta_centavos || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) %>" style="width:70px" /><button class="btn ghost sm" type="submit">ok</button></form>
+                <% } else { %>
+                  <form method="post" action="/admin/representantes/<%= p.id %>/comissao" class="prazo-form"><input name="comissao" value="<%= formatPercent(p.comissao_bps).replace('%', '') %>" style="width:56px" /> %<button class="btn ghost sm" type="submit">ok</button></form>
+                <% } %>
+              </td>
+              <td class="num"><%= p.pedidos %></td>
+              <td><% if (p.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
+              <td><form method="post" action="<%= base %>/<%= p.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= p.ativo ? 'Desativar' : 'Ativar' %></button></form></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<% if (pessoa) { %>
+<div class="kpis four">
+  <div class="kpi"><div class="kl">Pendente</div><div class="kv" style="color:var(--warn)"><%= formatBRL(resumo.pendente) %></div><div class="ks"><%= resumo.pendente_qtd %> pedido(s) · cliente ainda não pagou</div></div>
+  <div class="kpi accent"><div class="kl">Liberado para pagar</div><div class="kv" style="color:var(--accent)"><%= formatBRL(resumo.liberado) %></div><div class="ks"><%= resumo.liberado_qtd %> pedido(s) · cliente já pagou</div></div>
+  <div class="kpi ok"><div class="kl">Já pago</div><div class="kv"><%= formatBRL(resumo.pago) %></div><div class="ks"><%= resumo.pago_qtd %> pedido(s) · este mês <%= formatBRL(resumo.pago_mes) %></div></div>
+  <div class="kpi"><div class="kl">Total gerado</div><div class="kv"><%= formatBRL(resumo.total) %></div><div class="ks"><%= resumo.qtd %> pedido(s) atribuído(s)</div></div>
+</div>
+
+<div class="card pad">
+  <div class="rep-tabs">
+    <a class="tab <%= filtro.sit === 'todos' ? 'on' : '' %>" href="<%= qs({ sit: 'todos' }) %>">Todos</a>
+    <a class="tab <%= filtro.sit === 'pendente' ? 'on' : '' %>" href="<%= qs({ sit: 'pendente' }) %>">Pendente <span class="dim"><%= contagem.pendente %></span></a>
+    <a class="tab <%= filtro.sit === 'liberado' ? 'on' : '' %>" href="<%= qs({ sit: 'liberado' }) %>">Liberado <span class="dim"><%= contagem.liberado %></span></a>
+    <a class="tab <%= filtro.sit === 'pago' ? 'on' : '' %>" href="<%= qs({ sit: 'pago' }) %>">Pago <span class="dim"><%= contagem.pago %></span></a>
+    <span style="flex:1"></span>
+    <form method="get" action="<%= base %>" class="fin-filters" style="margin:0">
+      <input type="hidden" name="<%= param %>" value="<%= filtro.usuarioId %>" /><input type="hidden" name="sit" value="<%= filtro.sit %>" />
+      <select name="mes" onchange="this.form.submit()">
+        <option value="">Todos os meses (aceite)</option>
+        <% meses.forEach(function (m) { %><option value="<%= m.ym %>" <%= filtro.mes === m.ym ? 'selected' : '' %>><%= m.rotulo %></option><% }); %>
+      </select>
+    </form>
+    <% if (resumo.liberado_qtd > 0) { %>
+      <form method="post" action="/admin/repasses/<%= tipo %>/pagar-liberados" class="fin-filters" style="margin:0" onsubmit="return confirm('Marcar como pagos os <%= resumo.liberado_qtd %> repasse(s) liberados, no total de <%= formatBRL(resumo.liberado) %>?')">
+        <input type="hidden" name="usuario_id" value="<%= pessoa.id %>" /><input type="hidden" name="ret_usuario" value="<%= pessoa.id %>" /><input type="hidden" name="ret_sit" value="<%= filtro.sit %>" /><input type="hidden" name="ret_mes" value="<%= filtro.mes %>" />
+        <input type="date" name="pago_em" value="<%= hoje %>" class="date-sm" title="data do pagamento" />
+        <select name="forma"><% formas.forEach(function (f) { %><option><%= f %></option><% }); %></select>
+        <button class="btn sm" type="submit">Pagar todos liberados (<%= formatBRL(resumo.liberado) %>)</button>
+      </form>
+    <% } %>
+  </div>
+
+  <% if (linhas.length === 0) { %>
+    <div class="empty">Nenhum pedido nesse filtro.</div>
+  <% } else { %>
+  <div style="overflow-x:auto">
+  <table class="fin-table">
+    <thead>
+      <tr>
+        <th>Pedido</th><th>Cliente</th><th>Aceite</th>
+        <th class="num"><%= isFunc ? 'Etiquetas × taxa' : 'Valor cobrado × %' %></th>
+        <th class="num"><%= isFunc ? 'Taxa' : 'Comissão' %></th>
+        <th>Cliente pagou?</th><th>Repasse</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% linhas.forEach(function (l) { %>
+        <tr>
+          <td><a class="link-row" href="/admin/pedido/<%= l.id %>"><b><%= l.numero %></b></a></td>
+          <td><%= l.cliente_nome %></td>
+          <td class="dim"><%= l.aceite_br %></td>
+          <td class="num dim"><%= l.base_txt %><% if (isFunc && l.status !== 'despachado') { %><div style="font-size:11px">(previsto; conta as despachadas ao encerrar)</div><% } %></td>
+          <td class="num"><b><%= formatBRL(l.valor) %></b></td>
+          <td><%- badgeFin(l) %></td>
+          <td>
+            <% if (l.situacao === 'pago') { %>
+              <span class="badge ok">Pago <%= l.pago_br %><%= l.pago_forma ? ' · ' + l.pago_forma : '' %></span>
+              <form method="post" action="/admin/repasses/<%= tipo %>/<%= l.id %>/reabrir" style="display:inline;margin:0 0 0 6px">
+                <input type="hidden" name="ret_usuario" value="<%= pessoa.id %>" /><input type="hidden" name="ret_sit" value="<%= filtro.sit %>" /><input type="hidden" name="ret_mes" value="<%= filtro.mes %>" />
+                <button class="btn ghost sm" type="submit" title="desfazer">desfazer</button>
+              </form>
+            <% } else if (l.situacao === 'liberado') { %>
+              <form method="post" action="/admin/repasses/<%= tipo %>/<%= l.id %>/pagar" class="fin-filters" style="margin:0;flex-wrap:nowrap">
+                <input type="hidden" name="ret_usuario" value="<%= pessoa.id %>" /><input type="hidden" name="ret_sit" value="<%= filtro.sit %>" /><input type="hidden" name="ret_mes" value="<%= filtro.mes %>" />
+                <input type="date" name="pago_em" value="<%= hoje %>" class="date-sm" />
+                <select name="forma"><% formas.forEach(function (f) { %><option><%= f %></option><% }); %></select>
+                <button class="btn sm" type="submit">Marcar pago</button>
+              </form>
+            <% } else { %>
+              <span class="dim" style="font-size:12px">aguarda o cliente pagar</span>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</div>
+<% } else { %>
+  <div class="card pad"><div class="empty">Cadastre um <%= isFunc ? 'funcionário' : 'representante' %> em "+ cadastro".</div></div>
+<% } %>
+
+<div class="hint-box"><%= isFunc
+  ? 'O funcionário é atribuído em cada pedido (Pedidos recebidos › abrir o pedido). A taxa é etiquetas despachadas × taxa por etiqueta; antes do encerramento mostra o previsto com todas as etiquetas.'
+  : 'O representante é atribuído em cada pedido (Pedidos recebidos › abrir o pedido). A comissão é o valor cobrado do pedido × %; se o pedido for encerrado com sobras, a comissão acompanha.' %>
+  "Pendente" é quando o cliente ainda não pagou; "Liberado" é quando pagou e o repasse pode ser feito; "Pago" é repasse concluído.</div>
+
+<script>
+  (function () {
+    var b = document.getElementById('cadToggle'), p = document.getElementById('cadPanel');
+    b.addEventListener('click', function () { p.style.display = p.style.display === 'none' ? 'block' : 'none'; });
+  })();
+</script>
+
+<%- include('../partials/app-close') %>

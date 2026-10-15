@@ -335,3 +335,18 @@ td.mono { font-family:var(--mono); font-size:12px; }
 .custo-form label { width:100%; }
 .custo-form input, .custo-form select { width:100%; box-sizing:border-box; background:var(--card); border:1px solid var(--field-border); border-radius:8px; padding:6px 8px; color:var(--text); font-size:12.5px; font-family:inherit; }
 .custo-form button { grid-column:1 / -1; justify-self:start; }
+
+/* ---------- repasses (representantes / funcionarios) ---------- */
+.rep-top { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.rep-sel { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0; }
+.rep-sel label { font-size:12.5px; color:var(--text-muted); }
+.rep-sel select { background:var(--field-bg); border:1px solid var(--field-border); border-radius:10px; padding:10px 12px; color:var(--text); font-size:14px; font-family:inherit; min-width:260px; }
+.link-btn { background:transparent; border:none; color:var(--accent); font-size:12.5px; cursor:pointer; font-family:inherit; padding:6px 2px; }
+.link-btn:hover { text-decoration:underline; }
+.cad-panel { margin-bottom:16px; }
+.kpi.accent .kv { color:var(--accent); }
+.rep-tabs { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.rep-tabs .tab { font-size:13px; padding:7px 12px; border-radius:9px; border:1px solid var(--border); color:var(--text-muted); text-decoration:none; }
+.rep-tabs .tab.on { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
+.rep-tabs .tab:hover { color:var(--text); }
+.date-sm { background:var(--field-bg); border:1px solid var(--field-border); border-radius:8px; padding:6px 8px; color:var(--text); font-size:12.5px; font-family:inherit; }
