@@ -6,6 +6,7 @@ const db = require('../db');
 const { exigeCliente } = require('../auth');
 const { contarPaginas, enviarEtiquetas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
+const financeiro = require('../financeiro');
 const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
 
 const router = express.Router();
@@ -155,6 +156,9 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     });
     await client.query('UPDATE pedidos SET comprovante = $1 WHERE id = $2', [pdfBuffer, pedidoId]);
 
+    // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
+    await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos);
+
     await client.query('COMMIT');
     res.json({ ok: true, pedidoId, numero });
   } catch (e) {
@@ -196,6 +200,22 @@ router.get('/meus-envios', exigeCliente, async (req, res, next) => {
     });
 
     res.render('cliente/meus-envios', { pedidos, formatBRL, formatDateTime });
+  } catch (e) { next(e); }
+});
+
+// ---------- Financeiro (um lancamento por pedido) ----------
+router.get('/financeiro', exigeCliente, async (req, res, next) => {
+  try {
+    const clienteId = req.session.user.clienteId;
+    const sit = ['todos', 'aberto', 'vencido', 'pago'].includes(req.query.situacao) ? req.query.situacao : 'todos';
+    const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : '';
+    const todos = await financeiro.listar({ clienteId });
+    const lista = financeiro.filtrarSituacao(mes ? await financeiro.listar({ clienteId, mes }) : todos, sit);
+    res.render('cliente/financeiro', {
+      lancamentos: lista, resumo: financeiro.resumo(todos),
+      meses: await financeiro.mesesDisponiveis(clienteId), filtro: { situacao: sit, mes },
+      formatBRL, formatDateTime,
+    });
   } catch (e) { next(e); }
 });
 

@@ -1,0 +1,32 @@
+<%- include('../partials/app-open', { titulo: 'Financeiro', ativo: 'financeiro' }) %>
+
+<h2 class="title">Financeiro</h2>
+<p class="sub">Cada pedido aceito gera um lançamento com o valor dos itens enviados. Abra o detalhe para ver o que compôs o valor.</p>
+
+<div class="kpis four">
+  <div class="kpi"><div class="kl">Em aberto</div><div class="kv"><%= formatBRL(resumo.aberto_centavos) %></div><div class="ks"><%= resumo.aberto_qtd %> pedido(s)</div></div>
+  <div class="kpi <%= resumo.vencido_qtd ? 'danger' : '' %>"><div class="kl">Vencido</div><div class="kv"><%= formatBRL(resumo.vencido_centavos) %></div><div class="ks"><%= resumo.vencido_qtd ? resumo.vencido_qtd + ' pedido(s) · ' + resumo.vencido_dias + ' dias' : 'nada vencido' %></div></div>
+  <div class="kpi ok"><div class="kl">Pago no mês</div><div class="kv"><%= formatBRL(resumo.pago_mes_centavos) %></div><div class="ks"><%= resumo.pago_mes_qtd %> pedido(s)</div></div>
+  <div class="kpi"><div class="kl">Próximo vencimento</div><div class="kv"><%= resumo.proximo ? resumo.proximo.vencimento_br.slice(0, 5) : '—' %></div><div class="ks"><%= resumo.proximo ? resumo.proximo.numero + ' · ' + formatBRL(resumo.proximo.valor_centavos) : 'nenhum em aberto' %></div></div>
+</div>
+
+<div class="card pad">
+  <form method="get" action="/financeiro" class="fin-filters">
+    <select name="situacao" onchange="this.form.submit()">
+      <option value="todos" <%= filtro.situacao === 'todos' ? 'selected' : '' %>>Todos</option>
+      <option value="aberto" <%= filtro.situacao === 'aberto' ? 'selected' : '' %>>Em aberto</option>
+      <option value="vencido" <%= filtro.situacao === 'vencido' ? 'selected' : '' %>>Vencidos</option>
+      <option value="pago" <%= filtro.situacao === 'pago' ? 'selected' : '' %>>Pagos</option>
+    </select>
+    <select name="mes" onchange="this.form.submit()">
+      <option value="">Todos os meses</option>
+      <% meses.forEach(function (m) { %><option value="<%= m.ym %>" <%= filtro.mes === m.ym ? 'selected' : '' %>><%= m.rotulo %></option><% }); %>
+    </select>
+  </form>
+
+  <%- include('../partials/financeiro-lista', { lancamentos: lancamentos, admin: false, formatBRL: formatBRL }) %>
+</div>
+
+<div class="hint-box">O vencimento é calculado a partir da data do aceite mais o prazo combinado com a distribuidora. A baixa do pagamento é feita pela distribuidora após a confirmação.</div>
+
+<%- include('../partials/app-close') %>

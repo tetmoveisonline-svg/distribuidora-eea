@@ -20,3 +20,14 @@ document.addEventListener('click', function (ev) {
     h.parentElement.classList.toggle('open');
   }
 });
+
+// Financeiro: abre/fecha o detalhe de um lancamento.
+document.addEventListener('click', function (ev) {
+  var b = ev.target.closest ? ev.target.closest('.fin-toggle') : null;
+  if (!b) return;
+  var d = document.getElementById('fin-detail-' + b.getAttribute('data-fin'));
+  if (!d) return;
+  var aberto = d.style.display !== 'none';
+  d.style.display = aberto ? 'none' : 'table-row';
+  b.textContent = aberto ? 'detalhe' : 'fechar';
+});

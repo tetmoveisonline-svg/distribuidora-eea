@@ -1,0 +1,59 @@
+<%- include('../partials/app-open', { titulo: 'Financeiro', ativo: 'adm-financeiro' }) %>
+
+<h2 class="title">Financeiro</h2>
+<p class="sub">Um lançamento por pedido, gerado no aceite. Abra o detalhe para registrar o pagamento. "Vencido" é calculado pela data, não precisa marcar.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<div class="kpis four">
+  <div class="kpi"><div class="kl">A receber<%= filtro.cliente ? ' (cliente)' : '' %></div><div class="kv"><%= formatBRL(resumo.aberto_centavos) %></div><div class="ks"><%= resumo.aberto_qtd %> pedido(s)</div></div>
+  <div class="kpi <%= resumo.vencido_qtd ? 'danger' : '' %>"><div class="kl">Vencido</div><div class="kv"><%= formatBRL(resumo.vencido_centavos) %></div><div class="ks"><%= resumo.vencido_qtd ? resumo.vencido_qtd + ' pedido(s) · até ' + resumo.vencido_dias + ' dias' : 'nada vencido' %></div></div>
+  <div class="kpi ok"><div class="kl">Recebido no mês</div><div class="kv"><%= formatBRL(resumo.pago_mes_centavos) %></div><div class="ks"><%= resumo.pago_mes_qtd %> pedido(s)</div></div>
+  <div class="kpi"><div class="kl">Próximo vencimento</div><div class="kv"><%= resumo.proximo ? resumo.proximo.vencimento_br.slice(0, 5) : '—' %></div><div class="ks"><%= resumo.proximo ? resumo.proximo.numero + ' · ' + resumo.proximo.cliente_nome : 'nenhum em aberto' %></div></div>
+</div>
+
+<% if (!filtro.cliente && porCliente.length > 0) { %>
+<div class="card pad" style="margin-bottom:16px">
+  <div class="section-title">Em aberto por cliente</div>
+  <table>
+    <thead><tr><th>Cliente</th><th class="num">Pedidos</th><th class="num">Em aberto</th><th class="num">Vencido</th><th></th></tr></thead>
+    <tbody>
+      <% porCliente.forEach(function (c) { %>
+        <tr>
+          <td><%= c.nome %></td>
+          <td class="num"><%= c.qtd %></td>
+          <td class="num"><%= formatBRL(c.aberto) %></td>
+          <td class="num"><% if (c.vencido) { %><span class="badge danger"><%= formatBRL(c.vencido) %></span><% } else { %><span class="dim">—</span><% } %></td>
+          <td class="num"><a class="btn ghost sm" href="/admin/financeiro?cliente=<%= c.id %>&situacao=aberto">ver</a></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<div class="card pad">
+  <form method="get" action="/admin/financeiro" class="fin-filters">
+    <select name="cliente" onchange="this.form.submit()">
+      <option value="">Todos os clientes</option>
+      <% clientes.forEach(function (c) { %><option value="<%= c.id %>" <%= filtro.cliente === c.id ? 'selected' : '' %>><%= c.nome %></option><% }); %>
+    </select>
+    <select name="situacao" onchange="this.form.submit()">
+      <option value="aberto" <%= filtro.situacao === 'aberto' ? 'selected' : '' %>>Em aberto (inclui vencidos)</option>
+      <option value="vencido" <%= filtro.situacao === 'vencido' ? 'selected' : '' %>>Só vencidos</option>
+      <option value="pago" <%= filtro.situacao === 'pago' ? 'selected' : '' %>>Pagos</option>
+      <option value="todos" <%= filtro.situacao === 'todos' ? 'selected' : '' %>>Todos</option>
+    </select>
+    <select name="mes" onchange="this.form.submit()">
+      <option value="">Todos os meses</option>
+      <% meses.forEach(function (m) { %><option value="<%= m.ym %>" <%= filtro.mes === m.ym ? 'selected' : '' %>><%= m.rotulo %></option><% }); %>
+    </select>
+  </form>
+
+  <%- include('../partials/financeiro-lista', { lancamentos: lancamentos, admin: true, formatBRL: formatBRL, formas: formas, hoje: hoje, filtro: filtro }) %>
+</div>
+
+<div class="hint-box">O prazo de vencimento de cada cliente é definido em Cadastros &rsaquo; Clientes. Pedidos antigos receberam lançamento em aberto com o mesmo cálculo.</div>
+
+<%- include('../partials/app-close') %>

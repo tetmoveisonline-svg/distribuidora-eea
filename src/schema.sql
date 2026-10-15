@@ -138,3 +138,31 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_cliente ON pedidos(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_pedidos_representante ON pedidos(representante_id);
 CREATE INDEX IF NOT EXISTS idx_linhas_pedido ON linhas(pedido_id);
 CREATE INDEX IF NOT EXISTS idx_etiquetas_pedido ON etiquetas(pedido_id);
+
+-- ===================== FINANCEIRO =====================
+-- Prazo de pagamento do cliente (dias apos o aceite) usado para calcular o vencimento.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS prazo_dias INTEGER NOT NULL DEFAULT 7;
+
+-- Um lancamento por pedido, criado no aceite com o valor total do pedido.
+-- Situacao "vencido" nao e gravada: e calculada pela data (aberto + vencimento < hoje).
+CREATE TABLE IF NOT EXISTS financeiro (
+  id              SERIAL PRIMARY KEY,
+  pedido_id       INTEGER NOT NULL UNIQUE REFERENCES pedidos(id) ON DELETE CASCADE,
+  cliente_id      INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  valor_centavos  INTEGER NOT NULL CHECK (valor_centavos >= 0),
+  vencimento      DATE NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto','pago','cancelado')),
+  pago_em         TIMESTAMPTZ,
+  forma_pagamento TEXT,
+  observacao      TEXT,
+  criado_em       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_financeiro_cliente ON financeiro(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_financeiro_vencimento ON financeiro(vencimento);
+
+-- Pedidos criados antes do financeiro existir ganham lancamento em aberto (idempotente).
+INSERT INTO financeiro (pedido_id, cliente_id, valor_centavos, vencimento)
+SELECT p.id, p.cliente_id, p.total_centavos,
+       (COALESCE(p.aceite_em, p.criado_em) AT TIME ZONE 'America/Sao_Paulo')::date + c.prazo_dias
+FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
+WHERE NOT EXISTS (SELECT 1 FROM financeiro f WHERE f.pedido_id = p.id);

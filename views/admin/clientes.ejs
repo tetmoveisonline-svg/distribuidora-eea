@@ -13,6 +13,7 @@
       <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
       <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
       <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
+      <div class="field"><label>Prazo de pagamento (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>
       <button class="btn block" type="submit">Salvar cliente</button>
     </form>
   </div>
@@ -20,13 +21,14 @@
     <div class="section-title">Clientes cadastrados</div>
     <% if (clientes.length === 0) { %><div class="empty">Nenhum cliente ainda.</div><% } else { %>
     <table>
-      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Produtos</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Produtos</th><th>Prazo</th><th>Status</th><th></th></tr></thead>
       <tbody>
         <% clientes.forEach(function (c) { %>
           <tr>
             <td><%= c.nome %></td>
             <td class="dim"><%= c.login || '—' %></td>
             <td class="num"><%= c.produtos %></td>
+            <td><form method="post" action="/admin/clientes/<%= c.id %>/prazo" class="prazo-form"><input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" /> dias <button class="btn ghost sm" type="submit">ok</button></form></td>
             <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
             <td><form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form></td>
           </tr>

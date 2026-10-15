@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { exigeAdmin } = require('../auth');
 const { enviarEtiquetas } = require('../etiquetas');
+const financeiro = require('../financeiro');
 const {
   formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
   horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps,
@@ -132,11 +133,79 @@ router.get('/pedido/:id/comprovante', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ===================== FINANCEIRO =====================
+router.get('/financeiro', async (req, res, next) => {
+  try {
+    const clienteId = pInt(req.query.cliente);
+    const sit = ['todos', 'aberto', 'vencido', 'pago', 'cancelado'].includes(req.query.situacao) ? req.query.situacao : 'aberto';
+    const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : '';
+    const todos = await financeiro.listar({ clienteId });
+    const lista = financeiro.filtrarSituacao(mes ? await financeiro.listar({ clienteId, mes }) : todos, sit);
+    const clientes = await db.query('SELECT id, nome FROM clientes ORDER BY nome');
+    // Total em aberto por cliente (visao rapida de quem deve).
+    const porCliente = new Map();
+    for (const l of todos) {
+      if (l.situacao !== 'aberto' && l.situacao !== 'vencido') continue;
+      const c = porCliente.get(l.cliente_id) || { id: l.cliente_id, nome: l.cliente_nome, aberto: 0, vencido: 0, qtd: 0 };
+      c.aberto += l.valor_centavos; c.qtd++;
+      if (l.situacao === 'vencido') c.vencido += l.valor_centavos;
+      porCliente.set(l.cliente_id, c);
+    }
+    res.render('admin/financeiro', {
+      ativo: 'adm-financeiro', lancamentos: lista, resumo: financeiro.resumo(todos),
+      clientes: clientes.rows, meses: await financeiro.mesesDisponiveis(clienteId),
+      porCliente: Array.from(porCliente.values()).sort((a, b) => b.aberto - a.aberto),
+      filtro: { cliente: clienteId, situacao: sit, mes },
+      formas: financeiro.FORMAS, hoje: financeiro.hojeISO(),
+      ok: req.query.ok || null, erro: req.query.erro || null, formatBRL, formatDateTime,
+    });
+  } catch (e) { next(e); }
+});
+function voltarFin(req, extra) {
+  const q = new URLSearchParams();
+  const b = req.body || {};
+  if (b.ret_cliente) q.set('cliente', b.ret_cliente);
+  if (b.ret_situacao) q.set('situacao', b.ret_situacao);
+  if (b.ret_mes) q.set('mes', b.ret_mes);
+  Object.keys(extra || {}).forEach((k) => q.set(k, extra[k]));
+  const s = q.toString();
+  return '/admin/financeiro' + (s ? '?' + s : '');
+}
+router.post('/financeiro/:id/pagar', async (req, res, next) => {
+  try {
+    const id = pInt(req.params.id);
+    const data = /^\d{4}-\d{2}-\d{2}$/.test(req.body.pago_em || '') ? req.body.pago_em : financeiro.hojeISO();
+    const forma = financeiro.FORMAS.includes(req.body.forma) ? req.body.forma : 'Outro';
+    const obs = (req.body.observacao || '').toString().trim().slice(0, 200) || null;
+    const r = await db.query(
+      `UPDATE financeiro SET status = 'pago', forma_pagamento = $2, observacao = $3,
+         pago_em = ($4::date + time '12:00') AT TIME ZONE 'America/Sao_Paulo'
+       WHERE id = $1 AND status <> 'pago' RETURNING pedido_id`, [id, forma, obs, data]
+    );
+    if (r.rowCount === 0) return res.redirect(voltarFin(req, { erro: 'Lançamento não encontrado ou já pago.' }));
+    res.redirect(voltarFin(req, { ok: 'Pagamento registrado.' }));
+  } catch (e) { next(e); }
+});
+router.post('/financeiro/:id/reabrir', async (req, res, next) => {
+  try {
+    await db.query("UPDATE financeiro SET status = 'aberto', pago_em = NULL, forma_pagamento = NULL WHERE id = $1 AND status = 'pago'", [pInt(req.params.id)]);
+    res.redirect(voltarFin(req, { ok: 'Lançamento reaberto.' }));
+  } catch (e) { next(e); }
+});
+
 // ===================== CLIENTES =====================
+router.post('/clientes/:id/prazo', async (req, res, next) => {
+  try {
+    const dias = pInt(req.body.prazo_dias);
+    if (dias === null || dias < 0 || dias > 365) return res.redirect('/admin/clientes?erro=' + encodeURIComponent('Prazo inválido (0 a 365 dias).'));
+    await db.query('UPDATE clientes SET prazo_dias = $2 WHERE id = $1', [pInt(req.params.id), dias]);
+    res.redirect('/admin/clientes');
+  } catch (e) { next(e); }
+});
 router.get('/clientes', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT c.id, c.nome, c.ativo, u.login,
+      `SELECT c.id, c.nome, c.ativo, c.prazo_dias, u.login,
               (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo) AS produtos
        FROM clientes c LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente' ORDER BY c.nome`
     );
@@ -148,8 +217,9 @@ router.post('/clientes', async (req, res, next) => {
   try {
     const nome = (req.body.nome || '').trim(), email = (req.body.email || '').trim(), login = (req.body.login || '').trim(), senha = req.body.senha || '';
     if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
+    let prazo = pInt(req.body.prazo_dias); if (prazo === null || prazo < 0 || prazo > 365) prazo = 7;
     await client.query('BEGIN');
-    const c = await client.query('INSERT INTO clientes (nome, email) VALUES ($1,$2) RETURNING id', [nome, email || null]);
+    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias) VALUES ($1,$2,$3) RETURNING id', [nome, email || null, prazo]);
     await client.query('INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)', [nome, login, await bcrypt.hash(senha, 10), 'cliente', c.rows[0].id]);
     await client.query('COMMIT');
     res.redirect('/admin/clientes');

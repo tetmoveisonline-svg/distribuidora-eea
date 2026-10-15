@@ -15,6 +15,7 @@
       <div class="grp">Cliente</div>
       <a class="nav-item <%= ativo === 'novo' ? 'on' : '' %>" href="/novo"><span class="ico">&#8593;</span> Novo envio</a>
       <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
+      <a class="nav-item <%= ativo === 'financeiro' ? 'on' : '' %>" href="/financeiro"><span class="ico">&#36;</span> Financeiro</a>
     <% } else if (user.papel === 'representante') { %>
       <div class="grp">Representante</div>
       <a class="nav-item <%= ativo === 'rep' ? 'on' : '' %>" href="/rep/pedidos"><span class="ico">&#9776;</span> Meus pedidos</a>
@@ -25,6 +26,7 @@
       <div class="grp">Operação</div>
       <a class="nav-item <%= ativo === 'pedidos' ? 'on' : '' %>" href="/admin/pedidos"><span class="ico">&#9776;</span> Pedidos recebidos</a>
       <a class="nav-item <%= ativo === 'bipagem' ? 'on' : '' %>" href="/admin/bipagem"><span class="ico">&#8942;</span> Bipagem</a>
+      <a class="nav-item <%= ativo === 'adm-financeiro' ? 'on' : '' %>" href="/admin/financeiro"><span class="ico">&#36;</span> Financeiro</a>
       <div class="grp">Cadastros</div>
       <a class="nav-item <%= ativo === 'clientes' ? 'on' : '' %>" href="/admin/clientes"><span class="ico">&#9787;</span> Clientes</a>
       <a class="nav-item <%= ativo === 'reps' ? 'on' : '' %>" href="/admin/representantes"><span class="ico">&#9733;</span> Representantes</a>
