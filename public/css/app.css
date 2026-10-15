@@ -350,3 +350,4 @@ td.mono { font-family:var(--mono); font-size:12px; }
 .rep-tabs .tab.on { background:var(--accent-soft); color:var(--text); border-color:var(--accent); }
 .rep-tabs .tab:hover { color:var(--text); }
 .date-sm { background:var(--field-bg); border:1px solid var(--field-border); border-radius:8px; padding:6px 8px; color:var(--text); font-size:12.5px; font-family:inherit; }
+td.res { color:var(--warn); font-weight:600; }

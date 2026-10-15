@@ -1,18 +1,21 @@
 <%- include('../partials/app-open', { titulo: 'Estoque', ativo: 'estoque' }) %>
+<%
+  function tag(n) { return '<span class="saldo-tag ' + (n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : '')) + '">' + n + '</span>'; }
+%>
 
 <h2 class="title">Estoque</h2>
-<p class="sub">Saldo por cor e histórico de movimentos. Lançamentos são feitos em Produtos; o despacho na bipagem baixa 1 por etiqueta.</p>
+<p class="sub">Físico é o que está no depósito; reservado é o comprometido com pedidos aceitos e ainda não despachados; disponível é a diferença. Lançamentos são feitos em Produtos.</p>
 
 <div class="card pad" style="margin-bottom:16px">
   <div class="section-title">Saldos</div>
   <table>
-    <thead><tr><th>Produto</th><th>Cor</th><th>SKU</th><th class="num">Saldo</th></tr></thead>
+    <thead><tr><th>Produto</th><th>Cor</th><th>SKU</th><th class="num">Físico</th><th class="num">Reservado</th><th class="num">Disponível</th></tr></thead>
     <tbody>
       <% produtos.forEach(function (p) { %>
         <% if (p.cores.length === 0) { %>
-          <tr><td><%= p.nome %><% if (!p.ativo) { %> <span class="badge neutral">inativo</span><% } %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><span class="saldo-tag <%= p.saldo <= 0 ? 'zero' : (p.saldo <= 5 ? 'baixo' : '') %>"><%= p.saldo %></span></td></tr>
+          <tr><td><%= p.nome %><% if (!p.ativo) { %> <span class="badge neutral">inativo</span><% } %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><%= p.saldo %></td><td class="num <%= p.reservado > 0 ? 'res' : 'dim' %>"><%= p.reservado %></td><td class="num"><%- tag(p.saldo - p.reservado) %></td></tr>
         <% } else { p.cores.forEach(function (c, i) { %>
-          <tr><td><%= i === 0 ? p.nome : '' %><% if (i === 0 && !p.ativo) { %> <span class="badge neutral">inativo</span><% } %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><span class="saldo-tag <%= c.saldo <= 0 ? 'zero' : (c.saldo <= 5 ? 'baixo' : '') %>"><%= c.saldo %></span></td></tr>
+          <tr><td><%= i === 0 ? p.nome : '' %><% if (i === 0 && !p.ativo) { %> <span class="badge neutral">inativo</span><% } %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><%= c.saldo %></td><td class="num <%= c.reservado > 0 ? 'res' : 'dim' %>"><%= c.reservado %></td><td class="num"><%- tag(c.saldo - c.reservado) %></td></tr>
         <% }); } %>
       <% }); %>
     </tbody>
@@ -30,24 +33,30 @@
     </form>
   </div>
   <% if (movs.length === 0) { %><div class="empty">Nenhum movimento ainda.</div><% } else { %>
+  <div style="overflow-x:auto">
   <table>
-    <thead><tr><th>Quando</th><th>Produto</th><th>Cor</th><th>Motivo</th><th class="num">Qtd</th><th class="num">Saldo após</th><th>Pedido</th><th>Quem</th></tr></thead>
+    <thead><tr><th>Quando</th><th>Produto</th><th>Cor</th><th>Motivo</th><th>Pedido</th><th class="num">Físico</th><th class="num">Reserva</th><th class="num">Físico após</th><th class="num">Disp. após</th><th>Quem</th></tr></thead>
     <tbody>
-      <% movs.forEach(function (m) { %>
+      <% movs.forEach(function (m) { var disp = (m.reservado_apos !== null && m.reservado_apos !== undefined) ? m.saldo_apos - m.reservado_apos : null; %>
         <tr>
           <td class="dim"><%= formatDateTime(m.criado_em) %></td>
           <td><%= m.produto_nome %></td>
           <td><%= m.cor_nome || '—' %></td>
           <td><%= m.motivo %><% if (m.observacao) { %> <span class="dim">· <%= m.observacao %></span><% } %></td>
-          <td class="num" style="color:<%= m.quantidade > 0 ? 'var(--ok)' : 'var(--danger)' %>"><%= m.quantidade > 0 ? '+' + m.quantidade : m.quantidade %></td>
-          <td class="num"><%= m.saldo_apos %></td>
           <td class="dim"><%= m.pedido_numero || '—' %></td>
-          <td class="dim"><%= m.usuario_nome || '—' %></td>
+          <td class="num" style="color:<%= m.quantidade > 0 ? 'var(--ok)' : (m.quantidade < 0 ? 'var(--danger)' : 'var(--text-dim)') %>"><%= m.quantidade > 0 ? '+' + m.quantidade : m.quantidade %></td>
+          <td class="num" style="color:<%= m.reserva > 0 ? 'var(--warn)' : (m.reserva < 0 ? 'var(--ok)' : 'var(--text-dim)') %>"><%= m.reserva > 0 ? '+' + m.reserva : m.reserva %></td>
+          <td class="num"><%= m.saldo_apos %></td>
+          <td class="num"><%= disp !== null ? disp : '—' %></td>
+          <td class="dim"><%= m.usuario_nome || (m.motivo === 'Despacho' || m.motivo === 'Reserva' || m.motivo === 'Liberação de reserva' ? 'sistema' : '—') %></td>
         </tr>
       <% }); %>
     </tbody>
   </table>
+  </div>
   <% } %>
 </div>
+
+<div class="hint-box">Reserva (+) nasce no aceite do pedido; Despacho tira 1 do físico e 1 da reserva; Liberação de reserva (−) acontece ao encerrar um pedido com etiquetas sobrando. Entradas e ajustes manuais mexem só no físico.</div>
 
 <%- include('../partials/app-close') %>

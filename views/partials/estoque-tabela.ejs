@@ -3,18 +3,20 @@
     if (p.promo) return '<b style="color:var(--ok)">' + p.preco_txt + '</b> <span class="badge ok" style="margin-left:4px">' + p.promo_rotulo + '</span><div class="dim" style="font-size:11px;text-decoration:line-through">' + p.preco_original_txt + '</div>';
     return '<b>' + p.preco_txt + '</b>';
   }
+  function tag(n) { return '<span class="saldo-tag ' + (n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : '')) + '">' + n + '</span>'; }
+  function meu(x) { return x.meu_reservado > 0 ? '<span style="color:var(--warn)">' + x.meu_reservado + '</span> <span class="dim" style="font-size:11px">' + x.meus_pedidos + '</span>' : '<span class="dim">—</span>'; }
 %>
 <% if (produtos.length === 0) { %>
   <div class="empty">Você ainda não tem produtos negociados.</div>
 <% } else { %>
 <table>
-  <thead><tr><th>Produto</th><th class="num">Preço negociado</th><th>Cor</th><th>SKU</th><th class="num">Saldo</th></tr></thead>
+  <thead><tr><th>Produto</th><th class="num">Preço negociado</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead>
   <tbody>
     <% produtos.forEach(function (p) { %>
       <% if (p.cores.length === 0) { %>
-        <tr><td><%= p.nome %></td><td class="num"><%- precoCell(p) %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><span class="saldo-tag <%= p.saldo <= 0 ? 'zero' : (p.saldo <= 5 ? 'baixo' : '') %>"><%= p.saldo %></span></td></tr>
+        <tr><td><%= p.nome %></td><td class="num"><%- precoCell(p) %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><%- tag(p.disponivel) %></td><td class="num"><%- meu(p) %></td></tr>
       <% } else { p.cores.forEach(function (c, i) { %>
-        <tr><td><%= i === 0 ? p.nome : '' %></td><td class="num"><%- i === 0 ? precoCell(p) : '' %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><span class="saldo-tag <%= c.saldo <= 0 ? 'zero' : (c.saldo <= 5 ? 'baixo' : '') %>"><%= c.saldo %></span></td></tr>
+        <tr><td><%= i === 0 ? p.nome : '' %></td><td class="num"><%- i === 0 ? precoCell(p) : '' %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><%- tag(c.disponivel) %></td><td class="num"><%- meu(c) %></td></tr>
       <% }); } %>
     <% }); %>
   </tbody>

@@ -266,3 +266,40 @@ ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_em TIMESTAMPTZ;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_forma TEXT;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_centavos INTEGER;
 CREATE INDEX IF NOT EXISTS idx_pedidos_funcionario ON pedidos(funcionario_id);
+
+-- ===================== ESTOQUE: RESERVA =====================
+-- Aceite reserva (reservado += qtd), despacho consome (saldo -= 1 e reservado -= 1),
+-- encerramento com sobras libera (reservado -= nao enviadas). Disponivel = saldo - reservado.
+ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS reservado INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS reservado INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE estoque_mov ADD COLUMN IF NOT EXISTS reserva INTEGER NOT NULL DEFAULT 0;      -- delta do reservado
+ALTER TABLE estoque_mov ADD COLUMN IF NOT EXISTS reservado_apos INTEGER;
+ALTER TABLE estoque_mov ADD COLUMN IF NOT EXISTS linha_id INTEGER REFERENCES linhas(id) ON DELETE SET NULL;
+
+-- Migracao unica: reserva o que ainda falta despachar nos pedidos abertos de antes desta regra.
+CREATE TABLE IF NOT EXISTS migracoes (nome TEXT PRIMARY KEY, em TIMESTAMPTZ NOT NULL DEFAULT now());
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM migracoes WHERE nome = 'reserva_inicial') THEN
+    -- por linha de pedido aberto: faltam = quantidade - despachadas
+    CREATE TEMP TABLE tmp_res AS
+      SELECT l.id AS linha_id, l.pedido_id, l.cor_id, l.cor_nome, i.produto_id,
+             (l.quantidade - (SELECT count(*) FROM etiquetas e WHERE e.linha_id = l.id AND e.status = 'despachado'))::int AS faltam
+      FROM linhas l JOIN pedidos p ON p.id = l.pedido_id LEFT JOIN itens i ON i.id = l.item_id
+      WHERE p.status <> 'despachado' AND i.produto_id IS NOT NULL;
+    UPDATE produto_cores c SET reservado = c.reservado + s.q
+      FROM (SELECT cor_id, sum(faltam)::int AS q FROM tmp_res WHERE cor_id IS NOT NULL AND faltam > 0 GROUP BY cor_id) s
+      WHERE c.id = s.cor_id;
+    UPDATE produtos pr SET reservado = pr.reservado + s.q
+      FROM (SELECT produto_id, sum(faltam)::int AS q FROM tmp_res WHERE cor_id IS NULL AND faltam > 0 GROUP BY produto_id) s
+      WHERE pr.id = s.produto_id;
+    INSERT INTO estoque_mov (produto_id, cor_id, cor_nome, quantidade, reserva, saldo_apos, reservado_apos, motivo, observacao, pedido_id, linha_id)
+      SELECT t.produto_id, t.cor_id, t.cor_nome, 0, t.faltam,
+             COALESCE(c.saldo, pr.saldo), COALESCE(c.reservado, pr.reservado),
+             'Reserva', 'pedido aberto antes da regra de reserva', t.pedido_id, t.linha_id
+      FROM tmp_res t LEFT JOIN produto_cores c ON c.id = t.cor_id JOIN produtos pr ON pr.id = t.produto_id
+      WHERE t.faltam > 0;
+    DROP TABLE tmp_res;
+    INSERT INTO migracoes (nome) VALUES ('reserva_inicial');
+  END IF;
+END $$;

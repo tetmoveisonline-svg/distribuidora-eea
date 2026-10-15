@@ -12,7 +12,7 @@ const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamento
 
 // Itens ativos do cliente com o preco efetivo (promocao aplicada se estiver no periodo)
 // e as cores do produto (cada cor com seu SKU). Produto sem cores = cor unica.
-const SQL_ITENS = `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id, p.sku AS produto_sku, p.saldo AS produto_saldo,
+const SQL_ITENS = `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id, p.sku AS produto_sku, (p.saldo - p.reservado) AS produto_saldo,
                           to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
                    FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
                    WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`;
@@ -21,7 +21,7 @@ async function itensComPreco(q, clienteId) {
   const pids = r.rows.map((i) => i.produto_id).filter(Boolean);
   const coresMap = new Map();
   if (pids.length) {
-    const c = await q.query('SELECT id, produto_id, nome, sku, saldo FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
+    const c = await q.query('SELECT id, produto_id, nome, sku, (saldo - reservado) AS saldo FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
     for (const row of c.rows) {
       if (!coresMap.has(row.produto_id)) coresMap.set(row.produto_id, []);
       coresMap.get(row.produto_id).push(row);
@@ -218,6 +218,9 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       observacoes: (body.observacoes || '').toString().slice(0, 500),
     });
     await client.query('UPDATE pedidos SET comprovante = $1 WHERE id = $2', [pdfBuffer, pedidoId]);
+
+    // Estoque: reserva a quantidade de cada linha (o despacho consome depois).
+    await estoque.reservarPedido(client, pedidoId, usuarioId);
 
     // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
     await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos, totalEtiquetas);

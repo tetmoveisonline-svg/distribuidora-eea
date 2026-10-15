@@ -58,7 +58,8 @@
             <td>
               <% if (p.cores.length === 0) { %>
                 <div class="cor-row"><span class="cor-nome dim">cor única</span>
-                  <span class="saldo-tag <%= p.saldo <= 0 ? 'zero' : (p.saldo <= 5 ? 'baixo' : '') %>" title="saldo em estoque"><%= p.saldo %> un.</span>
+                  <span class="saldo-tag <%= (p.saldo - p.reservado) <= 0 ? 'zero' : ((p.saldo - p.reservado) <= 5 ? 'baixo' : '') %>" title="disponível = físico <%= p.saldo %> − reservado <%= p.reservado %>"><%= p.saldo - p.reservado %> disp.</span>
+                  <span class="dim" style="font-size:11px">fís. <%= p.saldo %> · res. <%= p.reservado %></span>
                   <form method="post" action="/admin/produtos/<%= p.id %>/estoque" class="est-form">
                     <select name="motivo"><% motivos.forEach(function (m) { %><option><%= m %></option><% }); %></select>
                     <input name="quantidade" type="number" placeholder="qtd" title="quantidade (negativa para saída no Ajuste)" />
@@ -71,7 +72,8 @@
                   <span class="cor-nome"><%= c.nome %></span>
                   <input name="sku" class="mono-in" value="<%= c.sku || '' %>" placeholder="SKU" title="SKU desta cor" />
                   <button class="btn ghost sm" type="submit">ok</button>
-                  <span class="saldo-tag <%= c.saldo <= 0 ? 'zero' : (c.saldo <= 5 ? 'baixo' : '') %>" title="saldo em estoque"><%= c.saldo %> un.</span>
+                  <span class="saldo-tag <%= (c.saldo - c.reservado) <= 0 ? 'zero' : ((c.saldo - c.reservado) <= 5 ? 'baixo' : '') %>" title="disponível = físico <%= c.saldo %> − reservado <%= c.reservado %>"><%= c.saldo - c.reservado %> disp.</span>
+                  <span class="dim" style="font-size:11px">fís. <%= c.saldo %> · res. <%= c.reservado %></span>
                   <input type="hidden" name="cor_id" value="<%= c.id %>" />
                   <select name="motivo" form="est-<%= c.id %>"><% motivos.forEach(function (m) { %><option><%= m %></option><% }); %></select>
                   <input name="quantidade" form="est-<%= c.id %>" type="number" placeholder="qtd" title="quantidade (negativa para saída no Ajuste)" />
@@ -106,6 +108,6 @@
   </div>
 </div>
 
-<div class="hint-box"><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> o saldo fica em cada cor. "Entrada" soma, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Cada etiqueta despachada na bipagem baixa 1 unidade sozinha. Saldo negativo fica em vermelho para acertar. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
+<div class="hint-box"><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> cada cor tem físico, reservado e disponível (físico − reservado). O aceite de um pedido reserva a quantidade; cada etiqueta despachada na bipagem consome 1 do físico e 1 da reserva; encerrar com sobras libera a reserva. "Entrada" soma ao físico, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Disponível negativo fica em vermelho para repor. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
 
 <%- include('../partials/app-close') %>

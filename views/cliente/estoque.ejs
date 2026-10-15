@@ -1,7 +1,7 @@
 <%- include('../partials/app-open', { titulo: 'Estoque', ativo: 'estoque' }) %>
 
 <h2 class="title">Estoque</h2>
-<p class="sub">Preço negociado e saldo atual dos produtos que você tem negociação. Atualiza sozinho a cada 30 segundos; cada etiqueta despachada baixa 1 unidade.</p>
+<p class="sub">Preço negociado e estoque disponível dos produtos que você tem negociação. Ao aceitar um envio, as etiquetas ficam reservadas para você; o despacho consome a reserva. Atualiza sozinho a cada 30 segundos.</p>
 
 <div class="card pad">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -13,7 +13,7 @@
   </div>
 </div>
 
-<div class="hint-box">Saldo em <span style="color:var(--danger)">vermelho</span> está esgotado; em <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos). Ao subir etiquetas, o sistema avisa se a quantidade passa do saldo, mas o pedido segue; a distribuidora confirma a reposição.</div>
+<div class="hint-box">Disponível em <span style="color:var(--danger)">vermelho</span> está esgotado; em <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos). "Reservado p/ você" é o que seus pedidos aceitos ainda vão consumir no despacho. Ao subir etiquetas, o sistema avisa se a quantidade passa do disponível, mas o pedido segue; a distribuidora confirma a reposição.</div>
 
 <script>
 (function () {
@@ -27,13 +27,14 @@
   }
   function render(produtos) {
     if (!produtos.length) { box.innerHTML = '<div class="empty">Você ainda não tem produtos negociados.</div>'; return; }
-    var h = '<table><thead><tr><th>Produto</th><th class="num">Preço negociado</th><th>Cor</th><th>SKU</th><th class="num">Saldo</th></tr></thead><tbody>';
+    function meu(x) { return x.meu_reservado > 0 ? '<span style="color:var(--warn)">' + x.meu_reservado + '</span> <span class="dim" style="font-size:11px">' + esc(x.meus_pedidos) + '</span>' : '<span class="dim">—</span>'; }
+    var h = '<table><thead><tr><th>Produto</th><th class="num">Preço negociado</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead><tbody>';
     produtos.forEach(function (p) {
       if (!p.cores.length) {
-        h += '<tr><td>' + esc(p.nome) + '</td><td class="num">' + preco(p) + '</td><td class="dim">cor única</td><td class="dim">—</td><td class="num">' + tag(p.saldo) + '</td></tr>';
+        h += '<tr><td>' + esc(p.nome) + '</td><td class="num">' + preco(p) + '</td><td class="dim">cor única</td><td class="dim">—</td><td class="num">' + tag(p.disponivel) + '</td><td class="num">' + meu(p) + '</td></tr>';
       } else {
         p.cores.forEach(function (c, i) {
-          h += '<tr><td>' + (i === 0 ? esc(p.nome) : '') + '</td><td class="num">' + (i === 0 ? preco(p) : '') + '</td><td>' + esc(c.nome) + '</td><td class="mono dim">' + esc(c.sku || '—') + '</td><td class="num">' + tag(c.saldo) + '</td></tr>';
+          h += '<tr><td>' + (i === 0 ? esc(p.nome) : '') + '</td><td class="num">' + (i === 0 ? preco(p) : '') + '</td><td>' + esc(c.nome) + '</td><td class="mono dim">' + esc(c.sku || '—') + '</td><td class="num">' + tag(c.disponivel) + '</td><td class="num">' + meu(c) + '</td></tr>';
         });
       }
     });

@@ -55,6 +55,8 @@ async function encerrarPedido(client, pedidoId) {
   const { despachadas, sobras, valor_despachadas } = r.rows[0];
 
   await client.query("UPDATE etiquetas SET status = 'nao_enviada' WHERE pedido_id = $1 AND status <> 'despachado'", [pedidoId]);
+  // libera a reserva de estoque das nao enviadas
+  await require('./estoque').liberarReservaPedido(client, pedidoId, null);
   await client.query(
     "UPDATE pedidos SET status = 'despachado', despachado_em = COALESCE(despachado_em, now()), separacao_em = COALESCE(separacao_em, now()), encerrado_em = now() WHERE id = $1",
     [pedidoId]

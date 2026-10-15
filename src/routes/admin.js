@@ -412,12 +412,12 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
     );
     const ref = await refCustos();
-    const cores = await db.query('SELECT id, produto_id, nome, sku, saldo FROM produto_cores ORDER BY produto_id, ordem, id');
+    const cores = await db.query('SELECT id, produto_id, nome, sku, saldo, reservado FROM produto_cores ORDER BY produto_id, ordem, id');
     const coresMap = new Map();
     for (const c of cores.rows) {
       if (!coresMap.has(c.produto_id)) coresMap.set(c.produto_id, []);
