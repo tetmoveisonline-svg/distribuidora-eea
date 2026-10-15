@@ -178,3 +178,23 @@ ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_tipo TEXT CHECK (promo_tipo IS 
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_valor INTEGER;
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_inicio DATE;
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_fim DATE;
+
+-- ===================== ENCERRAMENTO E CREDITO EM CONTA =====================
+-- Etiqueta que ficou para tras quando o admin encerrou o pedido: nao e cobrada.
+ALTER TABLE etiquetas DROP CONSTRAINT IF EXISTS etiquetas_status_check;
+ALTER TABLE etiquetas ADD CONSTRAINT etiquetas_status_check
+  CHECK (status IN ('pendente','conferido','despachado','nao_enviada'));
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS encerrado_em TIMESTAMPTZ;
+
+-- Credito em conta do cliente (sobra de pedido ja pago, abate o proximo aceite).
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS credito_centavos INTEGER NOT NULL DEFAULT 0;
+
+-- Historico do lancamento: valor reservado no aceite, etiquetas cobradas, credito gerado/usado.
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS valor_original_centavos INTEGER;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS etiquetas_total INTEGER;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS etiquetas_cobradas INTEGER;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS credito_gerado_centavos INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS credito_usado_centavos INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS encerrado_em TIMESTAMPTZ;
+UPDATE financeiro f SET valor_original_centavos = f.valor_centavos WHERE f.valor_original_centavos IS NULL;
+UPDATE financeiro f SET etiquetas_total = p.total_etiquetas FROM pedidos p WHERE p.id = f.pedido_id AND f.etiquetas_total IS NULL;

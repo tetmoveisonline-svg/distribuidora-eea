@@ -12,7 +12,8 @@
 const express = require('express');
 const db = require('../db');
 const { exigeAdmin } = require('../auth');
-const { formatDateTime } = require('../util');
+const { formatDateTime, formatBRL } = require('../util');
+const financeiro = require('../financeiro');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -30,7 +31,7 @@ async function estadoCliente(clienteId) {
   if (c.rowCount === 0) return null;
   const r = await db.query(
     `SELECT p.id AS pedido_id, p.numero, p.status AS pstatus,
-            e.id AS etq_id, e.indice, e.status AS estatus, e.codigo_externo, e.codigo_nfe, e.despachado_em, l.item_nome
+            e.id AS etq_id, e.indice, e.status AS estatus, e.codigo_externo, e.codigo_nfe, e.despachado_em, l.item_nome, l.preco_centavos
      FROM pedidos p
      JOIN etiquetas e ON e.pedido_id = p.id
      LEFT JOIN linhas l ON l.id = e.linha_id
@@ -44,6 +45,7 @@ async function estadoCliente(clienteId) {
       pedidosMap.set(row.pedido_id, {
         pedido_id: row.pedido_id, numero: row.numero, status: row.pstatus,
         rotulo: rotuloStatus(row.pstatus), total: 0, separadas: 0, despachadas: 0, semcodigo: 0,
+        sobras_centavos: 0, // valor das etiquetas ainda nao despachadas (vira credito se encerrar agora)
         etiquetas: [],
       });
     }
@@ -58,7 +60,7 @@ async function estadoCliente(clienteId) {
     });
     ped.total++; total++;
     if (sep) { ped.separadas++; separadas++; }
-    if (desp) { ped.despachadas++; despachadas++; }
+    if (desp) { ped.despachadas++; despachadas++; } else ped.sobras_centavos += Number(row.preco_centavos || 0);
     if (!row.codigo_externo) ped.semcodigo++;
   }
   return {
@@ -207,6 +209,30 @@ router.post('/marcar', async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Erro ao marcar manual:', err);
     res.status(500).json({ erro: 'Falha ao marcar a etiqueta.' });
+  } finally { client.release(); }
+});
+
+// ---------- Encerrar pedido com sobras ----------
+// As etiquetas nao despachadas viram "nao enviada" e saem da cobranca; o valor delas vira credito.
+router.post('/encerrar', async (req, res) => {
+  const clienteId = parseInt((req.body || {}).clienteId, 10);
+  const pedidoId = parseInt((req.body || {}).pedidoId, 10);
+  if (!clienteId || !pedidoId) return res.status(400).json({ erro: 'Dados inválidos.' });
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const chk = await client.query('SELECT numero FROM pedidos WHERE id = $1 AND cliente_id = $2', [pedidoId, clienteId]);
+    if (chk.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ erro: 'Pedido não encontrado para este cliente.' }); }
+    const r = await financeiro.encerrarPedido(client, pedidoId);
+    await client.query('COMMIT');
+    const est = await estadoCliente(clienteId);
+    let msg = 'Pedido ' + chk.rows[0].numero + ' encerrado: ' + r.despachadas + ' despachada(s), ' + r.naoEnviadas + ' não enviada(s). Cobrança final ' + formatBRL(r.valorCobrado) + '.';
+    if (r.creditoGerado > 0) msg += r.jaPago ? ' ' + formatBRL(r.creditoGerado) + ' viraram crédito em conta do cliente.' : ' ' + formatBRL(r.creditoGerado) + ' liberados do limite.';
+    res.json({ ok: true, mensagem: msg, estado: est });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Erro ao encerrar pedido:', e);
+    res.status(400).json({ erro: e.message || 'Falha ao encerrar o pedido.' });
   } finally { client.release(); }
 });
 

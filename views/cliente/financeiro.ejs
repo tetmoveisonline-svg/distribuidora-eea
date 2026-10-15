@@ -7,8 +7,9 @@
   <div class="kpi"><div class="kl">Em aberto</div><div class="kv"><%= formatBRL(resumo.aberto_centavos) %></div><div class="ks"><%= resumo.aberto_qtd %> pedido(s)</div></div>
   <div class="kpi <%= resumo.vencido_qtd ? 'danger' : '' %>"><div class="kl">Vencido</div><div class="kv"><%= formatBRL(resumo.vencido_centavos) %></div><div class="ks"><%= resumo.vencido_qtd ? resumo.vencido_qtd + ' pedido(s) · ' + resumo.vencido_dias + ' dias' : 'nada vencido' %></div></div>
   <div class="kpi ok"><div class="kl">Pago no mês</div><div class="kv"><%= formatBRL(resumo.pago_mes_centavos) %></div><div class="ks"><%= resumo.pago_mes_qtd %> pedido(s)</div></div>
-  <div class="kpi"><div class="kl">Próximo vencimento</div><div class="kv"><%= resumo.proximo ? resumo.proximo.vencimento_br.slice(0, 5) : '—' %></div><div class="ks"><%= resumo.proximo ? resumo.proximo.numero + ' · ' + formatBRL(resumo.proximo.valor_centavos) : 'nenhum em aberto' %></div></div>
+  <div class="kpi <%= creditoConta > 0 ? 'ok' : '' %>"><div class="kl">Crédito a seu favor</div><div class="kv"><%= formatBRL(creditoConta) %></div><div class="ks"><%= creditoConta > 0 ? 'abate o próximo pedido automaticamente' : 'sobras de pedidos já pagos aparecem aqui' %></div></div>
 </div>
+<% if (resumo.proximo) { %><p class="dim" style="font-size:12.5px;margin:-10px 0 16px">Próximo vencimento: <b style="color:var(--text)"><%= resumo.proximo.vencimento_br %></b> · <%= resumo.proximo.numero %> · <%= formatBRL(resumo.proximo.valor_centavos) %></p><% } %>
 
 <div class="card pad">
   <form method="get" action="/financeiro" class="fin-filters">
@@ -27,6 +28,6 @@
   <%- include('../partials/financeiro-lista', { lancamentos: lancamentos, admin: false, formatBRL: formatBRL }) %>
 </div>
 
-<div class="hint-box">O vencimento é calculado a partir da data do aceite mais o prazo combinado com a distribuidora. A baixa do pagamento é feita pela distribuidora após a confirmação.</div>
+<div class="hint-box">O vencimento é calculado a partir da data do aceite mais o prazo combinado com a distribuidora. A baixa do pagamento é feita pela distribuidora após a confirmação. Se um pedido for encerrado com etiquetas sobrando, você paga só as despachadas: o valor das que ficaram de fora libera seu limite ou, se o pedido já estava pago, vira crédito a seu favor e abate o próximo pedido.</div>
 
 <%- include('../partials/app-close') %>

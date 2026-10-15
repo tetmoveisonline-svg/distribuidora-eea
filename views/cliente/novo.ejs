@@ -16,7 +16,7 @@
     <div class="credit-track">
       <div class="pbar"><div class="pfill" id="creditFill" style="width:<%= credito.limite > 0 ? Math.min(100, Math.round(credito.aberto / credito.limite * 100)) : 100 %>%;background:<%= credito.vencido > 0 ? 'var(--danger)' : 'var(--warn)' %>"></div></div>
       <div class="dim" style="font-size:12px;margin-top:5px">
-        <%= formatBRL(credito.aberto) %> em aberto
+        <%= formatBRL(credito.aberto) %> em aberto<% if (credito.creditoConta > 0) { %> · <span style="color:var(--ok)"><%= formatBRL(credito.creditoConta) %> de crédito a seu favor</span><% } %>
         <% if (credito.vencido > 0) { %> · <span style="color:var(--danger)"><%= formatBRL(credito.vencido) %> vencido (<%= credito.maisVencido.numero %>, <%= credito.maisVencido.vencimento %>)</span>
         <% } else if (credito.proximo) { %> · vence <%= credito.proximo.vencimento %> (<%= credito.proximo.numero %>)<% } %>
       </div>

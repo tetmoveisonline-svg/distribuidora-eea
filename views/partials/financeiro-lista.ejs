@@ -30,8 +30,11 @@
         <% if (admin) { %><td><%= l.cliente_nome %></td><% } %>
         <td class="dim"><%= l.itens_resumo %> · <%= l.total_etiquetas %> etiq.</td>
         <td class="<%= l.situacao === 'vencido' ? 'fin-venc' : '' %>"><%= l.vencimento_br %></td>
-        <td class="num"><%= formatBRL(l.valor_centavos) %></td>
-        <td><%- badgeSit(l) %></td>
+        <td class="num">
+          <%= formatBRL(l.valor_centavos) %>
+          <% if (l.ajustado) { %><div class="dim" style="font-size:11px;text-decoration:line-through"><%= formatBRL(l.valor_original) %></div><% } %>
+        </td>
+        <td><%- badgeSit(l) %><% if (l.nao_enviadas > 0) { %> <span class="badge neutral" title="etiquetas que ficaram de fora no encerramento"><%= l.nao_enviadas %> não enviada(s)</span><% } %></td>
         <td class="num"><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= l.id %>">detalhe</button></td>
       </tr>
       <tr class="fin-detail" id="fin-detail-<%= l.id %>" style="display:none">
@@ -45,6 +48,21 @@
                 <% }); %>
               </tbody>
             </table>
+            <% if (l.ajustado) { %>
+              <table class="fin-itens fin-comp">
+                <tbody>
+                  <tr><td>Reservado no aceite · <%= l.etiquetas_total || '—' %> etiqueta(s)</td><td class="num dim"><%= formatBRL(l.valor_original) %></td></tr>
+                  <% if (l.credito_gerado > 0) { %>
+                    <tr><td>Despachadas · <%= l.etiquetas_cobradas %> etiqueta(s)</td><td class="num"><%= formatBRL(l.valor_cobrado) %></td></tr>
+                    <tr class="fin-cred"><td>Não enviadas · <%= l.nao_enviadas %> etiqueta(s) → crédito<%= l.status === 'pago' && l.encerrado_em_br ? ' em conta' : ' (limite liberado)' %><%= l.encerrado_em_br ? ' · encerrado em ' + l.encerrado_em_br : '' %></td><td class="num">− <%= formatBRL(l.credito_gerado) %></td></tr>
+                  <% } %>
+                  <% if (l.credito_usado > 0) { %>
+                    <tr class="fin-cred"><td>Crédito em conta usado neste pedido</td><td class="num">− <%= formatBRL(l.credito_usado) %></td></tr>
+                  <% } %>
+                  <tr class="fin-tot"><td>Valor a pagar</td><td class="num"><%= formatBRL(l.valor_centavos) %></td></tr>
+                </tbody>
+              </table>
+            <% } %>
             <div class="fin-meta">
               <% if (l.situacao === 'pago') { %>
                 <span>Pago em <b><%= l.pago_em_br %></b><% if (l.forma_pagamento) { %> via <b><%= l.forma_pagamento %></b><% } %><% if (l.observacao) { %> · <%= l.observacao %><% } %></span>

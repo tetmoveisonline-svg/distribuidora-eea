@@ -195,7 +195,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     await client.query('UPDATE pedidos SET comprovante = $1 WHERE id = $2', [pdfBuffer, pedidoId]);
 
     // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
-    await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos);
+    await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos, totalEtiquetas);
 
     await client.query('COMMIT');
     res.json({ ok: true, pedidoId, numero });
@@ -250,7 +250,7 @@ router.get('/financeiro', exigeCliente, async (req, res, next) => {
     const todos = await financeiro.listar({ clienteId });
     const lista = financeiro.filtrarSituacao(mes ? await financeiro.listar({ clienteId, mes }) : todos, sit);
     res.render('cliente/financeiro', {
-      lancamentos: lista, resumo: financeiro.resumo(todos),
+      lancamentos: lista, resumo: financeiro.resumo(todos), creditoConta: await financeiro.creditoConta(clienteId),
       meses: await financeiro.mesesDisponiveis(clienteId), filtro: { situacao: sit, mes },
       formatBRL, formatDateTime,
     });

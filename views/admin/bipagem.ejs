@@ -54,6 +54,7 @@
   <div class="hint-box" style="margin-top:16px">
     Ao bipar a primeira etiqueta de um pedido, o cliente já vê “Em separação”. Quando todas as etiquetas de um pedido são despachadas, ele vira “Despachado” sozinho.
     <b>Finalizar / atualizar</b> confirma o parcial agora e deixa o pedido aberto para despachar o resto depois.
+    <b>Encerrar pedido</b> fecha um pedido com etiquetas sobrando: cobra só as despachadas e o valor das que ficaram vira crédito para o cliente.
   </div>
 </div>
 
@@ -85,6 +86,7 @@
   .dot-ok { color:var(--ok); } .dot-wait { color:var(--warn); }
   .mini { font-size:11.5px; padding:5px 9px; border-radius:7px; border:1px solid var(--border-strong); background:var(--field-bg); color:var(--text); cursor:pointer; font-family:inherit; }
   .mini:hover { border-color:var(--accent); }
+  .mini.enc { color:var(--warn); border-color:var(--warn); }
 </style>
 
 <script>
@@ -133,7 +135,12 @@
       else if (p.separadas >= p.total) badge = '<span class="badge neutral">Em separação</span>';
       else if (p.separadas > 0) badge = '<span class="badge warn">Separação ' + p.separadas + '/' + p.total + '</span>';
       else badge = '<span class="badge neutral">Aguardando</span>';
-      html += '<div class="grp"><div class="grp-h"><div class="gl"><span class="tag">' + esc(p.numero) + '</span></div>' + badge + '</div>';
+      // Encerrar com sobras: so faz sentido quando ha algo despachado e ainda sobra etiqueta
+      var sobras = p.total - p.despachadas;
+      var btnEnc = (p.despachadas > 0 && sobras > 0)
+        ? '<button class="mini enc" data-encerrar="' + p.pedido_id + '" data-numero="' + esc(p.numero) + '" data-desp="' + p.despachadas + '" data-sobras="' + sobras + '" data-valor="' + esc(brl(p.sobras_centavos)) + '">Encerrar pedido (' + sobras + ' ficam de fora)</button>'
+        : '';
+      html += '<div class="grp"><div class="grp-h"><div class="gl"><span class="tag">' + esc(p.numero) + '</span></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + btnEnc + badge + '</div></div>';
       html += '<div style="overflow-x:auto"><table class="etqt"><thead><tr><th class="num">#</th><th>Produto</th><th>Separação</th><th>Despacho</th></tr></thead><tbody>';
       p.etiquetas.forEach(function (e) {
         // depois do bipe, mostra o codigo lido (BR... ou chave da nota) em verde no lugar de "Separada"
@@ -155,6 +162,32 @@
     document.querySelectorAll('[data-marcar]').forEach(function (b) {
       b.addEventListener('click', function () { marcar(parseInt(b.getAttribute('data-marcar'), 10), b.getAttribute('data-modo')); });
     });
+    document.querySelectorAll('[data-encerrar]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var msg = 'Encerrar o pedido ' + b.getAttribute('data-numero') + '?\n\n' +
+          b.getAttribute('data-desp') + ' despachada(s) serão cobradas.\n' +
+          b.getAttribute('data-sobras') + ' ficam de fora e viram crédito de ' + b.getAttribute('data-valor') + ' para o cliente ' +
+          '(libera o limite, ou crédito em conta se o pedido já foi pago).\n\nO pedido fecha e não recebe mais bipes.';
+        if (confirm(msg)) encerrar(parseInt(b.getAttribute('data-encerrar'), 10));
+      });
+    });
+  }
+
+  function brl(c) { return 'R$ ' + (Number(c || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+  function encerrar(pedidoId) {
+    if (travado || !clienteId) return;
+    travado = true;
+    fetch('/admin/bipagem/encerrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clienteId: clienteId, pedidoId: pedidoId }) })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, d: d }; }); })
+      .then(function (res) {
+        var d = res.d;
+        if (d.estado) pintar(d.estado);
+        if (res.status >= 400 || d.erro) fbShow('err', d.erro || 'Erro ao encerrar.');
+        else fbShow('ok', d.mensagem || 'Pedido encerrado.');
+      })
+      .catch(function () { fbShow('err', 'Falha de conexão.'); })
+      .finally(function () { travado = false; focar(); });
   }
 
   function carregar(id) {
