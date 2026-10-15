@@ -13,18 +13,21 @@ const {
   precoSugerido, lucroCom,
 } = require('../util');
 
-// Taxa do funcionario (por etiqueta) e maior comissao de representante ativa, para o calculo de preco.
+// Representantes (comissao %) e funcionarios (taxa por etiqueta) ativos, para o calculo de preco.
 async function refCustos() {
-  const fr = await funcRef();
-  const rep = await db.query("SELECT COALESCE(max(comissao_bps), 0)::int AS bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE");
-  return { funcCentavos: fr ? Number(fr.taxa_etiqueta_centavos || 0) : 0, funcNome: fr ? fr.nome : null, repBpsSugerido: rep.rows[0].bps };
+  const reps = await db.query("SELECT id, nome, COALESCE(comissao_bps, 0)::int AS bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE ORDER BY nome");
+  const funcs = await db.query("SELECT id, nome, COALESCE(taxa_etiqueta_centavos, 0)::int AS taxa FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE ORDER BY nome");
+  return { reps: reps.rows, funcs: funcs.rows };
 }
-// Anexa custo/lucro/sugerido ao produto (rep_bps do produto, ou o sugerido se vazio).
+// Anexa ao produto quem foi escolhido (ou ninguem), as taxas lidas do cadastro e o preco sugerido.
 function comCustos(p, ref) {
-  const repBps = p.rep_bps !== null && p.rep_bps !== undefined ? Number(p.rep_bps) : ref.repBpsSugerido;
+  const rep = ref.reps.find((r) => r.id === p.rep_usuario_id) || null;
+  const func = ref.funcs.find((f) => f.id === p.func_usuario_id) || null;
+  const repBps = rep ? rep.bps : 0;
+  const funcCentavos = func ? func.taxa : 0;
   const base = { custo_centavos: p.custo_centavos, lucro_centavos: p.lucro_centavos, rep_bps: repBps };
-  const sugerido = precoSugerido(base, ref.funcCentavos);
-  return { ...p, rep_bps_efetivo: repBps, rep_bps_definido: p.rep_bps !== null && p.rep_bps !== undefined, func_centavos: ref.funcCentavos, sugerido, temCustos: p.custo_centavos !== null || p.lucro_centavos !== null };
+  const sugerido = precoSugerido(base, funcCentavos);
+  return { ...p, rep, func, rep_bps_efetivo: repBps, func_centavos: funcCentavos, sugerido, temCustos: p.custo_centavos !== null || p.lucro_centavos !== null };
 }
 
 const router = express.Router();
@@ -330,7 +333,7 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.custo_centavos, p.lucro_centavos, p.rep_bps,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
     );
@@ -381,13 +384,16 @@ router.post('/produtos/:id/cores', async (req, res, next) => {
 // Custo, lucro desejado e % do representante do produto (para o preco sugerido).
 router.post('/produtos/:id/custos', async (req, res, next) => {
   try {
-    const custoTxt = (req.body.custo || '').toString().trim(), lucroTxt = (req.body.lucro || '').toString().trim(), repTxt = (req.body.rep || '').toString().trim();
+    const custoTxt = (req.body.custo || '').toString().trim(), lucroTxt = (req.body.lucro || '').toString().trim();
     const custo = custoTxt === '' ? null : parsePrecoToCentavos(custoTxt);
     const lucro = lucroTxt === '' ? null : parsePrecoToCentavos(lucroTxt);
-    const rep = repTxt === '' ? null : parsePercentToBps(repTxt);
     if ((custoTxt !== '' && custo === null) || (lucroTxt !== '' && lucro === null)) throw new Error('Custo e lucro devem ser valores em R$ (ex.: 40,00).');
-    if (repTxt !== '' && (rep === null || rep >= 10000)) throw new Error('Percentual do representante inválido (0 a 99,99).');
-    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_bps = $4 WHERE id = $1', [pInt(req.params.id), custo, lucro, rep]);
+    // quem recebe: validados contra o cadastro (papel certo e ativo)
+    const repId = pInt(req.body.rep_id), funcId = pInt(req.body.func_id);
+    const okRep = repId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]) : { rowCount: 0 };
+    const okFunc = funcId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'funcionario'", [funcId]) : { rowCount: 0 };
+    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5 WHERE id = $1',
+      [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null]);
     res.redirect('/admin/produtos?ok=' + encodeURIComponent('Custos atualizados.'));
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); }
 });
@@ -448,7 +454,7 @@ router.get('/precos', async (req, res, next) => {
   try {
     const clientes = await db.query('SELECT id, nome FROM clientes WHERE ativo = TRUE ORDER BY nome');
     const ref = await refCustos();
-    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, rep_bps FROM produtos WHERE ativo = TRUE ORDER BY nome');
+    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, rep_usuario_id, func_usuario_id FROM produtos WHERE ativo = TRUE ORDER BY nome');
     const produtos = { rows: prodRes.rows.map((p) => comCustos(p, ref)) };
     let clienteId = pInt(req.query.cliente);
     if (!clienteId && clientes.rowCount > 0) clienteId = clientes.rows[0].id;
@@ -457,7 +463,7 @@ router.get('/precos', async (req, res, next) => {
       itens = await db.query(
         `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id,
                 to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim,
-                p.custo_centavos, p.lucro_centavos, p.rep_bps
+                p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id
          FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
          WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`, [clienteId]
       );
@@ -474,8 +480,8 @@ router.get('/precos', async (req, res, next) => {
       const pc = comCustos(i, ref);
       const lucroInfo = pc.temCustos ? {
         sugerido: pc.sugerido,
-        lucro: lucroCom(i.preco_centavos, pc, ref.funcCentavos),
-        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, pc, ref.funcCentavos) : null,
+        lucro: lucroCom(i.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos),
+        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos) : null,
         lucroAlvo: Number(i.lucro_centavos || 0),
         diffSugerido: pc.sugerido !== null ? i.preco_centavos - pc.sugerido : null,
       } : null;

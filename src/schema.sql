@@ -248,3 +248,8 @@ CREATE INDEX IF NOT EXISTS idx_estoque_mov_produto ON estoque_mov(produto_id, cr
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS lucro_centavos INTEGER;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS rep_bps INTEGER;   -- % do representante usada no calculo (pontos-base)
+
+-- Quem recebe no calculo do preco sugerido: representante (comissao %) e funcionario (taxa por etiqueta),
+-- lidos do cadastro de cada um na hora do calculo.
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS rep_usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS func_usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
