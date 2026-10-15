@@ -98,7 +98,8 @@
         var totalLinha = item.preco_centavos * row.quantidade;
         var opts = ITENS.map(function (it) {
           var sel = it.id === row.itemId ? ' selected' : '';
-          return '<option value="' + it.id + '"' + sel + '>' + escapeHtml(it.nome) + ' - ' + brl(it.preco_centavos) + '</option>';
+          var promo = it.promo ? ' (' + escapeHtml(it.promo_rotulo) + ', de ' + brl(it.preco_original) + ')' : '';
+          return '<option value="' + it.id + '"' + sel + '>' + escapeHtml(it.nome) + ' - ' + brl(it.preco_centavos) + promo + '</option>';
         }).join('');
         html +=
           '<div class="file-item">' +
@@ -115,7 +116,8 @@
                 '<div class="stepper"><button type="button" class="dec" data-idx="' + idx + '">&minus;</button>' +
                 '<input class="qty" data-idx="' + idx + '" value="' + row.quantidade + '" inputmode="numeric" />' +
                 '<button type="button" class="inc" data-idx="' + idx + '">+</button></div></div>' +
-              '<div><span class="lbl">Valor unit.</span><div style="padding:8px 0;font-size:13.5px">' + brl(item.preco_centavos) + '</div></div>' +
+              '<div><span class="lbl">Valor unit.</span><div style="padding:8px 0;font-size:13.5px">' + brl(item.preco_centavos) +
+                (item.promo ? ' <span class="badge ok" style="margin-left:4px">' + escapeHtml(item.promo_rotulo) + '</span>' : '') + '</div></div>' +
               '<div><span class="lbl">Total</span><div style="padding:8px 0;font-size:14px;font-weight:600">' + brl(totalLinha) + '</div></div>' +
               '<div><span class="lbl">&nbsp;</span><button type="button" class="file-remove" data-idx="' + idx + '">remover</button></div>' +
             '</div>' +

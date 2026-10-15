@@ -8,7 +8,7 @@ const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
 const {
   formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
-  horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps,
+  horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps, precoEfetivo, brDate, hojeISO,
 } = require('../util');
 
 const router = express.Router();
@@ -212,10 +212,11 @@ router.get('/clientes', async (req, res, next) => {
     const r = await db.query(
       `SELECT c.id, c.nome, c.ativo, c.prazo_dias, c.limite_centavos, c.bloquear_vencido, u.login,
               (SELECT COALESCE(sum(f.valor_centavos), 0) FROM financeiro f WHERE f.cliente_id = c.id AND f.status = 'aberto')::int AS em_aberto,
+              (SELECT count(*) FROM pedidos p WHERE p.cliente_id = c.id)::int AS pedidos,
               (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo) AS produtos
        FROM clientes c LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente' ORDER BY c.nome`
     );
-    res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null, formatBRL });
+    res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL });
   } catch (e) { next(e); }
 });
 router.post('/clientes', async (req, res, next) => {
@@ -233,6 +234,27 @@ router.post('/clientes', async (req, res, next) => {
     await client.query('COMMIT');
     res.redirect('/admin/clientes');
   } catch (e) { await client.query('ROLLBACK'); res.redirect('/admin/clientes?erro=' + encodeURIComponent(msgErro(e))); } finally { client.release(); }
+});
+// Excluir cliente: exige a senha do admin logado. Apaga usuarios, precos, pedidos, etiquetas,
+// arquivos e financeiro do cliente (cascata). Irreversivel.
+router.post('/clientes/:id/excluir', async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    const id = pInt(req.params.id);
+    const senha = (req.body.senha || '').toString();
+    const adm = await db.query('SELECT senha_hash FROM usuarios WHERE id = $1 AND papel = $2', [req.session.user.id, 'admin']);
+    if (adm.rowCount === 0 || !senha || !(await bcrypt.compare(senha, adm.rows[0].senha_hash))) {
+      return res.redirect('/admin/clientes?erro=' + encodeURIComponent('Senha do administrador incorreta. O cliente não foi excluído.'));
+    }
+    await client.query('BEGIN');
+    const c = await client.query('SELECT nome FROM clientes WHERE id = $1', [id]);
+    if (c.rowCount === 0) { await client.query('ROLLBACK'); return res.redirect('/admin/clientes?erro=' + encodeURIComponent('Cliente não encontrado.')); }
+    // arquivos subidos e ainda sem pedido (nao caem na cascata de pedidos)
+    await client.query('DELETE FROM arquivos WHERE pedido_id IS NULL AND usuario_id IN (SELECT id FROM usuarios WHERE cliente_id = $1)', [id]);
+    await client.query('DELETE FROM clientes WHERE id = $1', [id]);
+    await client.query('COMMIT');
+    res.redirect('/admin/clientes?ok=' + encodeURIComponent('Cliente "' + c.rows[0].nome + '" excluído com todo o histórico.'));
+  } catch (e) { await client.query('ROLLBACK'); next(e); } finally { client.release(); }
 });
 router.post('/clientes/:id/toggle', async (req, res, next) => {
   try {
@@ -291,8 +313,12 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 // ===================== PRODUTOS =====================
 router.get('/produtos', async (req, res, next) => {
   try {
-    const r = await db.query('SELECT id, nome, descricao, ativo FROM produtos ORDER BY nome');
-    res.render('admin/produtos', { produtos: r.rows, ativo: 'produtos', erro: req.query.erro || null });
+    const r = await db.query(
+      `SELECT p.id, p.nome, p.descricao, p.ativo,
+              (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
+       FROM produtos p ORDER BY p.nome`
+    );
+    res.render('admin/produtos', { produtos: r.rows, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null });
   } catch (e) { next(e); }
 });
 router.post('/produtos', async (req, res, next) => {
@@ -306,6 +332,21 @@ router.post('/produtos', async (req, res, next) => {
 router.post('/produtos/:id/toggle', async (req, res, next) => {
   try { await db.query('UPDATE produtos SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/produtos'); } catch (e) { next(e); }
 });
+// Excluir produto do catalogo: remove tambem os precos por cliente ligados a ele.
+// Pedidos ja feitos nao mudam (linhas guardam nome e preco; item_id vira NULL).
+router.post('/produtos/:id/excluir', async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    const id = pInt(req.params.id);
+    await client.query('BEGIN');
+    const p = await client.query('SELECT nome FROM produtos WHERE id = $1', [id]);
+    if (p.rowCount === 0) { await client.query('ROLLBACK'); return res.redirect('/admin/produtos?erro=' + encodeURIComponent('Produto não encontrado.')); }
+    const it = await client.query('DELETE FROM itens WHERE produto_id = $1', [id]);
+    await client.query('DELETE FROM produtos WHERE id = $1', [id]);
+    await client.query('COMMIT');
+    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Produto "' + p.rows[0].nome + '" excluído' + (it.rowCount ? ' junto com ' + it.rowCount + ' preço(s) por cliente.' : '.')));
+  } catch (e) { await client.query('ROLLBACK'); next(e); } finally { client.release(); }
+});
 
 // ===================== PRECOS POR CLIENTE =====================
 router.get('/precos', async (req, res, next) => {
@@ -316,11 +357,23 @@ router.get('/precos', async (req, res, next) => {
     if (!clienteId && clientes.rowCount > 0) clienteId = clientes.rows[0].id;
     let itens = { rows: [] }, clienteNome = '';
     if (clienteId) {
-      itens = await db.query('SELECT id, nome, preco_centavos FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome', [clienteId]);
+      itens = await db.query(
+        `SELECT id, nome, preco_centavos, promo_tipo, promo_valor,
+                to_char(promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(promo_fim, 'YYYY-MM-DD') AS promo_fim
+         FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome`, [clienteId]
+      );
       const cn = await db.query('SELECT nome FROM clientes WHERE id = $1', [clienteId]);
       clienteNome = cn.rowCount ? cn.rows[0].nome : '';
     }
-    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: itens.rows, clienteId, clienteNome, ativo: 'precos', erro: req.query.erro || null, formatBRL });
+    const hoje = hojeISO();
+    const lista = itens.rows.map((i) => {
+      const ef = precoEfetivo(i, hoje);
+      // promo cadastrada mas fora do periodo (agendada ou encerrada)
+      let promoEstado = null;
+      if (i.promo_tipo && !ef.promo) promoEstado = (i.promo_inicio && i.promo_inicio > hoje) ? 'agendada' : 'encerrada';
+      return { ...i, efetivo: ef, promoEstado, promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
+    });
+    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
   } catch (e) { next(e); }
 });
 router.post('/precos', async (req, res, next) => {
@@ -333,6 +386,32 @@ router.post('/precos', async (req, res, next) => {
     await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos) VALUES ($1,$2,$3,$4)', [clienteId, produtoId, prod.rows[0].nome, preco]);
     res.redirect('/admin/precos?cliente=' + clienteId);
   } catch (e) { const cid = pInt(req.body.cliente_id) || ''; res.redirect('/admin/precos?cliente=' + cid + '&erro=' + encodeURIComponent(msgErro(e))); }
+});
+// Promocao no preco negociado: tipo 'valor' (preco promocional em R$) ou 'percentual' (% de desconto), com periodo.
+router.post('/precos/:id/promo', async (req, res, next) => {
+  const id = pInt(req.params.id);
+  const cur = await db.query('SELECT cliente_id, preco_centavos FROM itens WHERE id = $1', [id]).catch(() => ({ rowCount: 0 }));
+  const cid = cur.rowCount ? cur.rows[0].cliente_id : '';
+  try {
+    if (!cur.rowCount) throw new Error('Preço não encontrado.');
+    const tipo = req.body.tipo === 'percentual' ? 'percentual' : 'valor';
+    const valor = tipo === 'percentual' ? parsePercentToBps(req.body.valor) : parsePrecoToCentavos(req.body.valor);
+    if (valor === null || valor <= 0) throw new Error(tipo === 'percentual' ? 'Informe o percentual de desconto.' : 'Informe o preço promocional.');
+    if (tipo === 'percentual' && valor >= 10000) throw new Error('Desconto deve ser menor que 100%.');
+    if (tipo === 'valor' && valor >= cur.rows[0].preco_centavos) throw new Error('O preço promocional deve ser menor que o preço negociado.');
+    const ini = /^\d{4}-\d{2}-\d{2}$/.test(req.body.inicio || '') ? req.body.inicio : null;
+    const fim = /^\d{4}-\d{2}-\d{2}$/.test(req.body.fim || '') ? req.body.fim : null;
+    if (!fim) throw new Error('Informe até quando vale a promoção.');
+    if (ini && fim < ini) throw new Error('A data final é anterior à inicial.');
+    await db.query('UPDATE itens SET promo_tipo = $2, promo_valor = $3, promo_inicio = $4, promo_fim = $5 WHERE id = $1', [id, tipo, valor, ini, fim]);
+    res.redirect('/admin/precos?cliente=' + cid + '&ok=' + encodeURIComponent('Promoção aplicada.'));
+  } catch (e) { res.redirect('/admin/precos?cliente=' + cid + '&erro=' + encodeURIComponent(msgErro(e))); }
+});
+router.post('/precos/:id/promo/remover', async (req, res, next) => {
+  try {
+    const it = await db.query('UPDATE itens SET promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL WHERE id = $1 RETURNING cliente_id', [pInt(req.params.id)]);
+    res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : '') + '&ok=' + encodeURIComponent('Promoção removida.'));
+  } catch (e) { next(e); }
 });
 router.post('/precos/:id/remove', async (req, res, next) => {
   try {

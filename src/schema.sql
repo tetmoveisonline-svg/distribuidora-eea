@@ -171,3 +171,10 @@ WHERE NOT EXISTS (SELECT 1 FROM financeiro f WHERE f.pedido_id = p.id);
 -- o pagamento libera. NULL = sem controle. bloquear_vencido = com pedido vencido, nao aceita envio novo.
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS limite_centavos INTEGER CHECK (limite_centavos IS NULL OR limite_centavos >= 0);
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS bloquear_vencido BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Promocao no preco negociado (itens): 'valor' = preco promocional fixo em centavos;
+-- 'percentual' = desconto em pontos-base sobre o preco. Vale entre promo_inicio e promo_fim (inclusive).
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_tipo TEXT CHECK (promo_tipo IS NULL OR promo_tipo IN ('valor','percentual'));
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_valor INTEGER;
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_inicio DATE;
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_fim DATE;

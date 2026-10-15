@@ -7,7 +7,19 @@ const { exigeCliente } = require('../auth');
 const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
-const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
+const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay, precoEfetivo } = require('../util');
+
+// Itens ativos do cliente com o preco efetivo (promocao aplicada se estiver no periodo).
+const SQL_ITENS = `SELECT id, nome, preco_centavos, promo_tipo, promo_valor,
+                          to_char(promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(promo_fim, 'YYYY-MM-DD') AS promo_fim
+                   FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome`;
+async function itensComPreco(q, clienteId) {
+  const r = await q.query(SQL_ITENS, [clienteId]);
+  return r.rows.map((i) => {
+    const ef = precoEfetivo(i);
+    return { id: i.id, nome: i.nome, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo };
+  });
+}
 
 const router = express.Router();
 
@@ -50,7 +62,7 @@ function normalizarCodigos(raw, paginas) {
 // ---------- Novo envio ----------
 router.get('/novo', exigeCliente, async (req, res, next) => {
   try {
-    const itens = await db.query('SELECT id, nome, preco_centavos FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome', [req.session.user.clienteId]);
+    const itens = { rows: await itensComPreco(db, req.session.user.clienteId) };
     const credito = await financeiro.creditoCliente(req.session.user.clienteId);
     const cli = await db.query('SELECT nome FROM clientes WHERE id = $1', [req.session.user.clienteId]);
     // WhatsApp da distribuidora (so digitos, com DDI). Vazio = botao nao aparece.
@@ -99,8 +111,8 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
-    const itensRes = await client.query('SELECT id, nome, preco_centavos FROM itens WHERE cliente_id = $1 AND ativo = TRUE', [clienteId]);
-    const itensMap = new Map(itensRes.rows.map((i) => [i.id, i]));
+    // Preco efetivo (promocao vigente) no momento do aceite; a linha guarda o preco realmente cobrado.
+    const itensMap = new Map((await itensComPreco(client, clienteId)).map((i) => [i.id, i]));
 
     const linhas = [];
     let totalCentavos = 0, totalEtiquetas = 0;

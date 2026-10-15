@@ -94,7 +94,43 @@ function andamentoDisplay(pedido) {
   }));
 }
 
+// Data de hoje em Sao Paulo (YYYY-MM-DD).
+function hojeISO() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+// dd/mm/aaaa a partir de YYYY-MM-DD.
+function brDate(iso) {
+  if (!iso) return '';
+  const s = String(iso).slice(0, 10);
+  return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4);
+}
+
+// Preco efetivo de um item considerando a promocao (se estiver no periodo).
+// item: { preco_centavos, promo_tipo, promo_valor, promo_inicio, promo_fim }
+// Retorna { preco_centavos, preco_original, promo (bool), promo_rotulo, promo_fim_br }.
+function precoEfetivo(item, hoje) {
+  const base = Number(item.preco_centavos || 0);
+  const out = { preco_centavos: base, preco_original: base, promo: false, promo_rotulo: '', promo_fim_br: '' };
+  if (!item.promo_tipo || item.promo_valor === null || item.promo_valor === undefined) return out;
+  const h = hoje || hojeISO();
+  const ini = item.promo_inicio ? String(item.promo_inicio instanceof Date ? item.promo_inicio.toISOString() : item.promo_inicio).slice(0, 10) : null;
+  const fim = item.promo_fim ? String(item.promo_fim instanceof Date ? item.promo_fim.toISOString() : item.promo_fim).slice(0, 10) : null;
+  if (ini && h < ini) return out;
+  if (fim && h > fim) return out;
+  let preco = base;
+  if (item.promo_tipo === 'valor') preco = Math.max(0, Number(item.promo_valor));
+  else preco = Math.max(0, Math.round(base * (10000 - Number(item.promo_valor)) / 10000));
+  if (preco >= base) return out;
+  out.preco_centavos = preco; out.promo = true;
+  out.promo_fim_br = fim ? brDate(fim) : '';
+  out.promo_rotulo = (item.promo_tipo === 'percentual' ? formatPercent(item.promo_valor) + ' off' : 'promo') + (fim ? ' até ' + out.promo_fim_br : '');
+  return out;
+}
+
 module.exports = {
+  hojeISO,
+  brDate,
+  precoEfetivo,
   formatBRL,
   formatDateTime,
   parsePrecoToCentavos,
