@@ -242,3 +242,9 @@ CREATE TABLE IF NOT EXISTS estoque_mov (
   criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_estoque_mov_produto ON estoque_mov(produto_id, criado_em DESC);
+
+-- ===================== CUSTO E LUCRO DO PRODUTO =====================
+-- Preco sugerido = (custo + taxa do funcionario + lucro desejado) / (1 - % do representante).
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS lucro_centavos INTEGER;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS rep_bps INTEGER;   -- % do representante usada no calculo (pontos-base)

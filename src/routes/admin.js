@@ -10,7 +10,22 @@ const estoque = require('../estoque');
 const {
   formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
   horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps, precoEfetivo, brDate, hojeISO, skuCor,
+  precoSugerido, lucroCom,
 } = require('../util');
+
+// Taxa do funcionario (por etiqueta) e maior comissao de representante ativa, para o calculo de preco.
+async function refCustos() {
+  const fr = await funcRef();
+  const rep = await db.query("SELECT COALESCE(max(comissao_bps), 0)::int AS bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE");
+  return { funcCentavos: fr ? Number(fr.taxa_etiqueta_centavos || 0) : 0, funcNome: fr ? fr.nome : null, repBpsSugerido: rep.rows[0].bps };
+}
+// Anexa custo/lucro/sugerido ao produto (rep_bps do produto, ou o sugerido se vazio).
+function comCustos(p, ref) {
+  const repBps = p.rep_bps !== null && p.rep_bps !== undefined ? Number(p.rep_bps) : ref.repBpsSugerido;
+  const base = { custo_centavos: p.custo_centavos, lucro_centavos: p.lucro_centavos, rep_bps: repBps };
+  const sugerido = precoSugerido(base, ref.funcCentavos);
+  return { ...p, rep_bps_efetivo: repBps, rep_bps_definido: p.rep_bps !== null && p.rep_bps !== undefined, func_centavos: ref.funcCentavos, sugerido, temCustos: p.custo_centavos !== null || p.lucro_centavos !== null };
+}
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -315,18 +330,19 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.custo_centavos, p.lucro_centavos, p.rep_bps,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
     );
+    const ref = await refCustos();
     const cores = await db.query('SELECT id, produto_id, nome, sku, saldo FROM produto_cores ORDER BY produto_id, ordem, id');
     const coresMap = new Map();
     for (const c of cores.rows) {
       if (!coresMap.has(c.produto_id)) coresMap.set(c.produto_id, []);
       coresMap.get(c.produto_id).push(c);
     }
-    const produtos = r.rows.map((p) => ({ ...p, cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })) }));
-    res.render('admin/produtos', { produtos, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null });
+    const produtos = r.rows.map((p) => ({ ...comCustos(p, ref), cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })) }));
+    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent });
   } catch (e) { next(e); }
 });
 router.post('/produtos', async (req, res, next) => {
@@ -361,6 +377,19 @@ router.post('/produtos/:id/cores', async (req, res, next) => {
     await db.query('INSERT INTO produto_cores (produto_id, nome, sku, ordem) VALUES ($1,$2,$3,$4)', [pid, nome, normSku(req.body.sku), ord.rows[0].o]);
     res.redirect('/admin/produtos');
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.code === '23505' ? 'Essa cor já existe neste produto.' : msgErro(e))); }
+});
+// Custo, lucro desejado e % do representante do produto (para o preco sugerido).
+router.post('/produtos/:id/custos', async (req, res, next) => {
+  try {
+    const custoTxt = (req.body.custo || '').toString().trim(), lucroTxt = (req.body.lucro || '').toString().trim(), repTxt = (req.body.rep || '').toString().trim();
+    const custo = custoTxt === '' ? null : parsePrecoToCentavos(custoTxt);
+    const lucro = lucroTxt === '' ? null : parsePrecoToCentavos(lucroTxt);
+    const rep = repTxt === '' ? null : parsePercentToBps(repTxt);
+    if ((custoTxt !== '' && custo === null) || (lucroTxt !== '' && lucro === null)) throw new Error('Custo e lucro devem ser valores em R$ (ex.: 40,00).');
+    if (repTxt !== '' && (rep === null || rep >= 10000)) throw new Error('Percentual do representante inválido (0 a 99,99).');
+    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_bps = $4 WHERE id = $1', [pInt(req.params.id), custo, lucro, rep]);
+    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Custos atualizados.'));
+  } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); }
 });
 // Lancamento de estoque (entrada, ajuste ou saida manual) numa cor ou no produto (cor unica).
 router.post('/produtos/:id/estoque', async (req, res, next) => {
@@ -418,15 +447,19 @@ router.post('/produtos/:id/excluir', async (req, res, next) => {
 router.get('/precos', async (req, res, next) => {
   try {
     const clientes = await db.query('SELECT id, nome FROM clientes WHERE ativo = TRUE ORDER BY nome');
-    const produtos = await db.query('SELECT id, nome FROM produtos WHERE ativo = TRUE ORDER BY nome');
+    const ref = await refCustos();
+    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, rep_bps FROM produtos WHERE ativo = TRUE ORDER BY nome');
+    const produtos = { rows: prodRes.rows.map((p) => comCustos(p, ref)) };
     let clienteId = pInt(req.query.cliente);
     if (!clienteId && clientes.rowCount > 0) clienteId = clientes.rows[0].id;
     let itens = { rows: [] }, clienteNome = '';
     if (clienteId) {
       itens = await db.query(
-        `SELECT id, nome, preco_centavos, promo_tipo, promo_valor,
-                to_char(promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(promo_fim, 'YYYY-MM-DD') AS promo_fim
-         FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome`, [clienteId]
+        `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id,
+                to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim,
+                p.custo_centavos, p.lucro_centavos, p.rep_bps
+         FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
+         WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`, [clienteId]
       );
       const cn = await db.query('SELECT nome FROM clientes WHERE id = $1', [clienteId]);
       clienteNome = cn.rowCount ? cn.rows[0].nome : '';
@@ -437,9 +470,18 @@ router.get('/precos', async (req, res, next) => {
       // promo cadastrada mas fora do periodo (agendada ou encerrada)
       let promoEstado = null;
       if (i.promo_tipo && !ef.promo) promoEstado = (i.promo_inicio && i.promo_inicio > hoje) ? 'agendada' : 'encerrada';
-      return { ...i, efetivo: ef, promoEstado, promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
+      // lucro por unidade com o preco negociado (e com a promocao, se ativa)
+      const pc = comCustos(i, ref);
+      const lucroInfo = pc.temCustos ? {
+        sugerido: pc.sugerido,
+        lucro: lucroCom(i.preco_centavos, pc, ref.funcCentavos),
+        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, pc, ref.funcCentavos) : null,
+        lucroAlvo: Number(i.lucro_centavos || 0),
+        diffSugerido: pc.sugerido !== null ? i.preco_centavos - pc.sugerido : null,
+      } : null;
+      return { ...i, efetivo: ef, promoEstado, lucroInfo, promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
     });
-    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
+    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
   } catch (e) { next(e); }
 });
 router.post('/precos', async (req, res, next) => {

@@ -27,7 +27,27 @@
       <tbody>
         <% produtos.forEach(function (p) { %>
           <tr>
-            <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %></td>
+            <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %>
+              <div class="custo-box">
+                <% if (p.temCustos) { %>
+                  <div class="custo-grid">
+                    <span>Custo do produto</span><span class="num"><%= formatBRL(p.custo_centavos || 0) %></span>
+                    <span>Funcionário <span class="dim">· por etiqueta</span></span><span class="num"><%= formatBRL(p.func_centavos) %></span>
+                    <span>Representante <span class="dim">· % da venda</span></span><span class="num"><%= formatPercent(p.rep_bps_efetivo) %></span>
+                    <span>Lucro desejado</span><span class="num"><%= formatBRL(p.lucro_centavos || 0) %></span>
+                    <span class="tot">Preço sugerido</span><span class="num tot ok"><%= p.sugerido !== null ? formatBRL(p.sugerido) : '—' %></span>
+                  </div>
+                <% } else { %>
+                  <div class="dim" style="font-size:11.5px;margin-bottom:6px">Sem custo cadastrado: informe custo e lucro para ver o preço sugerido.</div>
+                <% } %>
+                <form method="post" action="/admin/produtos/<%= p.id %>/custos" class="custo-form">
+                  <label>Custo R$<input name="custo" value="<%= p.custo_centavos !== null && p.custo_centavos !== undefined ? (p.custo_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>" placeholder="40,00" /></label>
+                  <label>Lucro R$<input name="lucro" value="<%= p.lucro_centavos !== null && p.lucro_centavos !== undefined ? (p.lucro_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>" placeholder="20,00" /></label>
+                  <label>Rep. %<input name="rep" value="<%= p.rep_bps_definido ? formatPercent(p.rep_bps).replace('%', '') : '' %>" placeholder="<%= formatPercent(ref.repBpsSugerido).replace('%', '') %>" title="vazio = maior comissão cadastrada (<%= formatPercent(ref.repBpsSugerido) %>)" /></label>
+                  <button class="btn ghost sm" type="submit">Salvar</button>
+                </form>
+              </div>
+            </td>
             <td>
               <% if (p.cores.length === 0) { %>
                 <div class="cor-row"><span class="cor-nome dim">cor única</span>
@@ -79,6 +99,6 @@
   </div>
 </div>
 
-<div class="hint-box"><b>Estoque:</b> o saldo fica em cada cor. "Entrada" soma, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Cada etiqueta despachada na bipagem baixa 1 unidade sozinha. Saldo negativo fica em vermelho para acertar. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
+<div class="hint-box"><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). A taxa do funcionário vem do cadastro de Funcionários<%= ref.funcNome ? ' (' + ref.funcNome + ', ' + formatBRL(ref.funcCentavos) + ' por etiqueta)' : ' (nenhum funcionário com taxa cadastrada: R$ 0,00)' %>; o % do representante, se deixado vazio, usa a maior comissão cadastrada (<%= formatPercent(ref.repBpsSugerido) %>). Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> o saldo fica em cada cor. "Entrada" soma, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Cada etiqueta despachada na bipagem baixa 1 unidade sozinha. Saldo negativo fica em vermelho para acertar. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
 
 <%- include('../partials/app-close') %>

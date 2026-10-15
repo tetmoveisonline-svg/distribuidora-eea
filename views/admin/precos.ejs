@@ -27,15 +27,17 @@
     <form method="post" action="/admin/precos">
       <input type="hidden" name="cliente_id" value="<%= clienteId %>" />
       <div class="field"><label>Produto</label>
-        <select name="produto_id">
+        <select name="produto_id" id="prodSel">
           <% if (produtos.length === 0) { %><option value="">— cadastre um produto antes —</option><% } %>
-          <% produtos.forEach(function (p) { %><option value="<%= p.id %>"><%= p.nome %></option><% }); %>
+          <% produtos.forEach(function (p) { %><option value="<%= p.id %>" data-sugerido="<%= p.sugerido !== null ? (p.sugerido / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>"><%= p.nome %><%= p.sugerido !== null ? ' · sugerido ' + formatBRL(p.sugerido) : '' %></option><% }); %>
         </select>
       </div>
-      <div class="field"><label>Preço negociado (R$)</label><input name="preco" placeholder="4,50" /></div>
+      <div class="field"><label>Preço negociado (R$)</label><input name="preco" id="precoIn" placeholder="4,50" />
+        <div class="dim" id="precoHint" style="font-size:11.5px;margin-top:5px"></div>
+      </div>
       <button class="btn block" type="submit">Adicionar</button>
     </form>
-    <div class="hint-box" style="margin-top:14px">O preço vale para todas as cores do produto. Para uma promoção por tempo limitado, use o botão "Promoção" na lista ao lado.</div>
+    <div class="hint-box" style="margin-top:14px">O preço vale para todas as cores do produto. Ele vem preenchido com o preço sugerido (custo + taxas + lucro, definidos em Produtos); altere se a negociação for diferente. Para uma promoção por tempo limitado, use o botão "Promoção" na lista ao lado.</div>
   </div>
 
   <div class="card pad">
@@ -45,7 +47,16 @@
       <% itens.forEach(function (i) { %>
         <div class="price-row" id="pr-<%= i.id %>">
           <div class="price-main">
-            <div class="price-name"><%= i.nome %></div>
+            <div class="price-name"><%= i.nome %>
+              <% if (i.lucroInfo) { var li = i.lucroInfo; var cor = li.lucro >= li.lucroAlvo ? 'var(--ok)' : (li.lucro > 0 ? 'var(--warn)' : 'var(--danger)'); %>
+                <div class="price-obs">obs: lucro <b style="color:<%= cor %>"><%= formatBRL(li.lucro) %></b> por unidade
+                  <% if (li.diffSugerido === 0) { %>· igual ao sugerido
+                  <% } else if (li.diffSugerido !== null && li.diffSugerido < 0) { %>· <%= formatBRL(-li.diffSugerido) %> abaixo do sugerido (<%= formatBRL(li.sugerido) %>)
+                  <% } else if (li.diffSugerido !== null) { %>· <%= formatBRL(li.diffSugerido) %> acima do sugerido (<%= formatBRL(li.sugerido) %>)<% } %>
+                  <% if (li.lucroPromo !== null) { %><br>com a promoção: <b style="color:<%= li.lucroPromo >= li.lucroAlvo ? 'var(--ok)' : (li.lucroPromo > 0 ? 'var(--warn)' : 'var(--danger)') %>"><%= formatBRL(li.lucroPromo) %></b> por unidade<% } %>
+                </div>
+              <% } %>
+            </div>
             <div class="price-value">
               <% if (i.efetivo.promo) { %>
                 <span class="now"><%= formatBRL(i.efetivo.preco_centavos) %></span>
@@ -103,6 +114,21 @@
 <% } %>
 
 <script>
+  // Preco negociado vem preenchido com o sugerido do produto escolhido.
+  (function () {
+    var sel = document.getElementById('prodSel'), inp = document.getElementById('precoIn'), hint = document.getElementById('precoHint');
+    if (!sel || !inp) return;
+    var tocado = false;
+    function sug() { var o = sel.options[sel.selectedIndex]; return o ? (o.getAttribute('data-sugerido') || '') : ''; }
+    function aplicar() {
+      var s = sug();
+      if (!tocado || !inp.value) inp.value = s;
+      hint.textContent = s ? 'Sugerido: R$ ' + s + '. Altere se a negociação for diferente.' : 'Produto sem custo cadastrado; informe o preço.';
+    }
+    inp.addEventListener('input', function () { tocado = !!inp.value; });
+    sel.addEventListener('change', function () { tocado = false; aplicar(); });
+    aplicar();
+  })();
   document.querySelectorAll('.promo-toggle').forEach(function (b) {
     b.addEventListener('click', function () {
       var p = document.getElementById(b.getAttribute('data-target'));

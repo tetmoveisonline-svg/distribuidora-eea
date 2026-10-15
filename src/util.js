@@ -150,3 +150,22 @@ function skuCor(_skuBase, cor) {
   return s || null;
 }
 module.exports.skuCor = skuCor;
+
+// ---------- custo, lucro e preco sugerido ----------
+// p: { custo_centavos, lucro_centavos, rep_bps }, funcCentavos: taxa do funcionario por etiqueta.
+// Preco sugerido = (custo + func + lucro) / (1 - rep%), arredondado para cima no centavo.
+function precoSugerido(p, funcCentavos) {
+  const custo = Number(p.custo_centavos || 0), lucro = Number(p.lucro_centavos || 0), func = Number(funcCentavos || 0);
+  const bps = Math.min(9999, Math.max(0, Number(p.rep_bps || 0)));
+  if (!custo && !lucro && !func) return null;
+  return Math.ceil((custo + func + lucro) / (1 - bps / 10000));
+}
+// Lucro por unidade vendendo a precoCentavos: preco - comissao do rep - custo - func.
+function lucroCom(precoCentavos, p, funcCentavos) {
+  const custo = Number(p.custo_centavos || 0), func = Number(funcCentavos || 0);
+  const bps = Math.min(9999, Math.max(0, Number(p.rep_bps || 0)));
+  const preco = Number(precoCentavos || 0);
+  return preco - Math.round(preco * bps / 10000) - custo - func;
+}
+module.exports.precoSugerido = precoSugerido;
+module.exports.lucroCom = lucroCom;
