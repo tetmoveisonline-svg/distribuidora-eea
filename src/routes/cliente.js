@@ -51,7 +51,8 @@ function normalizarCodigos(raw, paginas) {
 router.get('/novo', exigeCliente, async (req, res, next) => {
   try {
     const itens = await db.query('SELECT id, nome, preco_centavos FROM itens WHERE cliente_id = $1 AND ativo = TRUE ORDER BY nome', [req.session.user.clienteId]);
-    res.render('cliente/novo', { itens: itens.rows, formatBRL });
+    const credito = await financeiro.creditoCliente(req.session.user.clienteId);
+    res.render('cliente/novo', { itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', formatBRL });
   } catch (e) { next(e); }
 });
 
@@ -108,6 +109,15 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       const totalLinha = item.preco_centavos * quantidade;
       totalCentavos += totalLinha; totalEtiquetas += quantidade;
       linhas.push({ arquivoId, arquivoNome: arq.rows[0].nome, codigos: arq.rows[0].codigos || [], itemId: item.id, itemNome: item.nome, precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha });
+    }
+
+    // Limite de credito: o que esta em aberto no financeiro consome o limite; vencido pode bloquear.
+    const credito = await financeiro.creditoCliente(clienteId);
+    if (credito && credito.bloqueado) {
+      throw httpErr(400, 'Há pedido vencido em aberto (' + credito.maisVencido.numero + ', ' + formatBRL(credito.maisVencido.valor) + '). Regularize o pagamento para liberar novos envios.');
+    }
+    if (credito && credito.controlado && totalCentavos > credito.disponivel) {
+      throw httpErr(400, 'O pedido (' + formatBRL(totalCentavos) + ') ultrapassa seu crédito disponível (' + formatBRL(credito.disponivel) + '). Reduza a quantidade ou fale com a empresa para liberar saldo.');
     }
 
     const seq = await client.query("SELECT 'DS-' || nextval('pedido_numero_seq') AS numero");

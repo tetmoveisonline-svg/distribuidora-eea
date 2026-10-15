@@ -162,8 +162,69 @@
     document.getElementById('fileCount').textContent = rows.length;
     document.getElementById('labelCount').textContent = t.labels;
     document.getElementById('grandTotal').textContent = brl(t.totalC);
-    revisarBtn.disabled = rows.length === 0;
+    var excede = verificarCredito(t.totalC);
+    revisarBtn.disabled = rows.length === 0 || excede;
   }
+
+  // ---------- limite de credito ----------
+  // CREDITO vem do servidor: { controlado, disponivel, limite, aberto, bloqueado, proximo, maisVencido }.
+  // Se o total passar do disponivel, mostra o aviso com a quantidade que ainda cabe do item que estourou.
+  var CREDITO = window.CREDITO || null;
+  var creditWarn = document.getElementById('creditWarn');
+  var revisarHint = document.getElementById('revisarHint');
+  var linhaSugerida = null; // { idx, qtd }
+
+  function verificarCredito(totalC) {
+    if (!CREDITO || !CREDITO.controlado || rows.length === 0) { esconderAviso(); return !!(CREDITO && CREDITO.bloqueado && rows.length); }
+    if (CREDITO.bloqueado) { esconderAviso(); return true; }
+    if (totalC <= CREDITO.disponivel) { esconderAviso(); return false; }
+
+    var excesso = totalC - CREDITO.disponivel;
+    document.getElementById('cwText').textContent =
+      'O pedido fica em ' + brl(totalC) + ' e você tem ' + brl(CREDITO.disponivel) + ' de crédito disponível. Excede em ' + brl(excesso) + '.';
+
+    // Sugestao: reduz a ultima linha (a que fez estourar) ate caber. Se nem zerando ela cabe, avisa.
+    var idx = rows.length - 1;
+    var row = rows[idx];
+    var item = itemById(row.itemId) || { preco_centavos: 0, nome: '-' };
+    var outros = totalC - item.preco_centavos * row.quantidade;
+    var sobra = CREDITO.disponivel - outros;
+    var cabe = item.preco_centavos > 0 ? Math.floor(sobra / item.preco_centavos) : 0;
+    var sug = document.getElementById('cwSugestao');
+    var btn = document.getElementById('cwAjustar');
+    if (cabe >= 1 && cabe < row.quantidade) {
+      sug.textContent = 'Com o crédito atual cabem até ' + cabe + ' etiqueta' + (cabe > 1 ? 's' : '') + ' de ' + item.nome +
+        ' (' + brl(cabe * item.preco_centavos) + ') neste arquivo. As outras ' + (row.quantidade - cabe) + ' podem ir num próximo envio.';
+      btn.textContent = 'Ajustar para ' + cabe + ' etiqueta' + (cabe > 1 ? 's' : '');
+      btn.style.display = 'inline-block';
+      linhaSugerida = { idx: idx, qtd: cabe };
+    } else {
+      sug.textContent = rows.length > 1
+        ? 'Mesmo sem este arquivo o restante já passa do crédito. Remova arquivos ou reduza as quantidades até o total caber em ' + brl(CREDITO.disponivel) + '.'
+        : 'Nenhuma etiqueta de ' + item.nome + ' cabe no crédito disponível agora.';
+      btn.style.display = 'none';
+      linhaSugerida = null;
+    }
+
+    var saldo = document.getElementById('cwSaldo');
+    saldo.textContent = CREDITO.proximo
+      ? 'Quite o pedido ' + CREDITO.proximo.numero + ' (' + brl(CREDITO.proximo.valor) + ', vence ' + CREDITO.proximo.vencimento + ') ou fale com a empresa para ampliar o limite.'
+      : 'Fale com a empresa para ampliar o limite de crédito.';
+
+    creditWarn.style.display = 'block';
+    if (revisarHint) revisarHint.style.display = 'block';
+    return true;
+  }
+  function esconderAviso() {
+    creditWarn.style.display = 'none';
+    if (revisarHint) revisarHint.style.display = 'none';
+    linhaSugerida = null;
+  }
+  document.getElementById('cwAjustar').addEventListener('click', function () {
+    if (!linhaSugerida || !rows[linhaSugerida.idx]) return;
+    rows[linhaSugerida.idx].quantidade = linhaSugerida.qtd;
+    render();
+  });
 
   // ---------- revisar / aceitar ----------
   function abrirRevisar() {

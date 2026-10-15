@@ -14,6 +14,7 @@
       <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
       <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
       <div class="field"><label>Prazo de pagamento (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>
+      <div class="field"><label>Limite de crédito (R$) — vazio = sem limite</label><input name="limite" placeholder="5.000,00" /></div>
       <button class="btn block" type="submit">Salvar cliente</button>
     </form>
   </div>
@@ -21,14 +22,21 @@
     <div class="section-title">Clientes cadastrados</div>
     <% if (clientes.length === 0) { %><div class="empty">Nenhum cliente ainda.</div><% } else { %>
     <table>
-      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Produtos</th><th>Prazo</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Produtos</th><th>Prazo · limite · vencido</th><th>Status</th><th></th></tr></thead>
       <tbody>
         <% clientes.forEach(function (c) { %>
           <tr>
-            <td><%= c.nome %></td>
+            <td><%= c.nome %><% if (c.limite_centavos !== null) { %><div class="dim" style="font-size:11.5px"><%= formatBRL(c.em_aberto) %> em aberto de <%= formatBRL(c.limite_centavos) %></div><% } %></td>
             <td class="dim"><%= c.login || '—' %></td>
             <td class="num"><%= c.produtos %></td>
-            <td><form method="post" action="/admin/clientes/<%= c.id %>/prazo" class="prazo-form"><input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" /> dias <button class="btn ghost sm" type="submit">ok</button></form></td>
+            <td>
+              <form method="post" action="/admin/clientes/<%= c.id %>/prazo" class="prazo-form">
+                <input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" title="prazo em dias" /> d
+                <input name="limite" class="lim" value="<%= c.limite_centavos === null ? '' : (c.limite_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) %>" placeholder="sem limite" title="limite de crédito (R$)" />
+                <label title="com pedido vencido, bloquear envios novos"><input type="checkbox" name="bloquear_vencido" value="1" <%= c.bloquear_vencido ? 'checked' : '' %> /> bloq.</label>
+                <button class="btn ghost sm" type="submit">ok</button>
+              </form>
+            </td>
             <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
             <td><form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form></td>
           </tr>

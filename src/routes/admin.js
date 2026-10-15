@@ -194,22 +194,28 @@ router.post('/financeiro/:id/reabrir', async (req, res, next) => {
 });
 
 // ===================== CLIENTES =====================
+// Prazo de pagamento, limite de credito e bloqueio por vencido (edicao inline na lista).
 router.post('/clientes/:id/prazo', async (req, res, next) => {
   try {
     const dias = pInt(req.body.prazo_dias);
     if (dias === null || dias < 0 || dias > 365) return res.redirect('/admin/clientes?erro=' + encodeURIComponent('Prazo inválido (0 a 365 dias).'));
-    await db.query('UPDATE clientes SET prazo_dias = $2 WHERE id = $1', [pInt(req.params.id), dias]);
+    const limTxt = (req.body.limite || '').toString().trim();
+    const limite = limTxt === '' ? null : parsePrecoToCentavos(limTxt);
+    if (limTxt !== '' && limite === null) return res.redirect('/admin/clientes?erro=' + encodeURIComponent('Limite inválido. Use por exemplo 5000 ou 5.000,00 (vazio = sem limite).'));
+    const bloquear = req.body.bloquear_vencido === '1';
+    await db.query('UPDATE clientes SET prazo_dias = $2, limite_centavos = $3, bloquear_vencido = $4 WHERE id = $1', [pInt(req.params.id), dias, limite, bloquear]);
     res.redirect('/admin/clientes');
   } catch (e) { next(e); }
 });
 router.get('/clientes', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT c.id, c.nome, c.ativo, c.prazo_dias, u.login,
+      `SELECT c.id, c.nome, c.ativo, c.prazo_dias, c.limite_centavos, c.bloquear_vencido, u.login,
+              (SELECT COALESCE(sum(f.valor_centavos), 0) FROM financeiro f WHERE f.cliente_id = c.id AND f.status = 'aberto')::int AS em_aberto,
               (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo) AS produtos
        FROM clientes c LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente' ORDER BY c.nome`
     );
-    res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null });
+    res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null, formatBRL });
   } catch (e) { next(e); }
 });
 router.post('/clientes', async (req, res, next) => {
@@ -218,8 +224,11 @@ router.post('/clientes', async (req, res, next) => {
     const nome = (req.body.nome || '').trim(), email = (req.body.email || '').trim(), login = (req.body.login || '').trim(), senha = req.body.senha || '';
     if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
     let prazo = pInt(req.body.prazo_dias); if (prazo === null || prazo < 0 || prazo > 365) prazo = 7;
+    const limTxt = (req.body.limite || '').toString().trim();
+    const limite = limTxt === '' ? null : parsePrecoToCentavos(limTxt);
+    if (limTxt !== '' && limite === null) throw new Error('Limite inválido. Use por exemplo 5000 ou 5.000,00 (vazio = sem limite).');
     await client.query('BEGIN');
-    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias) VALUES ($1,$2,$3) RETURNING id', [nome, email || null, prazo]);
+    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias, limite_centavos) VALUES ($1,$2,$3,$4) RETURNING id', [nome, email || null, prazo, limite]);
     await client.query('INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)', [nome, login, await bcrypt.hash(senha, 10), 'cliente', c.rows[0].id]);
     await client.query('COMMIT');
     res.redirect('/admin/clientes');

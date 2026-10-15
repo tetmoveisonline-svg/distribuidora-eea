@@ -166,3 +166,8 @@ SELECT p.id, p.cliente_id, p.total_centavos,
        (COALESCE(p.aceite_em, p.criado_em) AT TIME ZONE 'America/Sao_Paulo')::date + c.prazo_dias
 FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
 WHERE NOT EXISTS (SELECT 1 FROM financeiro f WHERE f.pedido_id = p.id);
+
+-- Limite de credito do cliente: o que esta em aberto/vencido no financeiro consome o limite;
+-- o pagamento libera. NULL = sem controle. bloquear_vencido = com pedido vencido, nao aceita envio novo.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS limite_centavos INTEGER CHECK (limite_centavos IS NULL OR limite_centavos >= 0);
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS bloquear_vencido BOOLEAN NOT NULL DEFAULT TRUE;

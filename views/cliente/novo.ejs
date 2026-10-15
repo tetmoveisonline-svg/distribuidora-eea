@@ -7,6 +7,27 @@
   <div class="alert err">Você ainda não tem itens cadastrados. Peça ao administrador para cadastrar seus itens e preços.</div>
 <% } %>
 
+<% if (credito && credito.controlado) { %>
+  <div class="card pad credit-bar">
+    <div>
+      <div class="kl">Crédito disponível</div>
+      <div class="kv"><%= formatBRL(credito.disponivel) %> <span class="dim" style="font-size:12.5px;font-weight:400">de <%= formatBRL(credito.limite) %></span></div>
+    </div>
+    <div class="credit-track">
+      <div class="pbar"><div class="pfill" id="creditFill" style="width:<%= credito.limite > 0 ? Math.min(100, Math.round(credito.aberto / credito.limite * 100)) : 100 %>%;background:<%= credito.vencido > 0 ? 'var(--danger)' : 'var(--warn)' %>"></div></div>
+      <div class="dim" style="font-size:12px;margin-top:5px">
+        <%= formatBRL(credito.aberto) %> em aberto
+        <% if (credito.vencido > 0) { %> · <span style="color:var(--danger)"><%= formatBRL(credito.vencido) %> vencido (<%= credito.maisVencido.numero %>, <%= credito.maisVencido.vencimento %>)</span>
+        <% } else if (credito.proximo) { %> · vence <%= credito.proximo.vencimento %> (<%= credito.proximo.numero %>)<% } %>
+      </div>
+    </div>
+    <a class="doc-link" href="/financeiro">Ver financeiro</a>
+  </div>
+<% } %>
+<% if (credito && credito.bloqueado) { %>
+  <div class="alert err">Há pedido vencido em aberto (<%= credito.maisVencido.numero %>, <%= formatBRL(credito.maisVencido.valor) %>, venceu em <%= credito.maisVencido.vencimento %>). Novos envios ficam liberados após o pagamento.<% if (contato) { %> Contato: <%= contato %>.<% } %></div>
+<% } %>
+
 <div class="card pad">
   <div class="dropzone" id="dropzone">
     <div class="big">Arraste os PDFs das etiquetas aqui</div>
@@ -20,6 +41,28 @@
   <div id="files" style="margin-top:18px"></div>
   <div id="empty" class="empty">Nenhum arquivo ainda. Selecione os PDFs das etiquetas para começar.</div>
 
+  <div id="creditWarn" class="credit-warn" style="display:none">
+    <div class="cw-head">
+      <div class="cw-title">Este envio ultrapassa seu limite de crédito</div>
+      <div class="cw-text" id="cwText"></div>
+    </div>
+    <div class="cw-opts">
+      <div class="cw-opt">
+        <div class="cw-opt-title">Enviar menos etiquetas agora</div>
+        <div class="cw-opt-text" id="cwSugestao"></div>
+        <button type="button" class="btn sm" id="cwAjustar" style="display:none">Ajustar quantidade</button>
+      </div>
+      <div class="cw-opt">
+        <div class="cw-opt-title">Liberar mais saldo</div>
+        <div class="cw-opt-text" id="cwSaldo"></div>
+        <div class="actions-inline">
+          <% if (contato) { %><span class="doc-link"><%= contato %></span><% } %>
+          <a class="doc-link" href="/financeiro">Ver financeiro</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="totalbar">
     <div class="muted"><span id="fileCount">0</span> arquivos &middot; <b style="color:var(--text)"><span id="labelCount">0</span> etiquetas</b> no total</div>
     <div style="display:flex;align-items:center;gap:20px">
@@ -27,6 +70,7 @@
       <button class="btn" id="revisarBtn" disabled>Revisar pedido</button>
     </div>
   </div>
+  <div class="dim" id="revisarHint" style="display:none;font-size:12px;text-align:right;margin-top:6px">"Revisar pedido" libera quando o total couber no crédito disponível.</div>
 </div>
 
 <div class="hint-box">A quantidade vem do número de páginas do PDF e pode ser ajustada no &minus; / +. O valor de cada arquivo é quantidade &times; preço negociado do item, e o rodapé soma tudo.</div>
@@ -67,6 +111,7 @@
 
 <script>
   window.ITENS = <%- JSON.stringify(itens) %>;
+  window.CREDITO = <%- JSON.stringify(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
 </script>
 <script type="module" src="/js/leitor-etiquetas.js"></script>
 <script src="/js/novo.js"></script>

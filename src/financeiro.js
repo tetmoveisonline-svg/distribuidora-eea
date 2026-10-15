@@ -117,3 +117,35 @@ async function mesesDisponiveis(clienteId) {
 }
 
 module.exports = { FORMAS, hojeISO, mesAtual, criarLancamento, listar, resumo, filtrarSituacao, mesesDisponiveis, rotuloMes };
+
+// Credito do cliente: limite menos o que esta em aberto (inclui vencido) no financeiro.
+// limite null = sem controle (disponivel = null). bloqueado = tem vencido e o cadastro manda bloquear.
+async function creditoCliente(clienteId) {
+  const c = await db.query('SELECT limite_centavos, bloquear_vencido, prazo_dias FROM clientes WHERE id = $1', [clienteId]);
+  if (c.rowCount === 0) return null;
+  const cli = c.rows[0];
+  const hoje = hojeISO();
+  const r = await db.query(
+    `SELECT f.valor_centavos, to_char(f.vencimento, 'YYYY-MM-DD') AS vencimento_iso,
+            to_char(f.vencimento, 'DD/MM/YYYY') AS vencimento_br, p.numero
+     FROM financeiro f JOIN pedidos p ON p.id = f.pedido_id
+     WHERE f.cliente_id = $1 AND f.status = 'aberto' ORDER BY f.vencimento, f.id`, [clienteId]
+  );
+  let aberto = 0, vencido = 0, proximo = null, maisVencido = null;
+  for (const l of r.rows) {
+    aberto += l.valor_centavos;
+    if (l.vencimento_iso < hoje) { vencido += l.valor_centavos; if (!maisVencido) maisVencido = l; }
+    else if (!proximo) proximo = l;
+  }
+  const limite = cli.limite_centavos === null || cli.limite_centavos === undefined ? null : Number(cli.limite_centavos);
+  const disponivel = limite === null ? null : Math.max(0, limite - aberto);
+  return {
+    limite, aberto, vencido, disponivel,
+    controlado: limite !== null,
+    bloqueado: !!(cli.bloquear_vencido && vencido > 0),
+    proximo: proximo ? { numero: proximo.numero, valor: proximo.valor_centavos, vencimento: proximo.vencimento_br } : null,
+    maisVencido: maisVencido ? { numero: maisVencido.numero, valor: maisVencido.valor_centavos, vencimento: maisVencido.vencimento_br } : null,
+  };
+}
+
+module.exports.creditoCliente = creditoCliente;
