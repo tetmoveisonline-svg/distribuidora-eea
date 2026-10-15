@@ -35,57 +35,83 @@
       <div class="field"><label>Preço negociado (R$)</label><input name="preco" placeholder="4,50" /></div>
       <button class="btn block" type="submit">Adicionar</button>
     </form>
+    <div class="hint-box" style="margin-top:14px">O preço vale para todas as cores do produto. Para uma promoção por tempo limitado, use o botão "Promoção" na lista ao lado.</div>
   </div>
+
   <div class="card pad">
     <div class="section-title">Preços de <%= clienteNome %></div>
     <% if (itens.length === 0) { %><div class="empty">Nenhum preço cadastrado para este cliente.</div><% } else { %>
-    <table>
-      <thead><tr><th>Produto</th><th class="num">Preço</th><th>Promoção</th><th></th></tr></thead>
-      <tbody>
-        <% itens.forEach(function (i) { %>
-          <tr>
-            <td><%= i.nome %></td>
-            <td class="num">
+    <div class="price-list">
+      <% itens.forEach(function (i) { %>
+        <div class="price-row" id="pr-<%= i.id %>">
+          <div class="price-main">
+            <div class="price-name"><%= i.nome %></div>
+            <div class="price-value">
               <% if (i.efetivo.promo) { %>
-                <b style="color:var(--ok)"><%= formatBRL(i.efetivo.preco_centavos) %></b>
-                <div class="dim" style="font-size:11.5px;text-decoration:line-through"><%= formatBRL(i.preco_centavos) %></div>
-              <% } else { %><%= formatBRL(i.preco_centavos) %><% } %>
-            </td>
-            <td>
-              <% if (i.promo_tipo) { %>
-                <div style="margin-bottom:6px">
-                  <% if (i.efetivo.promo) { %><span class="badge ok">Ativa</span>
-                  <% } else if (i.promoEstado === 'agendada') { %><span class="badge warn">Agendada</span>
-                  <% } else { %><span class="badge neutral">Encerrada</span><% } %>
-                  <span class="dim" style="font-size:12px">
-                    <%= i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor) + ' de desconto' : 'por ' + formatBRL(i.promo_valor) %>
-                    · <%= i.promo_inicio ? 'de ' + brDate(i.promo_inicio) + ' ' : '' %>até <%= brDate(i.promo_fim) %>
-                  </span>
-                  <form method="post" action="/admin/precos/<%= i.id %>/promo/remover" style="display:inline;margin:0 0 0 6px"><button class="btn ghost sm" type="submit">tirar</button></form>
-                </div>
+                <span class="now"><%= formatBRL(i.efetivo.preco_centavos) %></span>
+                <span class="was"><%= formatBRL(i.preco_centavos) %></span>
+              <% } else { %>
+                <span class="now"><%= formatBRL(i.preco_centavos) %></span>
               <% } %>
-              <form method="post" action="/admin/precos/<%= i.id %>/promo" class="promo-form">
+            </div>
+            <div class="price-state">
+              <% if (i.promo_tipo) { %>
+                <% if (i.efetivo.promo) { %><span class="badge ok">Promoção ativa</span>
+                <% } else if (i.promoEstado === 'agendada') { %><span class="badge warn">Promoção agendada</span>
+                <% } else { %><span class="badge neutral">Promoção encerrada</span><% } %>
+                <div class="dim price-sub">
+                  <%= i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor) + ' de desconto' : 'por ' + formatBRL(i.promo_valor) %>
+                  · <%= i.promo_inicio ? brDate(i.promo_inicio) + ' a ' : 'até ' %><%= brDate(i.promo_fim) %>
+                </div>
+              <% } else { %>
+                <span class="dim price-sub">sem promoção</span>
+              <% } %>
+            </div>
+            <div class="price-actions">
+              <button type="button" class="btn ghost sm promo-toggle" data-target="promo-<%= i.id %>"><%= i.promo_tipo ? 'Editar promoção' : 'Promoção' %></button>
+              <form method="post" action="/admin/precos/<%= i.id %>/remove" style="margin:0" onsubmit="return confirm('Remover o preço de <%= i.nome.replace(/'/g, '') %> para este cliente?')"><button class="btn ghost sm" type="submit">Remover</button></form>
+            </div>
+          </div>
+
+          <div class="promo-panel" id="promo-<%= i.id %>" style="display:none">
+            <form method="post" action="/admin/precos/<%= i.id %>/promo" class="promo-grid">
+              <div class="field"><label>Tipo</label>
                 <select name="tipo">
                   <option value="percentual" <%= i.promo_tipo === 'percentual' ? 'selected' : '' %>>% de desconto</option>
-                  <option value="valor" <%= i.promo_tipo === 'valor' ? 'selected' : '' %>>R$ (preço promocional)</option>
+                  <option value="valor" <%= i.promo_tipo === 'valor' ? 'selected' : '' %>>R$ · preço promocional</option>
                 </select>
-                <input name="valor" placeholder="10" value="<%= i.promo_valor_txt %>" title="percentual de desconto ou preço promocional em R$" />
-                <label>de <input type="date" name="inicio" value="<%= i.promo_inicio || '' %>" title="início (opcional, vazio = já)" /></label>
-                <label>até <input type="date" name="fim" value="<%= i.promo_fim || '' %>" required /></label>
-                <button class="btn ghost sm" type="submit"><%= i.promo_tipo ? 'Atualizar' : 'Aplicar' %></button>
-              </form>
-            </td>
-            <td><form method="post" action="/admin/precos/<%= i.id %>/remove" style="margin:0"><button class="btn ghost sm" type="submit">Remover</button></form></td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-    <div class="hint-box" style="margin-top:12px">Promoção em <b>%</b> aplica o desconto sobre o preço negociado; em <b>R$</b> o valor informado passa a ser o preço do item. Vale do início (ou de agora, se vazio) até a data final, inclusive. O cliente vê o preço promocional ao subir a etiqueta e o pedido grava o valor cobrado na hora do aceite.</div>
+              </div>
+              <div class="field"><label>Valor</label><input name="valor" placeholder="10" value="<%= i.promo_valor_txt %>" /></div>
+              <div class="field"><label>Início <span class="dim">(opcional)</span></label><input type="date" name="inicio" value="<%= i.promo_inicio || '' %>" /></div>
+              <div class="field"><label>Até</label><input type="date" name="fim" value="<%= i.promo_fim || '' %>" required /></div>
+              <div class="promo-btns">
+                <button class="btn sm" type="submit"><%= i.promo_tipo ? 'Salvar' : 'Aplicar' %></button>
+                <% if (i.promo_tipo) { %><button class="btn ghost sm" type="submit" formaction="/admin/precos/<%= i.id %>/promo/remover" formnovalidate>Tirar promoção</button><% } %>
+                <button class="btn ghost sm promo-toggle" type="button" data-target="promo-<%= i.id %>">Fechar</button>
+              </div>
+            </form>
+            <div class="dim promo-help">Em <b>%</b> o desconto é sobre o preço negociado; em <b>R$</b> o valor informado passa a ser o preço do item. Vale do início (ou de agora, se vazio) até a data final, inclusive. O cliente vê o preço promocional ao subir a etiqueta e o pedido grava o valor cobrado no aceite.</div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
     <% } %>
   </div>
 </div>
 <% } else { %>
   <div class="card pad"><div class="empty">Cadastre um cliente ativo para definir preços.</div></div>
 <% } %>
+
+<script>
+  document.querySelectorAll('.promo-toggle').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = document.getElementById(b.getAttribute('data-target'));
+      if (!p) return;
+      var aberto = p.style.display !== 'none';
+      document.querySelectorAll('.promo-panel').forEach(function (x) { x.style.display = 'none'; });
+      if (!aberto) { p.style.display = 'block'; var f = p.querySelector('input[name="valor"]'); if (f) f.focus(); }
+    });
+  });
+</script>
 
 <%- include('../partials/app-close') %>
