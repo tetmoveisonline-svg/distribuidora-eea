@@ -3,6 +3,8 @@
 <h2 class="title">Pedidos recebidos</h2>
 <p class="sub">Você (admin) vê tudo: valor, comissão do representante e taxa do funcionário. Clique num pedido para abrir o detalhe e atribuir a comissão.</p>
 
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
 <div class="card pad">
   <% if (pedidos.length === 0) { %>
     <div class="empty">Nenhum pedido recebido ainda.</div>

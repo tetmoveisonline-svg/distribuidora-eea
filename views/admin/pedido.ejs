@@ -3,6 +3,8 @@
 <h2 class="title">Pedido <%= pedido.numero %></h2>
 <p class="sub">Cliente: <%= pedido.cliente_nome %><%= pedido.cliente_email ? ' · ' + pedido.cliente_email : '' %> · aceito em <%= formatDateTime(pedido.aceite_em) %></p>
 
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
 <div class="card pad" style="margin-bottom:16px">
   <%- include('../partials/timeline', { passos: passos }) %>
 </div>
@@ -27,6 +29,15 @@
   </div>
 
   <%- include('../partials/etiquetas-detalhe', { pid: pedido.id, etqs: etiquetas, desp: etqDespachadas, tot: etqTotal, admin: true, formatDateTime: formatDateTime }) %>
+
+  <details class="danger-zone">
+    <summary>Excluir este pedido (teste ou lançamento errado)</summary>
+    <form method="post" action="/admin/pedido/<%= pedido.id %>/excluir" class="fin-form" style="margin-top:10px"
+          onsubmit="return confirm('Excluir o pedido <%= pedido.numero %>?\n\nEtiquetas, comprovante, lançamento financeiro e repasses somem; o estoque reservado/despachado é estornado. Não tem volta.')">
+      <div class="field" style="margin:0;min-width:220px"><label>Senha do administrador</label><input type="password" name="senha" autocomplete="current-password" required /></div>
+      <button class="btn danger sm" type="submit">Excluir pedido</button>
+    </form>
+  </details>
 </div>
 
 <div class="grid2">

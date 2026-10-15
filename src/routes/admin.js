@@ -99,7 +99,7 @@ router.get('/pedidos', async (req, res, next) => {
       ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em),
       taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
     }));
-    res.render('admin/pedidos', { pedidos, funcRef: fr, formatBRL, formatDateTime });
+    res.render('admin/pedidos', { pedidos, funcRef: fr, ok: req.query.ok || null, formatBRL, formatDateTime });
   } catch (e) { next(e); }
 });
 
@@ -128,11 +128,52 @@ router.get('/pedido/:id', async (req, res, next) => {
       passos: andamentoDisplay(pedido),
       etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
       expirado: etiquetasExpiradas(pedido.etiquetas_expira_em), horas: horasRestantes(pedido.etiquetas_expira_em),
+      erro: req.query.erro || null,
       formatBRL, formatDateTime, formatPercent,
     });
   } catch (e) { next(e); }
 });
 
+// Excluir pedido (ex.: teste): exige senha do admin. Estorna o estoque (reserva e despacho),
+// devolve/retira credito em conta ligado ao lancamento e apaga pedido, linhas, etiquetas,
+// arquivos e financeiro (cascata). Irreversivel.
+router.post('/pedido/:id/excluir', async (req, res, next) => {
+  const client = await db.getClient();
+  const pid = pInt(req.params.id);
+  try {
+    const senha = (req.body.senha || '').toString();
+    const adm = await db.query("SELECT senha_hash FROM usuarios WHERE id = $1 AND papel = 'admin'", [req.session.user.id]);
+    if (adm.rowCount === 0 || !senha || !(await bcrypt.compare(senha, adm.rows[0].senha_hash))) {
+      return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Senha do administrador incorreta. O pedido não foi excluído.'));
+    }
+    await client.query('BEGIN');
+    const p = await client.query('SELECT id, numero, cliente_id FROM pedidos WHERE id = $1 FOR UPDATE', [pid]);
+    if (p.rowCount === 0) { await client.query('ROLLBACK'); return naoEncontrado(res, req); }
+    const numero = p.rows[0].numero, clienteId = p.rows[0].cliente_id;
+
+    // 1) estoque: reverte exatamente o que este pedido movimentou (reserva, despacho, liberacao)
+    const mv = await client.query(
+      `SELECT produto_id, cor_id, cor_nome, sum(quantidade)::int AS q, sum(reserva)::int AS r
+       FROM estoque_mov WHERE pedido_id = $1 GROUP BY produto_id, cor_id, cor_nome`, [pid]
+    );
+    for (const m of mv.rows) {
+      if (m.q === 0 && m.r === 0) continue;
+      await estoque.movimentar(client, { produtoId: m.produto_id, corId: m.cor_id, corNome: m.cor_nome, quantidade: -m.q, reserva: -m.r, motivo: 'Estorno', observacao: 'pedido ' + numero + ' excluído', pedidoId: null, usuarioId: req.session.user.id });
+    }
+    // 2) credito em conta ligado ao lancamento
+    const f = await client.query('SELECT status, credito_usado_centavos, credito_gerado_centavos FROM financeiro WHERE pedido_id = $1', [pid]);
+    if (f.rowCount) {
+      const usado = Number(f.rows[0].credito_usado_centavos || 0);
+      const gerado = f.rows[0].status === 'pago' ? Number(f.rows[0].credito_gerado_centavos || 0) : 0;
+      const delta = usado - gerado;
+      if (delta !== 0) await client.query('UPDATE clientes SET credito_centavos = GREATEST(0, credito_centavos + $2) WHERE id = $1', [clienteId, delta]);
+    }
+    // 3) apaga (cascata: linhas, etiquetas, arquivos, financeiro; estoque_mov fica com pedido_id nulo)
+    await client.query('DELETE FROM pedidos WHERE id = $1', [pid]);
+    await client.query('COMMIT');
+    res.redirect('/admin/pedidos?ok=' + encodeURIComponent('Pedido ' + numero + ' excluído; estoque e crédito estornados.'));
+  } catch (e) { await client.query('ROLLBACK'); next(e); } finally { client.release(); }
+});
 // Funcionario do pedido (taxa por etiqueta gravada na atribuicao).
 router.post('/pedido/:id/funcionario', async (req, res, next) => {
   try {
