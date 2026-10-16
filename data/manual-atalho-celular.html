@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Atalho no celular — Distribuidora E&A</title>
+<style>
+  /* Manual ilustrado: telas de celular desenhadas em CSS, uma pagina por sistema (Android / iPhone). */
+  @page { size: A4; margin: 12mm 13mm; }
+  :root { --ink:#1e1a16; --muted:#6f655b; --line:#e3dcd2; --accent:#b7791f; --accent-dark:#7a4e0e; --green:#2e7d4f; --soft:#fbf5ea; --hl:#e0362b; }
+  * { box-sizing:border-box; }
+  html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { margin:0; color:var(--ink); background:#fff; font:11pt/1.45 'Segoe UI', system-ui, sans-serif; }
+  .page { page-break-after:always; }
+  .page:last-child { page-break-after:auto; }
+  h1 { font-size:18pt; margin:0 0 4px; line-height:1.15; }
+  h2 { font-size:17pt; margin:0 0 2px; display:flex; align-items:center; gap:10px; }
+  .os { display:inline-grid; place-items:center; width:30px; height:30px; border-radius:9px; color:#fff; font-size:15px; }
+  .os.a { background:var(--green); } .os.i { background:#2b2b2b; }
+  .lbl { font-size:9pt; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  .sub { color:var(--muted); margin:0 0 12px; }
+  .hero { display:flex; gap:16px; align-items:center; margin-bottom:10px; }
+  .hero img { height:52px; }
+  .link { display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--soft); border:1px dashed var(--accent); border-radius:10px; padding:7px 12px; font-size:10.5pt; margin-bottom:10px; }
+  .link code { font-family:Consolas, monospace; background:#fff; padding:2px 8px; border-radius:6px; border:1px solid var(--line); }
+  .steps { display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; }
+  .step { break-inside:avoid; }
+  .cap { display:grid; grid-template-columns:28px 1fr; gap:10px; align-items:start; margin-top:6px; }
+  .n { width:26px; height:26px; border-radius:50%; background:var(--accent); color:#fff; font-weight:700; display:grid; place-items:center; font-size:12pt; }
+  .cap b { display:block; font-weight:600; font-size:11pt; }
+  .cap span { color:var(--muted); font-size:10pt; }
+  .tip { margin-top:14px; background:var(--soft); border-left:3px solid var(--accent); border-radius:6px; padding:8px 12px; font-size:10.5pt; }
+  .tip b { color:var(--accent-dark); }
+
+  /* ---- celular desenhado ---- */
+  .phone { width:100%; max-width:43mm; margin:0 auto; aspect-ratio:9/15.5; background:#111; border-radius:22px; padding:7px; box-shadow:0 10px 24px rgba(0,0,0,.22); position:relative; }
+  .scr { position:absolute; inset:7px; background:#fff; border-radius:16px; overflow:hidden; font-size:7.6pt; line-height:1.3; }
+  .st { height:16px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; font-size:6.5pt; background:#fff; }
+  .st.d { background:#1f1f1f; color:#fff; }
+  .ab { margin:4px 7px; height:20px; border-radius:11px; background:#eef0f3; display:flex; align-items:center; gap:5px; padding:0 8px; font-size:6.8pt; color:#333; }
+  .ab .lock { font-size:6pt; }
+  .ab .dots { margin-left:auto; font-weight:700; font-size:10pt; line-height:1; }
+  .site { padding:8px 9px; }
+  .site .brand { display:flex; align-items:center; gap:5px; margin-bottom:6px; }
+  .site .brand .lg { width:16px; height:16px; border-radius:5px; background:linear-gradient(135deg,var(--accent),var(--accent-dark)); }
+  .site .brand b { font-size:7.5pt; }
+  .site .fld { border:1px solid #d9d9d9; border-radius:6px; height:16px; margin:5px 0; padding:0 6px; display:flex; align-items:center; color:#999; font-size:6.5pt; }
+  .site .btn { background:var(--accent); color:#fff; border-radius:6px; height:17px; display:grid; place-items:center; font-weight:600; font-size:6.8pt; margin-top:6px; }
+  .site .nav { display:flex; gap:4px; margin:6px 0; flex-wrap:wrap; }
+  .site .nav i { font-style:normal; background:#f3efe8; border-radius:999px; padding:1px 6px; font-size:6pt; }
+  .site .card { border:1px solid #eee; border-radius:7px; padding:5px 6px; margin-top:5px; }
+  .site .card small { color:#888; font-size:5.8pt; }
+  .site .card .v { font-weight:700; font-size:9pt; color:var(--green); }
+  .dim-over { position:absolute; inset:0; background:rgba(0,0,0,.35); }
+  .menu { position:absolute; top:22px; right:6px; width:62%; background:#fff; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.35); padding:4px 0; }
+  .menu .ic { display:flex; justify-content:space-around; padding:4px 6px 6px; border-bottom:1px solid #eee; font-size:8pt; color:#555; }
+  .menu div.it { padding:4px 9px; font-size:6.6pt; color:#222; display:flex; gap:6px; align-items:center; }
+  .menu div.it s { text-decoration:none; width:9px; color:#777; }
+  .it.hl { background:#fff1ee; outline:2px solid var(--hl); outline-offset:-2px; border-radius:4px; font-weight:700; }
+  .dialog { position:absolute; left:8%; right:8%; top:34%; background:#fff; border-radius:10px; padding:9px 10px; box-shadow:0 8px 20px rgba(0,0,0,.35); }
+  .dialog h4 { margin:0 0 6px; font-size:8pt; }
+  .dialog .row { display:flex; gap:7px; align-items:center; }
+  .appic { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,var(--accent),var(--accent-dark)); color:#fff; font-weight:800; font-size:6.5pt; display:grid; place-items:center; flex:none; }
+  .dialog .fld { flex:1; border-bottom:2px solid var(--accent); padding:2px 0; font-size:7pt; }
+  .dialog .acts { display:flex; justify-content:flex-end; gap:10px; margin-top:8px; font-size:7pt; font-weight:600; color:var(--accent); }
+  .dialog .acts span.hl { outline:2px solid var(--hl); outline-offset:2px; border-radius:3px; padding:0 3px; }
+  .home { position:absolute; inset:0; background:linear-gradient(160deg,#1f3a5f,#3a6a8f 60%,#8fb3c9); }
+  .home .clock { color:#fff; text-align:center; font-size:15pt; font-weight:300; margin-top:14px; }
+  .home .date { color:#e9f0f5; text-align:center; font-size:6pt; }
+  .home .apps { display:grid; grid-template-columns:repeat(4,1fr); gap:9px 5px; padding:14px 10px 0; }
+  .home .ap { text-align:center; color:#fff; font-size:5.3pt; }
+  .home .ap i { display:block; width:24px; height:24px; border-radius:7px; margin:0 auto 2px; background:#ffffffcc; }
+  .home .ap.ea i { background:linear-gradient(135deg,var(--accent),var(--accent-dark)); color:#fff; font-style:normal; font-weight:800; font-size:6pt; display:grid; place-items:center; }
+  .home .ap.ea { outline:2px solid var(--hl); outline-offset:3px; border-radius:6px; }
+  .home .ap i.g { background:#34a853; } .home .ap i.b { background:#4285f4; } .home .ap i.w { background:#25d366; } .home .ap i.r { background:#ea4335; } .home .ap i.y { background:#fbbc04; } .home .ap i.p { background:#8e44ad; } .home .ap i.k { background:#222; }
+  .home .dock { position:absolute; bottom:8px; left:8px; right:8px; background:#ffffff33; border-radius:12px; padding:5px 0; display:grid; grid-template-columns:repeat(4,1fr); }
+  .home .dock i { display:block; width:22px; height:22px; border-radius:7px; margin:0 auto; }
+  /* iOS */
+  .ios-bar { position:absolute; left:0; right:0; bottom:0; height:44px; background:#f6f6f8; border-top:1px solid #ddd; }
+  .ios-bar .url { margin:5px 8px 0; height:18px; border-radius:7px; background:#e4e4e8; display:flex; align-items:center; justify-content:center; gap:4px; font-size:6.6pt; color:#333; }
+  .ios-bar .tb { display:flex; justify-content:space-around; align-items:center; margin-top:3px; font-size:9pt; color:#1a73e8; }
+  .ios-bar .tb .share { outline:2px solid var(--hl); outline-offset:2px; border-radius:4px; padding:0 2px; }
+  .sheet { position:absolute; left:0; right:0; bottom:0; top:16%; background:#f2f2f6; border-radius:12px 12px 0 0; padding:7px 8px; box-shadow:0 -6px 18px rgba(0,0,0,.3); }
+  .sheet .hd { display:flex; gap:7px; align-items:center; background:#fff; border-radius:8px; padding:6px; margin-bottom:6px; }
+  .sheet .hd b { font-size:7pt; display:block; } .sheet .hd small { color:#888; font-size:5.8pt; }
+  .sheet .people { display:none; }
+  .sheet .people i { width:22px; height:22px; border-radius:50%; background:#cfd3dc; display:block; }
+  .sheet .apps { display:flex; gap:6px; margin-bottom:6px; }
+  .sheet .apps i { width:22px; height:22px; border-radius:6px; display:block; }
+  .sheet .list { background:#fff; border-radius:8px; }
+  .sheet .list div { padding:4px 8px; border-bottom:1px solid #eee; font-size:6.6pt; display:flex; justify-content:space-between; }
+  .sheet .list div:last-child { border-bottom:0; }
+  .sheet .list div.hl { background:#fff1ee; outline:2px solid var(--hl); outline-offset:-2px; border-radius:4px; font-weight:700; }
+  .ios-conf { position:absolute; inset:0; background:#f2f2f6; }
+  .ios-conf .top { display:flex; justify-content:space-between; gap:6px; padding:8px 9px 4px; font-size:6.5pt; color:#1a73e8; white-space:nowrap; }
+  .ios-conf .top b { color:#111; }
+  .ios-conf .top .hl { outline:2px solid var(--hl); outline-offset:2px; border-radius:3px; font-weight:700; }
+  .ios-conf .box { margin:6px 8px; background:#fff; border-radius:8px; padding:7px 8px; display:flex; gap:7px; align-items:center; }
+  .ios-conf .box div { font-size:6.8pt; } .ios-conf .box small { color:#888; font-size:5.8pt; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:30mm; }
+  .ios-conf .note { margin:0 10px; color:#777; font-size:5.8pt; }
+  .kb { position:absolute; left:0; right:0; bottom:0; height:30%; background:#d1d4da; padding:5px 4px; display:grid; gap:3px; grid-auto-rows:1fr; }
+  .kb span { display:grid; grid-template-columns:repeat(10,1fr); gap:3px; align-content:center; }
+  .kb span i { display:block; background:#fff; border-radius:3px; height:12px; }
+  .ptr { position:absolute; font-size:18pt; filter:drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+  .result { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px; }
+  .result > div { border:1px solid var(--line); border-radius:10px; padding:8px 10px; display:flex; gap:9px; align-items:center; font-size:10pt; }
+  .result .mini { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,var(--accent),var(--accent-dark)); color:#fff; font-weight:800; display:grid; place-items:center; flex:none; font-size:10pt; }
+  .result small { color:var(--muted); display:block; font-size:8.5pt; }
+  .foot { margin-top:18px; color:var(--muted); font-size:9pt; text-align:center; border-top:1px solid var(--line); padding-top:8px; }
+</style>
+</head>
+<body>
+
+<!-- =========== PAGINA 1: ANDROID =========== -->
+<section class="page">
+  <div class="hero">
+    <img src="__LOGO__" alt="E&A Móveis">
+    <div>
+      <div class="lbl">Manual rápido · Distribuidora E&amp;A Móveis</div>
+      <h1>Coloque o sistema na tela inicial do seu celular</h1>
+      <p class="sub" style="margin:0">Em menos de um minuto você cria um ícone e abre o sistema com um toque, como um aplicativo. Não precisa baixar nada.</p>
+    </div>
+  </div>
+  <div class="link">📍 Endereço do sistema: <code>distribuidoraeea.up.railway.app</code></div>
+
+  <h2><span class="os a">▲</span> Android (Chrome)</h2>
+  <p class="sub">Samsung, Motorola, Xiaomi e qualquer celular com o Google Chrome.</p>
+
+  <div class="steps">
+    <!-- A1 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="st"><span>09:41</span><span>▂▄▆ 🔋</span></div>
+        <div class="ab"><span class="lock">🔒</span> distribuidoraeea.up.railway.app <span class="dots">⋮</span></div>
+        <div class="site">
+          <div class="brand"><span class="lg"></span><b>Distribuidora E&amp;A Móveis</b></div>
+          <div style="font-size:6.5pt;color:#777">Entre com seu login e senha</div>
+          <div class="fld">Login</div><div class="fld">Senha</div>
+          <div class="btn">Entrar</div>
+        </div>
+      </div></div>
+      <div class="cap"><span class="n">1</span><div><b>Abra o Chrome e entre no site</b><span>Digite o endereço acima e faça o login normalmente.</span></div></div>
+    </div>
+    <!-- A2 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="st"><span>09:41</span><span>▂▄▆ 🔋</span></div>
+        <div class="ab"><span class="lock">🔒</span> distribuidoraeea.up… <span class="dots">⋮</span></div>
+        <div class="site">
+          <div class="brand"><span class="lg"></span><b>Início</b></div>
+          <div class="nav"><i>Início</i><i>Novo envio</i><i>Meus envios</i><i>Estoque</i></div>
+          <div class="card"><small>Crédito disponível</small><div class="v">R$ 4.250,00</div></div>
+          <div class="card"><small>Pedidos em andamento</small><div class="v">2</div></div>
+        </div>
+        <div class="dim-over"></div>
+        <div class="menu">
+          <div class="ic"><span>→</span><span>★</span><span>⬇</span><span>ⓘ</span><span>↻</span></div>
+          <div class="it"><s>+</s> Nova guia</div>
+          <div class="it"><s>☆</s> Favoritos</div>
+          <div class="it"><s>⟳</s> Histórico</div>
+          <div class="it"><s>⇪</s> Compartilhar…</div>
+          <div class="it"><s>🔍</s> Buscar na página</div>
+          <div class="it hl"><s>⊕</s> Adicionar à tela inicial</div>
+          <div class="it"><s>🖥</s> Site para computador</div>
+          <div class="it"><s>⚙</s> Configurações</div>
+        </div>
+        <span class="ptr" style="right:2px;top:46%">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">2</span><div><b>Toque nos três pontinhos ⋮ e depois em "Adicionar à tela inicial"</b><span>Em alguns celulares a opção aparece como "Instalar app".</span></div></div>
+    </div>
+    <!-- A3 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="st"><span>09:41</span><span>▂▄▆ 🔋</span></div>
+        <div class="ab"><span class="lock">🔒</span> distribuidoraeea.up… <span class="dots">⋮</span></div>
+        <div class="site">
+          <div class="brand"><span class="lg"></span><b>Início</b></div>
+          <div class="nav"><i>Início</i><i>Novo envio</i><i>Meus envios</i></div>
+          <div class="card"><small>Crédito disponível</small><div class="v">R$ 4.250,00</div></div>
+        </div>
+        <div class="dim-over"></div>
+        <div class="dialog">
+          <h4>Adicionar à tela inicial</h4>
+          <div class="row"><span class="appic">E&amp;A</span><span class="fld">E&amp;A Móveis</span></div>
+          <div class="acts"><span>Cancelar</span><span class="hl">Adicionar</span></div>
+        </div>
+        <span class="ptr" style="right:2px;top:58%">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">3</span><div><b>Confirme em "Adicionar"</b><span>Pode manter o nome "E&amp;A Móveis" ou mudar como preferir. Se perguntar, escolha "Adicionar automaticamente".</span></div></div>
+    </div>
+    <!-- A4 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="home">
+          <div class="st d" style="background:transparent"><span>09:42</span><span>▂▄▆ 🔋</span></div>
+          <div class="clock">09:42</div><div class="date">quinta, 16 de outubro</div>
+          <div class="apps">
+            <div class="ap"><i class="w"></i>WhatsApp</div><div class="ap"><i class="r"></i>Gmail</div><div class="ap"><i class="y"></i>Fotos</div><div class="ap"><i class="b"></i>Maps</div>
+            <div class="ap"><i class="p"></i>Instagram</div><div class="ap"><i class="g"></i>Planilhas</div><div class="ap"><i class="k"></i>Câmera</div><div class="ap ea"><i>E&amp;A</i>E&amp;A Móveis</div>
+          </div>
+          <div class="dock"><i style="background:#34a853"></i><i style="background:#4285f4"></i><i style="background:#25d366"></i><i style="background:#ea4335"></i></div>
+        </div>
+        <span class="ptr" style="right:2px;top:52%">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">4</span><div><b>Pronto! O ícone apareceu na tela inicial</b><span>Ele costuma ficar na última página da tela inicial. Toque nele para abrir o sistema.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- =========== PAGINA 2: IPHONE =========== -->
+<section class="page">
+  <h2><span class="os i"></span> iPhone (Safari)</h2>
+  <p class="sub">Funciona só pelo Safari, o navegador que já vem no iPhone. Pelo Chrome do iPhone o botão não aparece.</p>
+
+  <div class="steps">
+    <!-- I1 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="st"><span>9:41</span><span>●●● 🔋</span></div>
+        <div class="site" style="padding-top:12px">
+          <div class="brand"><span class="lg"></span><b>Distribuidora E&amp;A Móveis</b></div>
+          <div class="nav"><i>Início</i><i>Novo envio</i><i>Meus envios</i><i>Estoque</i></div>
+          <div class="card"><small>Crédito disponível</small><div class="v">R$ 4.250,00</div></div>
+          <div class="card"><small>Pedidos em andamento</small><div class="v">2</div></div>
+          <div class="card"><small>Novidades</small><div style="font-size:6pt">Chegou estoque de Penteadeira Luna · Branco</div></div>
+        </div>
+        <div class="ios-bar">
+          <div class="url">🔒 distribuidoraeea.up.railway.app</div>
+          <div class="tb"><span>‹</span><span>›</span><span class="share">⇧</span><span>▢</span><span>▣</span></div>
+        </div>
+        <span class="ptr" style="left:44%;bottom:30px">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">1</span><div><b>Abra o Safari, entre no site e toque em Compartilhar</b><span>É o quadrado com a seta para cima, no meio da barra de baixo.</span></div></div>
+    </div>
+    <!-- I2 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="st"><span>9:41</span><span>●●● 🔋</span></div>
+        <div class="site" style="padding-top:12px">
+          <div class="brand"><span class="lg"></span><b>Distribuidora E&amp;A Móveis</b></div>
+          <div class="nav"><i>Início</i><i>Novo envio</i></div>
+        </div>
+        <div class="dim-over"></div>
+        <div class="sheet">
+          <div class="hd"><span class="appic">E&amp;A</span><div><b>Distribuidora E&amp;A Móveis</b><small>distribuidoraeea.up.railway.app</small></div></div>
+          <div class="people"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="apps"><i style="background:#25d366"></i><i style="background:#1a73e8"></i><i style="background:#ea4335"></i><i style="background:#888"></i><i style="background:#f59e0b"></i></div>
+          <div class="list">
+            <div>Copiar <span>⧉</span></div>
+            <div>Adicionar à Lista de Leitura <span>≣</span></div>
+            <div>Adicionar Favorito <span>📖</span></div>
+            <div class="hl">Adicionar à Tela de Início <span>⊞</span></div>
+            <div>Marcação <span>✎</span></div>
+          </div>
+        </div>
+        <span class="ptr" style="right:10px;bottom:34px">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">2</span><div><b>Role a lista e toque em "Adicionar à Tela de Início"</b><span>Fica um pouco mais abaixo nas opções, depois dos aplicativos.</span></div></div>
+    </div>
+    <!-- I3 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="ios-conf">
+          <div class="st" style="background:transparent"><span>9:41</span><span>●●● 🔋</span></div>
+          <div class="top"><span>Cancelar</span><b>Tela de Início</b><span class="hl">Adicionar</span></div>
+          <div class="box"><span class="appic">E&amp;A</span><div>E&amp;A Móveis<small>https://distribuidoraeea.up.railway.app</small></div></div>
+          <div class="note">Um ícone será adicionado à sua Tela de Início para acessar este site rapidamente.</div>
+          <div class="kb"><span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span style='grid-template-columns:1fr 5fr 1fr'><i></i><i></i><i></i></span></div>
+        </div>
+        <span class="ptr" style="right:2px;top:40px">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">3</span><div><b>Toque em "Adicionar" no canto superior direito</b><span>Pode manter o nome "E&amp;A Móveis" ou mudar como preferir.</span></div></div>
+    </div>
+    <!-- I4 -->
+    <div class="step">
+      <div class="phone"><div class="scr">
+        <div class="home" style="background:linear-gradient(160deg,#3b2a6b,#8b4b8f 55%,#f0a07a)">
+          <div class="st d" style="background:transparent"><span>9:42</span><span>●●● 🔋</span></div>
+          <div class="clock">9:42</div><div class="date">quinta-feira, 16 de outubro</div>
+          <div class="apps">
+            <div class="ap"><i class="g"></i>Mensagens</div><div class="ap"><i class="b"></i>Safari</div><div class="ap"><i class="y"></i>Fotos</div><div class="ap"><i class="r"></i>Mail</div>
+            <div class="ap"><i class="w"></i>WhatsApp</div><div class="ap"><i class="p"></i>Instagram</div><div class="ap"><i class="k"></i>Câmera</div><div class="ap ea"><i>E&amp;A</i>E&amp;A Móveis</div>
+          </div>
+          <div class="dock"><i style="background:#34a853"></i><i style="background:#4285f4"></i><i style="background:#25d366"></i><i style="background:#ea4335"></i></div>
+        </div>
+        <span class="ptr" style="right:2px;top:52%">👆</span>
+      </div></div>
+      <div class="cap"><span class="n">4</span><div><b>Pronto! O ícone apareceu na tela inicial</b><span>Toque nele e o sistema abre em tela cheia, sem a barra do navegador.</span></div></div>
+    </div>
+  </div>
+
+  <div class="result">
+    <div><span class="mini">E&amp;A</span><div><b>Abre como um app</b><small>Tela cheia, sem a barra do navegador.</small></div></div>
+    <div><span class="mini">✓</span><div><b>Login fica salvo</b><small>Toque e já entra nos seus pedidos.</small></div></div>
+    <div><span class="mini">♪</span><div><b>Rádio junto</b><small>Deixe a rádio tocando enquanto confere o estoque.</small></div></div>
+  </div>
+  <div class="tip"><b>Não achou a opção?</b> No Android, confira se está usando o Chrome (ícone colorido). No iPhone, o atalho só funciona pelo Safari. Se ainda assim não aparecer, atualize o navegador na loja de aplicativos.</div>
+  <div class="foot">Distribuidora E&amp;A Móveis · dúvidas? chame no WhatsApp (17) 99232-5005</div>
+</section>
+
+</body>
+</html>
