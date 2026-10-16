@@ -501,6 +501,45 @@ router.post('/produtos/:id/cores', async (req, res, next) => {
     res.redirect('/admin/produtos');
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.code === '23505' ? 'Essa cor já existe neste produto.' : msgErro(e))); }
 });
+// Importa o catalogo de data/catalogo-produtos.json: cria produtos que nao existem (pelo nome),
+// atualiza custo e descricao dos existentes e acrescenta cores que faltam. Nao apaga nada.
+router.post('/produtos/importar', async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    const arq = require('path').join(__dirname, '..', '..', 'data', 'catalogo-produtos.json');
+    const cat = JSON.parse(require('fs').readFileSync(arq, 'utf8'));
+    let criados = 0, atualizados = 0, coresNovas = 0;
+    await client.query('BEGIN');
+    for (const p of cat.produtos) {
+      const nome = String(p.nome || '').trim();
+      if (!nome) continue;
+      const custo = p.custo === null || p.custo === undefined || p.custo === '' ? null : parsePrecoToCentavos(p.custo);
+      const ex = await client.query('SELECT id FROM produtos WHERE upper(nome) = upper($1) LIMIT 1', [nome]);
+      let pid;
+      if (ex.rowCount) {
+        pid = ex.rows[0].id;
+        await client.query('UPDATE produtos SET descricao = COALESCE($2, descricao), custo_centavos = COALESCE($3, custo_centavos) WHERE id = $1', [pid, p.descricao || null, custo]);
+        atualizados++;
+      } else {
+        const ins = await client.query('INSERT INTO produtos (nome, descricao, custo_centavos) VALUES ($1,$2,$3) RETURNING id', [nome, p.descricao || null, custo]);
+        pid = ins.rows[0].id; criados++;
+      }
+      const cores = Array.isArray(p.cores) ? p.cores : [];
+      for (let i = 0; i < cores.length; i++) {
+        const cn = String(cores[i] || '').trim();
+        if (!cn) continue;
+        const r = await client.query(
+          `INSERT INTO produto_cores (produto_id, nome, ordem)
+           SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM produto_cores c WHERE c.produto_id = $1 AND upper(c.nome) = upper($2))`,
+          [pid, cn, i]
+        );
+        coresNovas += r.rowCount;
+      }
+    }
+    await client.query('COMMIT');
+    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Catálogo importado: ' + criados + ' produto(s) criados, ' + atualizados + ' atualizados, ' + coresNovas + ' cor(es) adicionadas.'));
+  } catch (e) { await client.query('ROLLBACK'); console.error('Erro ao importar catalogo:', e); res.redirect('/admin/produtos?erro=' + encodeURIComponent('Falha ao importar: ' + (e.message || ''))); } finally { client.release(); }
+});
 // Custo, lucro desejado e % do representante do produto (para o preco sugerido).
 router.post('/produtos/:id/custos', async (req, res, next) => {
   try {

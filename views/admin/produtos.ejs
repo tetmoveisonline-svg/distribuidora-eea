@@ -20,7 +20,13 @@
     </form>
   </div>
   <div class="card pad">
-    <div class="section-title">Catálogo</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="section-title" style="margin:0">Catálogo</div>
+      <form method="post" action="/admin/produtos/importar" style="margin:0"
+            onsubmit="return confirm('Importar o catálogo do relatório de custos (25 produtos com cores e custo)?\n\nProdutos que já existem pelo nome são atualizados (custo e descrição) e ganham as cores que faltam. Nada é apagado.')">
+        <button class="btn ghost sm" type="submit" title="lê data/catalogo-produtos.json">Importar catálogo do relatório</button>
+      </form>
+    </div>
     <% if (produtos.length === 0) { %><div class="empty">Nenhum produto ainda.</div><% } else { %>
     <table class="prod-table">
       <thead><tr><th>Produto</th><th>Cores e SKUs</th><th class="num">Preços</th><th>Status</th><th></th></tr></thead>

@@ -1,0 +1,30 @@
+{
+  "fonte": "relatorio_custos_por_produto.pdf (produtos-custo.csv) - importado em 16/10/2026",
+  "produtos": [
+    { "nome": "ABREU 3 PORTAS", "descricao": "Abreu 3 portas", "custo": "95,23", "cores": ["Branco", "Off/Nature", "Preto/Nature", "Ripa/Off", "Ripa/Preto"] },
+    { "nome": "ARMARIO COZINHA RAVENA", "descricao": "Armário de cozinha Ravena", "custo": "148,75", "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "COMBO EEA 2 MODULO", "descricao": "Combo EEA 2 módulos", "custo": "143,84", "cores": ["Branco", "Nature/Off", "Preto/Nature"] },
+    { "nome": "COOKTOP MONACO", "descricao": "Cooktop Mônaco", "custo": "157,43", "cores": ["Branco", "Preto"] },
+    { "nome": "ESC. FACILITY", "descricao": "Escrivaninha Facility", "custo": "75,12", "cores": ["Amadeirado", "Branco", "Preto"] },
+    { "nome": "ESC. GAMER RTX", "descricao": "Escrivaninha Gamer RTX", "custo": "82,27", "cores": ["Preto", "Preto/Azul", "Preto/Vermelho"] },
+    { "nome": "ESC6011", "descricao": "Escrivaninha 6011", "custo": "65,79", "cores": ["Amadeirado", "Branco", "Preto"] },
+    { "nome": "ESC. STAR", "descricao": "Escrivaninha Star", "custo": "70,37", "cores": ["Amadeirado", "Branco", "Preto"] },
+    { "nome": "ESP. GENOVA", "descricao": "Espelheira Genova (sem composição de custo no relatório)", "custo": null, "cores": ["Branca", "Branco/Carrara", "Branco/Ripado", "Preto/Ripado"] },
+    { "nome": "GABIENTE MUNIQUE", "descricao": "Gabinete Munique (sem composição de custo no relatório)", "custo": null, "cores": ["Branco", "Branco/Ripado"] },
+    { "nome": "GABINETE IRIS", "descricao": "Gabinete de banheiro Iris", "custo": "138,82", "cores": ["Branco", "Branco/Ripado", "Preto/Ripado"] },
+    { "nome": "LIV. BIPARTIDO GOLD", "descricao": "Livreiro bipartido Gold", "custo": "104,13", "cores": ["Branco", "Nature/Branco", "Preto/Nature"] },
+    { "nome": "SAPATEIRA MULTIUSO SPACE", "descricao": "Multiuso sapateira Space", "custo": "113,52", "cores": ["Amadeirado", "Branco", "Preto"] },
+    { "nome": "PAINEL IBIZA", "descricao": "Painel TV Ibiza", "custo": "124,61", "cores": ["Nature/Off", "Preto/Nature", "Ripado/Off", "Ripado/Preto"] },
+    { "nome": "PENTEADEIRA 1 METRO", "descricao": "Penteadeira 1 metro", "custo": "51,73", "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "PENTEADEIRA4111", "descricao": "Penteadeira 4111 (sem composição de custo no relatório)", "custo": null, "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "PENTEADEIRA ANNE", "descricao": "Penteadeira Anne", "custo": "113,18", "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "PENTEADEIRA BALI", "descricao": "Penteadeira Bali", "custo": "150,30", "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "PENTEADEIRA DULCE", "descricao": "Penteadeira Dulce", "custo": "108,83", "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "PENTEADEIRA EM \"L\" ALANA", "descricao": "Penteadeira em L Alana", "custo": "89,46", "cores": ["Branco", "Nature/Off", "Nature/Preto"] },
+    { "nome": "PENTEADEIRA NEW", "descricao": "Penteadeira New", "custo": "52,87", "cores": ["Branco", "Off/Nature", "Preto/Nature"] },
+    { "nome": "PENTEADEIRA 60CM", "descricao": "Penteadeira suspensa 60 cm", "custo": "46,78", "cores": ["Branco", "Nature/Off", "Preto/Nature"] },
+    { "nome": "RACK R22", "descricao": "Rack para TV R22", "custo": "72,08", "cores": ["Nature/Off", "Off/Ripa", "Preto/Nature", "Preto/Ripa"] },
+    { "nome": "SAP. AGATHA 3P", "descricao": "Sapateira Agatha 3 portas", "custo": "109,37", "cores": ["Amadeirado", "Branco", "Nature/Off", "Preto"] },
+    { "nome": "AGATHACOMPL.", "descricao": "Sapateira Agatha completa", "custo": "116,00", "cores": ["Amadeirado", "Branco", "Nature/Off"] }
+  ]
+}
