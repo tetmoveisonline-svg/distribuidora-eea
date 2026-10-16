@@ -17,6 +17,19 @@
       <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
       <a class="nav-item <%= ativo === 'financeiro' ? 'on' : '' %>" href="/financeiro"><span class="ico">&#36;</span> Financeiro</a>
       <a class="nav-item <%= ativo === 'estoque' ? 'on' : '' %>" href="/estoque"><span class="ico">&#9638;</span> Estoque</a>
+      <% if (radio && radio.url) { %>
+      <div class="radio" id="radio">
+        <div class="radio-top">
+          <button type="button" class="radio-btn" id="radioBtn" aria-label="Tocar rádio" title="Tocar / pausar">&#9654;</button>
+          <div class="radio-info">
+            <div class="radio-nome"><%= radio.nome %></div>
+            <div class="radio-st" id="radioSt">Parada · toque para ouvir</div>
+          </div>
+        </div>
+        <div class="radio-vol"><span class="ico">&#128266;</span><input type="range" id="radioVol" min="0" max="100" value="70" aria-label="Volume da rádio" /></div>
+        <audio id="radioAudio" preload="none" src="<%= radio.url %>"></audio>
+      </div>
+      <% } %>
     <% } else if (user.papel === 'representante') { %>
       <div class="grp">Representante</div>
       <a class="nav-item <%= ativo === 'rep' ? 'on' : '' %>" href="/rep/pedidos"><span class="ico">&#9776;</span> Meus pedidos</a>

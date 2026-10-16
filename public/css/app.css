@@ -356,3 +356,17 @@ td.res { color:var(--warn); font-weight:600; }
 .danger-zone summary:hover { color:var(--danger); }
 .inline-det summary { list-style:none; display:inline-block; cursor:pointer; }
 .inline-det summary::-webkit-details-marker { display:none; }
+
+/* ---------- radio (area do cliente) ---------- */
+.radio { margin-top:auto; padding:12px 10px 6px; border-top:1px solid var(--border); }
+.radio-top { display:flex; align-items:center; gap:10px; }
+.radio-btn { width:34px; height:34px; border-radius:50%; border:1px solid var(--border-strong); background:var(--field-bg); color:var(--text); font-size:12px; cursor:pointer; flex:none; display:flex; align-items:center; justify-content:center; }
+.radio-btn:hover { border-color:var(--accent); }
+.radio.on .radio-btn { background:var(--accent); color:var(--accent-text); border-color:var(--accent); }
+.radio-info { min-width:0; }
+.radio-nome { font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.radio-st { font-size:11px; color:var(--text-dim); }
+.radio.on .radio-st { color:var(--ok); }
+.radio-vol { display:flex; align-items:center; gap:6px; margin-top:8px; color:var(--text-dim); font-size:12px; }
+.radio-vol input { flex:1; accent-color:var(--accent); }
+.side { display:flex; flex-direction:column; }

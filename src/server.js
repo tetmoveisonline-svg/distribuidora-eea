@@ -37,6 +37,12 @@ app.use(session({
 app.use((req, res, next) => {
   res.locals.user = currentUser(req);
   res.locals.isFull = !!(res.locals.user && res.locals.user.papel === 'admin'); // admin completo (ve custos, lucros e comissoes)
+  // Radio na area do cliente (comeca pausada; o cliente da play). Vazio em RADIO_URL desliga.
+  res.locals.radio = {
+    nome: process.env.RADIO_NOME || '89 FM · A Rádio Rock',
+    url: process.env.RADIO_URL !== undefined ? process.env.RADIO_URL : 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_89FM_ADP.aac?dist=site-89fm',
+    site: process.env.RADIO_SITE || 'https://www.radiorock.com.br/',
+  };
   res.locals.empresa = {
     nome: process.env.EMPRESA_NOME || 'Central de Postagem',
   };

@@ -31,3 +31,23 @@ document.addEventListener('click', function (ev) {
   d.style.display = aberto ? 'none' : 'table-row';
   b.textContent = aberto ? 'detalhe' : 'fechar';
 });
+
+// Radio da area do cliente: comeca pausada; so toca quando o cliente clica. Volume lembrado no navegador.
+(function () {
+  var box = document.getElementById('radio'); if (!box) return;
+  var a = document.getElementById('radioAudio'), btn = document.getElementById('radioBtn'), st = document.getElementById('radioSt'), vol = document.getElementById('radioVol');
+  try { var v = localStorage.getItem('radioVol'); if (v !== null) vol.value = v; } catch (e) {}
+  a.volume = vol.value / 100;
+  vol.addEventListener('input', function () { a.volume = vol.value / 100; try { localStorage.setItem('radioVol', vol.value); } catch (e) {} });
+  function estado(t, on) { st.textContent = t; box.classList.toggle('on', !!on); btn.innerHTML = on ? '&#10074;&#10074;' : '&#9654;'; btn.setAttribute('aria-label', on ? 'Pausar rádio' : 'Tocar rádio'); }
+  btn.addEventListener('click', function () {
+    if (a.paused) {
+      estado('Conectando...', true);
+      a.load();
+      a.play().catch(function () { estado('Não foi possível tocar agora', false); });
+    } else { a.pause(); }
+  });
+  a.addEventListener('playing', function () { estado('Ao vivo', true); });
+  a.addEventListener('pause', function () { estado('Parada · toque para ouvir', false); });
+  a.addEventListener('error', function () { estado('Sem sinal no momento', false); });
+})();
