@@ -21,19 +21,39 @@
   </div>
   <div class="card pad">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-      <div class="section-title" style="margin:0">Catálogo</div>
-      <form method="post" action="/admin/produtos/importar" style="margin:0"
+      <div class="section-title" style="margin:0">Catálogo <span class="dim" style="font-weight:400;font-size:12.5px" id="catResumo"></span></div>
+      <form method="post" action="/admin/produtos/importar" style="margin:0" data-noajax="1"
             onsubmit="return confirm('Importar o catálogo do relatório de custos (25 produtos com cores e custo)?\n\nProdutos que já existem pelo nome são atualizados (custo e descrição) e ganham as cores que faltam. Nada é apagado.')">
         <button class="btn ghost sm" type="submit" title="lê data/catalogo-produtos.json">Importar catálogo do relatório</button>
       </form>
     </div>
+    <div class="cat-tools">
+      <input type="search" id="catBusca" placeholder="Buscar produto, cor ou SKU" autocomplete="off" />
+      <select id="catOrdem">
+        <option value="nome">Ordenar: nome A–Z</option>
+        <option value="recentes">Mais recentes (data de cadastro)</option>
+        <option value="antigos">Mais antigos</option>
+        <option value="menor">Menor estoque primeiro</option>
+        <option value="maior">Maior estoque primeiro</option>
+      </select>
+    </div>
+    <div class="rep-tabs" id="catAbas" role="tablist" aria-label="Filtro do catálogo">
+      <button type="button" class="tab on" data-f="todos" role="tab">Todos <span class="dim"></span></button>
+      <button type="button" class="tab" data-f="com" role="tab">Com estoque <span class="dim"></span></button>
+      <button type="button" class="tab" data-f="sem" role="tab">Sem estoque <span class="dim"></span></button>
+      <button type="button" class="tab" data-f="baixo" role="tab">Estoque baixo <span class="dim"></span></button>
+      <button type="button" class="tab" data-f="reserva" role="tab">Com reserva <span class="dim"></span></button>
+      <button type="button" class="tab" data-f="inativos" role="tab">Inativos <span class="dim"></span></button>
+    </div>
+    <div id="catMsg" class="alert" style="display:none"></div>
     <% if (produtos.length === 0) { %><div class="empty">Nenhum produto ainda.</div><% } else { %>
+    <div class="empty" id="catVazio" style="display:none">Nenhum produto nesse filtro.</div>
     <table class="prod-table">
       <thead><tr><th>Produto</th><th>Cores e SKUs</th><th class="num">Preços</th><th>Status</th><th></th></tr></thead>
       <tbody>
         <% produtos.forEach(function (p) { %>
-          <tr>
-            <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %>
+          <tr class="prod" data-id="<%= p.id %>" data-nome="<%= p.nome %>" data-criado="<%= p.criado_iso || '' %>" data-ativo="<%= p.ativo ? 1 : 0 %>" data-busca="<%= (p.nome + ' ' + (p.descricao || '') + ' ' + p.cores.map(function (c) { return c.nome + ' ' + (c.sku || ''); }).join(' ')).toLowerCase() %>">
+            <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %><div class="dim" style="font-size:11px;margin-top:2px">cadastrado <%= p.criado_br || '—' %></div>
               <% if (isFull) { %>
               <div class="custo-box">
                 <div class="custo-grid">
@@ -65,10 +85,10 @@
             </td>
             <td>
               <% if (p.cores.length === 0) { %>
-                <div class="cor-row"><span class="cor-nome dim">cor única</span>
-                  <span class="saldo-tag <%= (p.saldo - p.reservado) <= 0 ? 'zero' : ((p.saldo - p.reservado) <= 5 ? 'baixo' : '') %>" title="disponível = físico <%= p.saldo %> − reservado <%= p.reservado %>"><%= p.saldo - p.reservado %> disp.</span>
-                  <span class="dim" style="font-size:11px">fís. <%= p.saldo %> · res. <%= p.reservado %></span>
-                  <form method="post" action="/admin/produtos/<%= p.id %>/estoque" class="est-form">
+                <div class="cor-row" data-cor="0" data-disp="<%= p.saldo - p.reservado %>" data-res="<%= p.reservado %>"><span class="cor-nome dim">cor única</span>
+                  <span class="saldo-tag st <%= (p.saldo - p.reservado) <= 0 ? 'zero' : ((p.saldo - p.reservado) <= 5 ? 'baixo' : '') %>" title="disponível = físico − reservado"><%= p.saldo - p.reservado %> disp.</span>
+                  <span class="dim fr" style="font-size:11px">fís. <%= p.saldo %> · res. <%= p.reservado %></span>
+                  <form method="post" action="/admin/produtos/<%= p.id %>/estoque" class="est-form" data-cor="0">
                     <select name="motivo"><% motivos.forEach(function (m) { %><option><%= m %></option><% }); %></select>
                     <input name="quantidade" type="number" placeholder="qtd" title="quantidade (negativa para saída no Ajuste)" />
                     <button class="btn ghost sm" type="submit">lançar</button>
@@ -76,12 +96,12 @@
                 </div>
               <% } %>
               <% p.cores.forEach(function (c) { %>
-                <form method="post" action="/admin/produtos/<%= p.id %>/cores/<%= c.id %>/sku" class="cor-row">
+                <form method="post" action="/admin/produtos/<%= p.id %>/cores/<%= c.id %>/sku" class="cor-row" data-cor="<%= c.id %>" data-disp="<%= c.saldo - c.reservado %>" data-res="<%= c.reservado %>">
                   <span class="cor-nome"><%= c.nome %></span>
                   <input name="sku" class="mono-in" value="<%= c.sku || '' %>" placeholder="SKU" title="SKU desta cor" />
                   <button class="btn ghost sm" type="submit">ok</button>
-                  <span class="saldo-tag <%= (c.saldo - c.reservado) <= 0 ? 'zero' : ((c.saldo - c.reservado) <= 5 ? 'baixo' : '') %>" title="disponível = físico <%= c.saldo %> − reservado <%= c.reservado %>"><%= c.saldo - c.reservado %> disp.</span>
-                  <span class="dim" style="font-size:11px">fís. <%= c.saldo %> · res. <%= c.reservado %></span>
+                  <span class="saldo-tag st <%= (c.saldo - c.reservado) <= 0 ? 'zero' : ((c.saldo - c.reservado) <= 5 ? 'baixo' : '') %>" title="disponível = físico − reservado"><%= c.saldo - c.reservado %> disp.</span>
+                  <span class="dim fr" style="font-size:11px">fís. <%= c.saldo %> · res. <%= c.reservado %></span>
                   <input type="hidden" name="cor_id" value="<%= c.id %>" />
                   <select name="motivo" form="est-<%= c.id %>"><% motivos.forEach(function (m) { %><option><%= m %></option><% }); %></select>
                   <input name="quantidade" form="est-<%= c.id %>" type="number" placeholder="qtd" title="quantidade (negativa para saída no Ajuste)" />
@@ -89,7 +109,7 @@
                   <button class="chip-x" type="submit" formaction="/admin/produtos/<%= p.id %>/cores/<%= c.id %>/remover" formmethod="post" title="remover cor"
                           onclick="return confirm('Remover a cor <%= c.nome.replace(/'/g, '') %> de <%= p.nome.replace(/'/g, '') %>? Pedidos antigos não mudam.')">&times;</button>
                 </form>
-                <form method="post" action="/admin/produtos/<%= p.id %>/estoque" id="est-<%= c.id %>" style="display:none"><input type="hidden" name="cor_id" value="<%= c.id %>" /></form>
+                <form method="post" action="/admin/produtos/<%= p.id %>/estoque" id="est-<%= c.id %>" class="est-hidden" data-cor="<%= c.id %>" style="display:none"><input type="hidden" name="cor_id" value="<%= c.id %>" /></form>
               <% }); %>
               <form method="post" action="/admin/produtos/<%= p.id %>/cores" class="cor-row nova">
                 <input name="nome" placeholder="nova cor" class="cor-nome-in" />
@@ -103,7 +123,7 @@
               <div class="actions-inline" style="flex-wrap:nowrap">
                 <form method="post" action="/admin/produtos/<%= p.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= p.ativo ? 'Desativar' : 'Ativar' %></button></form>
                 <% if (isFull) { %>
-                <form method="post" action="/admin/produtos/<%= p.id %>/excluir" style="margin:0"
+                <form method="post" action="/admin/produtos/<%= p.id %>/excluir" style="margin:0" data-noajax="1"
                       onsubmit="return confirm(<%- JSON.stringify('Excluir o produto "' + p.nome + '"?\n\n' + p.precos + ' preço(s) por cliente serão removidos junto. Pedidos já feitos não mudam.\n\nEssa ação não tem volta.').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') %>)">
                   <button class="btn ghost sm danger" type="submit">Excluir</button>
                 </form>
@@ -119,5 +139,113 @@
 </div>
 
 <div class="hint-box"><% if (!isFull) { %>Sua conta é operacional: custo, lucro e preço sugerido ficam ocultos. <% } %><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> cada cor tem físico, reservado e disponível (físico − reservado). O aceite de um pedido reserva a quantidade; cada etiqueta despachada na bipagem consome 1 do físico e 1 da reserva; encerrar com sobras libera a reserva. "Entrada" soma ao físico, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Disponível negativo fica em vermelho para repor. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
+
+<script>
+(function () {
+  var tabela = document.querySelector('.prod-table'); if (!tabela) return;
+  var tbody = tabela.querySelector('tbody');
+  var linhas = Array.prototype.slice.call(tbody.querySelectorAll('tr.prod'));
+  var busca = document.getElementById('catBusca'), ordem = document.getElementById('catOrdem'), abas = document.getElementById('catAbas');
+  var msg = document.getElementById('catMsg'), vazio = document.getElementById('catVazio');
+  var filtro = 'todos';
+  try { filtro = localStorage.getItem('catFiltro') || 'todos'; ordem.value = localStorage.getItem('catOrdem') || 'nome'; busca.value = localStorage.getItem('catBusca') || ''; } catch (e) {}
+  if (!ordem.value) ordem.value = 'nome';
+
+  function corRows(tr) { return Array.prototype.slice.call(tr.querySelectorAll('[data-cor]:not(.est-hidden):not(.est-form)')); }
+  function casaCor(r, f) {
+    var d = parseInt(r.getAttribute('data-disp'), 10) || 0, res = parseInt(r.getAttribute('data-res'), 10) || 0;
+    if (f === 'com') return d > 0;
+    if (f === 'sem') return d <= 0;
+    if (f === 'baixo') return d > 0 && d <= 5;
+    if (f === 'reserva') return res > 0;
+    return true;
+  }
+  function casaProduto(tr, f, q) {
+    var ativo = tr.getAttribute('data-ativo') === '1';
+    if (f === 'inativos') { if (ativo) return false; } else if (!ativo) return false;
+    if (q && tr.getAttribute('data-busca').indexOf(q) < 0) return false;
+    var rows = corRows(tr), fCor = (f === 'inativos' || f === 'todos') ? 'todos' : f;
+    var algum = false;
+    rows.forEach(function (r) { var ok = casaCor(r, fCor); r.style.display = ok ? '' : 'none'; if (ok) algum = true; });
+    return algum || rows.length === 0;
+  }
+  function dispMin(tr, max) {
+    var vals = corRows(tr).map(function (r) { return parseInt(r.getAttribute('data-disp'), 10) || 0; });
+    if (!vals.length) return 0;
+    return max ? Math.max.apply(null, vals) : Math.min.apply(null, vals);
+  }
+  function contar(f) { return linhas.filter(function (tr) {
+    var ativo = tr.getAttribute('data-ativo') === '1';
+    if (f === 'inativos') return !ativo;
+    if (!ativo) return false;
+    if (f === 'todos') return true;
+    return corRows(tr).some(function (r) { return casaCor(r, f); });
+  }).length; }
+  function aplicar() {
+    var q = (busca.value || '').trim().toLowerCase();
+    var o = ordem.value;
+    linhas.sort(function (a, b) {
+      if (o === 'recentes') return (b.getAttribute('data-criado') || '').localeCompare(a.getAttribute('data-criado') || '') || a.getAttribute('data-nome').localeCompare(b.getAttribute('data-nome'));
+      if (o === 'antigos') return (a.getAttribute('data-criado') || '').localeCompare(b.getAttribute('data-criado') || '') || a.getAttribute('data-nome').localeCompare(b.getAttribute('data-nome'));
+      if (o === 'menor') return dispMin(a) - dispMin(b) || a.getAttribute('data-nome').localeCompare(b.getAttribute('data-nome'));
+      if (o === 'maior') return dispMin(b, true) - dispMin(a, true) || a.getAttribute('data-nome').localeCompare(b.getAttribute('data-nome'));
+      return a.getAttribute('data-nome').localeCompare(b.getAttribute('data-nome'), 'pt-BR');
+    });
+    var vis = 0;
+    linhas.forEach(function (tr) { tbody.appendChild(tr); var ok = casaProduto(tr, filtro, q); tr.style.display = ok ? '' : 'none'; if (ok) vis++; });
+    vazio.style.display = vis ? 'none' : 'block';
+    abas.querySelectorAll('[data-f]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-f') === filtro); b.querySelector('span').textContent = contar(b.getAttribute('data-f')); });
+    var cores = linhas.reduce(function (n, tr) { return n + corRows(tr).length; }, 0);
+    document.getElementById('catResumo').textContent = '· ' + linhas.length + ' produtos · ' + cores + ' cores' + (vis !== linhas.length ? ' · mostrando ' + vis : '');
+    try { localStorage.setItem('catFiltro', filtro); localStorage.setItem('catOrdem', o); localStorage.setItem('catBusca', busca.value || ''); } catch (e) {}
+  }
+  abas.addEventListener('click', function (e) { var b = e.target.closest('[data-f]'); if (!b) return; filtro = b.getAttribute('data-f'); aplicar(); });
+  busca.addEventListener('input', aplicar); ordem.addEventListener('change', aplicar);
+
+  // ---- salvar sem recarregar: formularios do catalogo vao por fetch e a linha atualiza no lugar ----
+  function aviso(tipo, texto) { msg.className = 'alert ' + tipo; msg.textContent = texto; msg.style.display = 'block'; clearTimeout(aviso.t); aviso.t = setTimeout(function () { msg.style.display = 'none'; }, 4000); }
+  function salvo(el, texto) {
+    var s = document.createElement('span'); s.className = 'salvo'; s.textContent = texto || '✓ salvo';
+    el.parentNode.insertBefore(s, el.nextSibling); setTimeout(function () { s.remove(); }, 2500);
+  }
+  function tagClass(d) { return 'saldo-tag st ' + (d <= 0 ? 'zero' : (d <= 5 ? 'baixo' : '')); }
+  document.querySelector('.card .prod-table').addEventListener('submit', function (e) {
+    var form = e.target; if (e.defaultPrevented || form.getAttribute('data-noajax')) return;
+    var sub = e.submitter;
+    var action = (sub && sub.getAttribute('formaction')) || form.action;
+    e.preventDefault();
+    var fd = new FormData(form);
+    var body = new URLSearchParams(); fd.forEach(function (v, k) { body.append(k, v); });
+    fetch(action, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.json().then(function (j) { return { st: r.status, j: j }; }); })
+      .then(function (res) {
+        var j = res.j;
+        if (!j.ok) { aviso('err', j.erro || 'Falha ao salvar.'); return; }
+        if (j.reload) { location.reload(); return; }
+        if (/\/estoque$/.test(action)) {
+          var corId = form.getAttribute('data-cor') || '0';
+          var tr = form.closest('tr.prod');
+          var row = tr.querySelector('[data-cor="' + corId + '"]:not(.est-hidden):not(.est-form)');
+          if (row) {
+            row.setAttribute('data-disp', j.disponivel); row.setAttribute('data-res', j.reservado);
+            var st = row.querySelector('.st'); if (st) { st.className = tagClass(j.disponivel); st.textContent = j.disponivel + ' disp.'; }
+            var fr = row.querySelector('.fr'); if (fr) fr.textContent = 'fís. ' + j.saldo + ' · res. ' + j.reservado;
+          }
+          var q = form.querySelector('[name="quantidade"]') || tr.querySelector('[form="' + form.id + '"][name="quantidade"]'); if (q) q.value = '';
+          salvo(sub || form, '✓ salvo · ' + j.disponivel + ' disp.'); aplicar();
+        } else if (/\/sku$/.test(action)) {
+          salvo(sub || form);
+        } else if (/\/custos$/.test(action)) {
+          var g = form.closest('.custo-box').querySelector('.custo-grid'); var n = g.querySelectorAll('.num');
+          if (n.length >= 5) { n[0].textContent = j.custo; n[1].textContent = j.func; n[2].textContent = j.comissao; n[3].textContent = j.lucro; n[4].textContent = j.sugerido; }
+          var dims = g.querySelectorAll('.dim'); if (dims.length >= 2) { dims[0].textContent = '· ' + j.funcNome; dims[1].textContent = '· ' + j.repNome + ' · ' + j.repPct + ' da venda'; }
+          salvo(sub || form);
+        } else { salvo(sub || form); }
+      })
+      .catch(function () { aviso('err', 'Falha de conexão ao salvar.'); });
+  });
+  aplicar();
+})();
+</script>
 
 <%- include('../partials/app-close') %>

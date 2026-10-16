@@ -99,6 +99,10 @@ router.post('/administradores/:id/senha', async (req, res, next) => {
 });
 
 function pInt(v) { const n = parseInt(v, 10); return isNaN(n) ? null : n; }
+// Formularios enviados por fetch (X-Requested-With: fetch) recebem JSON; os demais, redirect como antes.
+function isAjax(req) { return req.get('X-Requested-With') === 'fetch'; }
+function responder(req, res, payload, redirectUrl) { if (isAjax(req)) return res.json(Object.assign({ ok: true }, payload || {})); res.redirect(redirectUrl); }
+function responderErro(req, res, e, base) { const m = msgErro(e); if (isAjax(req)) return res.status(400).json({ ok: false, erro: m }); res.redirect(base + (base.indexOf('?') >= 0 ? '&' : '?') + 'erro=' + encodeURIComponent(m)); }
 function msgErro(e) { if (e && e.code === '23505') return 'Login já em uso. Escolha outro.'; return (e && e.message) ? e.message : 'Falha ao salvar.'; }
 function naoEncontrado(res, req) { return res.status(404).render('erro', { titulo: 'Não encontrado', mensagem: 'Registro inexistente.', user: req.session.user }); }
 function enviarPdf(res, filename, buffer) {
@@ -481,6 +485,7 @@ router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
       `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+              to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS criado_iso, to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS criado_br,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
     );
@@ -525,8 +530,8 @@ router.post('/produtos/:id/cores', async (req, res, next) => {
     if (!nome) throw new Error('Informe o nome da cor.');
     const ord = await db.query('SELECT COALESCE(max(ordem), -1) + 1 AS o FROM produto_cores WHERE produto_id = $1', [pid]);
     await db.query('INSERT INTO produto_cores (produto_id, nome, sku, ordem) VALUES ($1,$2,$3,$4)', [pid, nome, normSku(req.body.sku), ord.rows[0].o]);
-    res.redirect('/admin/produtos');
-  } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.code === '23505' ? 'Essa cor já existe neste produto.' : msgErro(e))); }
+    responder(req, res, { reload: true }, '/admin/produtos');
+  } catch (e) { if (e && e.code === '23505') e = new Error('Essa cor já existe neste produto.'); responderErro(req, res, e, '/admin/produtos'); }
 });
 // Importa o catalogo de data/catalogo-produtos.json: cria produtos que nao existem (pelo nome),
 // atualiza custo e descricao dos existentes e acrescenta cores que faltam. Nao apaga nada.
@@ -584,8 +589,17 @@ router.post('/produtos/:id/custos', async (req, res, next) => {
     const okFunc = funcId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'funcionario'", [funcId]) : { rowCount: 0 };
     await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5 WHERE id = $1',
       [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null]);
+    if (isAjax(req)) {
+      // devolve o quadro recalculado para a tela atualizar sem recarregar
+      const ref = await refCustos();
+      const p = await db.query('SELECT custo_centavos, lucro_centavos, rep_usuario_id, func_usuario_id FROM produtos WHERE id = $1', [pInt(req.params.id)]);
+      const pc = comCustos(p.rows[0], ref);
+      return res.json({ ok: true, custo: pc.custo_centavos !== null ? formatBRL(pc.custo_centavos) : '—', lucro: pc.lucro_centavos !== null ? formatBRL(pc.lucro_centavos) : '—',
+        func: formatBRL(pc.func_centavos), funcNome: pc.func ? pc.func.nome : 'ninguém', repNome: pc.rep ? pc.rep.nome : 'ninguém', repPct: formatPercent(pc.rep_bps_efetivo),
+        comissao: pc.sugerido !== null ? formatBRL(Math.round(pc.sugerido * pc.rep_bps_efetivo / 10000)) : '—', sugerido: pc.sugerido !== null ? formatBRL(pc.sugerido) : '—' });
+    }
     res.redirect('/admin/produtos?ok=' + encodeURIComponent('Custos atualizados.'));
-  } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); }
+  } catch (e) { responderErro(req, res, e, '/admin/produtos'); }
 });
 // Lancamento de estoque (entrada, ajuste ou saida manual) numa cor ou no produto (cor unica).
 router.post('/produtos/:id/estoque', async (req, res, next) => {
@@ -598,11 +612,11 @@ router.post('/produtos/:id/estoque', async (req, res, next) => {
     if (motivo === 'Saída manual' && qtd > 0) qtd = -qtd;
     if (motivo === 'Entrada' && qtd < 0) qtd = -qtd;
     await client.query('BEGIN');
-    const saldo = await estoque.movimentar(client, { produtoId: pid, corId, quantidade: qtd, motivo, observacao: (req.body.observacao || '').toString().trim().slice(0, 200) || null, usuarioId: req.session.user.id });
+    const r = await estoque.movimentar(client, { produtoId: pid, corId, quantidade: qtd, motivo, observacao: (req.body.observacao || '').toString().trim().slice(0, 200) || null, usuarioId: req.session.user.id });
     await client.query('COMMIT');
-    if (saldo === null) throw new Error('Produto ou cor não encontrados.');
-    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Estoque atualizado: saldo ' + saldo + '.'));
-  } catch (e) { await client.query('ROLLBACK'); res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); } finally { client.release(); }
+    if (r === null) throw new Error('Produto ou cor não encontrados.');
+    responder(req, res, { saldo: r.saldo, reservado: r.reservado, disponivel: r.disponivel, msg: 'Estoque atualizado: disponível ' + r.disponivel + '.' }, '/admin/produtos?ok=' + encodeURIComponent('Estoque atualizado: disponível ' + r.disponivel + '.'));
+  } catch (e) { await client.query('ROLLBACK'); responderErro(req, res, e, '/admin/produtos'); } finally { client.release(); }
 });
 // Historico de movimentos
 router.get('/estoque', async (req, res, next) => {
@@ -615,13 +629,13 @@ router.get('/estoque', async (req, res, next) => {
 });
 // Editar o SKU de uma cor
 router.post('/produtos/:id/cores/:cid/sku', async (req, res, next) => {
-  try { await db.query('UPDATE produto_cores SET sku = $3 WHERE id = $1 AND produto_id = $2', [pInt(req.params.cid), pInt(req.params.id), normSku(req.body.sku)]); res.redirect('/admin/produtos'); } catch (e) { next(e); }
+  try { const sku = normSku(req.body.sku); await db.query('UPDATE produto_cores SET sku = $3 WHERE id = $1 AND produto_id = $2', [pInt(req.params.cid), pInt(req.params.id), sku]); responder(req, res, { sku: sku || '' }, '/admin/produtos'); } catch (e) { next(e); }
 });
 router.post('/produtos/:id/cores/:cid/remover', async (req, res, next) => {
-  try { await db.query('DELETE FROM produto_cores WHERE id = $1 AND produto_id = $2', [pInt(req.params.cid), pInt(req.params.id)]); res.redirect('/admin/produtos'); } catch (e) { next(e); }
+  try { await db.query('DELETE FROM produto_cores WHERE id = $1 AND produto_id = $2', [pInt(req.params.cid), pInt(req.params.id)]); responder(req, res, { reload: true }, '/admin/produtos'); } catch (e) { next(e); }
 });
 router.post('/produtos/:id/toggle', async (req, res, next) => {
-  try { await db.query('UPDATE produtos SET ativo = NOT ativo WHERE id = $1', [req.params.id]); res.redirect('/admin/produtos'); } catch (e) { next(e); }
+  try { await db.query('UPDATE produtos SET ativo = NOT ativo WHERE id = $1', [req.params.id]); responder(req, res, { reload: true }, '/admin/produtos'); } catch (e) { next(e); }
 });
 // Excluir produto do catalogo: remove tambem os precos por cliente ligados a ele.
 // Pedidos ja feitos nao mudam (linhas guardam nome e preco; item_id vira NULL).
