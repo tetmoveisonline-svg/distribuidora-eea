@@ -338,3 +338,16 @@ CREATE INDEX IF NOT EXISTS idx_novidades_cliente ON novidades(cliente_id, criado
 
 -- WhatsApp do cliente (so digitos, com DDD) para enviar o acesso e avisos.
 ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefone TEXT;
+
+-- Imagens do produto (guardadas no banco: o disco do Railway e apagado a cada deploy).
+CREATE TABLE IF NOT EXISTS produto_imagens (
+  id         SERIAL PRIMARY KEY,
+  produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+  nome       TEXT NOT NULL,
+  mime       TEXT NOT NULL,
+  tamanho    INTEGER NOT NULL,
+  dados      BYTEA NOT NULL,
+  ordem      INTEGER NOT NULL DEFAULT 0,
+  criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_produto_imagens_produto ON produto_imagens(produto_id);

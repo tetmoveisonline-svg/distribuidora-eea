@@ -3,7 +3,8 @@
 const express = require('express');
 const multer = require('multer');
 const db = require('../db');
-const { exigeCliente } = require('../auth');
+const { exigeCliente, exigeLogin } = require('../auth');
+const imagens = require('../imagens');
 const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
@@ -290,13 +291,15 @@ router.get('/inicio', exigeCliente, async (req, res, next) => {
 // ---------- Estoque (produtos com preco negociado) ----------
 router.get('/estoque', exigeCliente, async (req, res, next) => {
   try {
-    const produtos = await estoque.saldosParaCliente(req.session.user.clienteId);
+    const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
     res.render('cliente/estoque', { produtos, formatDateTime });
   } catch (e) { next(e); }
 });
+// Imagem do produto (qualquer usuario logado); ?baixar=1 forca o download.
+router.get('/produtos/:id/imagens/:img', exigeLogin, (req, res, next) => imagens.servir(req, res).catch(next));
 router.get('/api/estoque', exigeCliente, async (req, res) => {
   try {
-    const produtos = await estoque.saldosParaCliente(req.session.user.clienteId);
+    const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
     res.json({ ok: true, produtos, atualizado_em: formatDateTime(new Date()) });
   } catch (e) { console.error('Erro estoque cliente:', e); res.status(500).json({ erro: 'Falha ao carregar o estoque.' }); }
 });

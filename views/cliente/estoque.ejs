@@ -77,6 +77,10 @@
     produtos.forEach(function (p) {
       h += '<div class="ec-card"><div class="ec-head"><div class="ec-nome">' + esc(p.nome) + '</div><div class="ec-right">' + precoCard(p) + '</div></div>';
       if (p.obs) h += '<div class="ec-obs mono">' + esc(p.obs) + '</div>';
+      if (p.imagens && p.imagens.length) {
+        h += '<button type="button" class="ec-fotos" data-galeria="' + p.id + '" data-nome="' + esc(p.nome) + '" data-imgs="' + p.imagens.map(function (i) { return i.id; }).join(',') + '">' +
+          '<img src="/produtos/' + p.id + '/imagens/' + p.imagens[0].id + '" alt="" loading="lazy" /> Ver ' + (p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens') + ' · baixar</button>';
+      }
       h += '<div class="ec-chips">';
       if (!p.cores.length) h += chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos);
       else p.cores.forEach(function (c) { h += chip(c.nome, c.sku || '', c.disponivel, c.meu_reservado, c.meus_pedidos); });
@@ -94,7 +98,51 @@
   document.getElementById('estRefresh').addEventListener('click', atualizar);
   setInterval(atualizar, 30000);
   renderTudo();
+
+  // Galeria: abre ao clicar em "Ver imagens"; setas, miniaturas e botao de baixar.
+  var gal = document.getElementById('galeria'), gImg = document.getElementById('galImg'), gTit = document.getElementById('galTit'), gN = document.getElementById('galN'), gThumbs = document.getElementById('galThumbs'), gDown = document.getElementById('galDown');
+  var gPid = 0, gIds = [], gI = 0;
+  function galMostrar(i) {
+    gI = (i + gIds.length) % gIds.length;
+    var src = '/produtos/' + gPid + '/imagens/' + gIds[gI];
+    gImg.src = src; gDown.href = src + '?baixar=1';
+    gN.textContent = (gI + 1) + ' / ' + gIds.length;
+    gThumbs.querySelectorAll('img').forEach(function (t, k) { t.classList.toggle('on', k === gI); });
+  }
+  function galAbrir(btn) {
+    gPid = btn.getAttribute('data-galeria'); gIds = btn.getAttribute('data-imgs').split(',');
+    gTit.textContent = btn.getAttribute('data-nome');
+    gThumbs.innerHTML = gIds.map(function (id) { return '<img src="/produtos/' + gPid + '/imagens/' + id + '" alt="" />'; }).join('');
+    gThumbs.querySelectorAll('img').forEach(function (t, k) { t.addEventListener('click', function () { galMostrar(k); }); });
+    gal.querySelectorAll('.gal-nav').forEach(function (b) { b.style.display = gIds.length > 1 ? '' : 'none'; });
+    galMostrar(0); gal.classList.add('on');
+  }
+  box.addEventListener('click', function (e) { var b = e.target.closest('.ec-fotos'); if (b) galAbrir(b); });
+  document.getElementById('galPrev').addEventListener('click', function () { galMostrar(gI - 1); });
+  document.getElementById('galNext').addEventListener('click', function () { galMostrar(gI + 1); });
+  document.getElementById('galFechar').addEventListener('click', function () { gal.classList.remove('on'); });
+  gal.addEventListener('click', function (e) { if (e.target === gal) gal.classList.remove('on'); });
+  document.addEventListener('keydown', function (e) {
+    if (!gal.classList.contains('on')) return;
+    if (e.key === 'Escape') gal.classList.remove('on'); else if (e.key === 'ArrowLeft') galMostrar(gI - 1); else if (e.key === 'ArrowRight') galMostrar(gI + 1);
+  });
 })();
 </script>
+
+<!-- Galeria de imagens do produto -->
+<div class="overlay gal" id="galeria">
+  <div class="card pad modal gal-box">
+    <div class="gal-top"><b id="galTit"></b><span class="dim" id="galN"></span><button type="button" class="btn ghost sm" id="galFechar">Fechar</button></div>
+    <div class="gal-stage">
+      <button type="button" class="gal-nav" id="galPrev" aria-label="anterior">‹</button>
+      <img id="galImg" src="" alt="imagem do produto" />
+      <button type="button" class="gal-nav" id="galNext" aria-label="próxima">›</button>
+    </div>
+    <div class="gal-bottom">
+      <div class="gal-thumbs" id="galThumbs"></div>
+      <a class="btn sm" id="galDown" href="#" download>Baixar imagem</a>
+    </div>
+  </div>
+</div>
 
 <%- include('../partials/app-close') %>

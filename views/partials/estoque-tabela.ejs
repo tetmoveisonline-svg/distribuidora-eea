@@ -21,6 +21,11 @@
         <div class="ec-right"><%- precoCell(p) %></div>
       </div>
       <% if (p.obs) { %><div class="ec-obs mono"><%= p.obs %></div><% } %>
+      <% if (p.imagens && p.imagens.length) { %>
+      <button type="button" class="ec-fotos" data-galeria="<%= p.id %>" data-nome="<%= p.nome %>" data-imgs="<%= p.imagens.map(function (i) { return i.id; }).join(',') %>">
+        <img src="/produtos/<%= p.id %>/imagens/<%= p.imagens[0].id %>" alt="" loading="lazy" /> Ver <%= p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens' %> · baixar
+      </button>
+      <% } %>
       <div class="ec-chips">
         <% if (p.cores.length === 0) { %>
           <%- chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos) %>

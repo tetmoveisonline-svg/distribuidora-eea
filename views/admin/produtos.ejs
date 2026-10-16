@@ -64,6 +64,10 @@
                 <input name="medidas" value="<%= p.medidas || '' %>" placeholder="medidas" style="width:130px" title="medidas (ex.: 120 x 45 x 80 cm)" />
                 <button class="btn ghost sm" type="submit">ok</button>
               </form>
+              <div class="pimg" data-pid="<%= p.id %>">
+                <div class="pimg-list"><% p.imagens.forEach(function (im) { %><span class="pimg-th"><img src="/produtos/<%= p.id %>/imagens/<%= im.id %>" alt="<%= im.nome %>" loading="lazy" /><button type="button" class="pimg-x" data-img="<%= im.id %>" title="remover imagem">×</button></span><% }); %></div>
+                <label class="btn ghost sm pimg-add"><input type="file" name="imagens" accept="image/*" multiple hidden /> + imagens <span class="dim pimg-n">(<%= p.imagens.length %>/8)</span></label>
+              </div>
               <% if (isFull) { %>
               <div class="custo-box">
                 <div class="custo-grid">
@@ -258,6 +262,42 @@
       .catch(function () { aviso('err', 'Falha de conexão ao salvar.'); });
   });
   aplicar();
+
+  // Imagens do produto: escolher arquivos envia na hora; o x remove. A lista volta no JSON e e redesenhada.
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+  function pintarImgs(box, lista) {
+    var pid = box.getAttribute('data-pid');
+    box.querySelector('.pimg-list').innerHTML = lista.map(function (im) {
+      return '<span class="pimg-th"><img src="/produtos/' + pid + '/imagens/' + im.id + '" alt="' + esc(im.nome) + '" /><button type="button" class="pimg-x" data-img="' + im.id + '" title="remover imagem">×</button></span>';
+    }).join('');
+    box.querySelector('.pimg-n').textContent = '(' + lista.length + '/8)';
+  }
+  function postImg(url, body) {
+    return fetch(url, { method: 'POST', body: body, credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.json(); });
+  }
+  document.querySelectorAll('.pimg').forEach(function (box) {
+    var pid = box.getAttribute('data-pid');
+    var inp = box.querySelector('input[type=file]');
+    inp.addEventListener('change', function () {
+      if (!inp.files.length) return;
+      var fd = new FormData();
+      for (var i = 0; i < inp.files.length; i++) fd.append('imagens', inp.files[i]);
+      var lbl = box.querySelector('.pimg-add'); lbl.classList.add('busy');
+      postImg('/admin/produtos/' + pid + '/imagens', fd).then(function (j) {
+        lbl.classList.remove('busy'); inp.value = '';
+        if (!j.ok) { aviso('err', j.erro || 'Falha ao enviar.'); return; }
+        pintarImgs(box, j.imagens); salvo(lbl, '✓ ' + j.imagens.length + ' imagem(ns)');
+      }).catch(function () { lbl.classList.remove('busy'); aviso('err', 'Falha ao enviar as imagens.'); });
+    });
+    box.addEventListener('click', function (e) {
+      var x = e.target.closest('.pimg-x'); if (!x) return;
+      postImg('/admin/produtos/' + pid + '/imagens/' + x.getAttribute('data-img') + '/excluir', new URLSearchParams()).then(function (j) {
+        if (!j.ok) { aviso('err', j.erro || 'Falha ao remover.'); return; }
+        pintarImgs(box, j.imagens);
+      });
+    });
+  });
 })();
 </script>
 

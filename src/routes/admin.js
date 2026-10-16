@@ -54,6 +54,7 @@ const {
 
 // Calculo de preco sugerido e taxas: modulo compartilhado com a area do cliente.
 const { refCustos, comCustos } = require('../precos');
+const imagens = require('../imagens');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -558,7 +559,8 @@ router.get('/produtos', async (req, res, next) => {
       if (!coresMap.has(c.produto_id)) coresMap.set(c.produto_id, []);
       coresMap.get(c.produto_id).push(c);
     }
-    const produtos = r.rows.map((p) => ({ ...comCustos(p, ref), cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })) }));
+    const imgMap = await imagens.listarPorProdutos(r.rows.map((p) => p.id));
+    const produtos = r.rows.map((p) => ({ ...comCustos(p, ref), cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })), imagens: imgMap.get(p.id) || [] }));
     res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, pesoTxt });
   } catch (e) { next(e); }
 });
@@ -585,6 +587,13 @@ function parsePesoMedidas(b) {
   return { peso, medidas };
 }
 function pesoTxt(g) { if (g === null || g === undefined) return ''; return (Number(g) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' kg'; }
+// Imagens do produto (upload multiplo e remocao; resposta JSON com a lista atual)
+router.post('/produtos/:id/imagens', (req, res, next) => imagens.upload.array('imagens', imagens.MAX_POR_PRODUTO)(req, res, (err) => err ? responderErro(req, res, new Error(err.code === 'LIMIT_FILE_SIZE' ? 'Imagem acima de 6 MB.' : err.message), '/admin/produtos') : next()), async (req, res) => {
+  try { responder(req, res, { imagens: await imagens.adicionar(pInt(req.params.id), req.files) }, '/admin/produtos'); } catch (e) { responderErro(req, res, e, '/admin/produtos'); }
+});
+router.post('/produtos/:id/imagens/:img/excluir', async (req, res) => {
+  try { responder(req, res, { imagens: await imagens.remover(pInt(req.params.id), pInt(req.params.img)) }, '/admin/produtos'); } catch (e) { responderErro(req, res, e, '/admin/produtos'); }
+});
 // Peso e medidas (edicao inline)
 router.post('/produtos/:id/dados', async (req, res, next) => {
   try {
