@@ -51,3 +51,10 @@ document.addEventListener('click', function (ev) {
   a.addEventListener('pause', function () { estado('Parada · toque para ouvir', false); });
   a.addEventListener('error', function () { estado('Sem sinal no momento', false); });
 })();
+
+// Contador "online" no topo do admin: atualiza a cada 30s.
+(function () {
+  var n = document.getElementById('onlineN'); if (!n) return;
+  function up() { fetch('/admin/online.json').then(function (r) { return r.json(); }).then(function (d) { if (d && d.ok) n.textContent = d.online; }).catch(function () {}); }
+  up(); setInterval(up, 30000);
+})();

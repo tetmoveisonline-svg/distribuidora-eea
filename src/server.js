@@ -49,6 +49,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Presenca: grava o ultimo acesso do usuario logado (no maximo 1x por minuto por usuario).
+const vistoCache = new Map();
+app.use((req, res, next) => {
+  const u = currentUser(req);
+  if (u && req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/css') && !req.path.startsWith('/js') && !req.path.startsWith('/img') && !req.path.endsWith('.json')) {
+    const agora = Date.now();
+    const ultimo = vistoCache.get(u.id) || 0;
+    if (agora - ultimo > 60000) {
+      vistoCache.set(u.id, agora);
+      db.query('UPDATE usuarios SET visto_em = now(), ultima_pagina = $2 WHERE id = $1', [u.id, req.path.slice(0, 80)]).catch(() => {});
+    }
+  }
+  next();
+});
+
 // Rotas.
 const authRoutes = require('./routes/auth');
 app.use('/', authRoutes);

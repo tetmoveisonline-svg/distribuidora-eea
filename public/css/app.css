@@ -402,3 +402,11 @@ td.res { color:var(--warn); font-weight:600; }
 .ec-chip.baixo { border-color:var(--warn); } .ec-chip.baixo .ec-n { color:var(--warn); }
 .ec-chip.zero { border-color:var(--danger); opacity:.8; } .ec-chip.zero .ec-n { color:var(--danger); }
 .ec-chip .ec-meu { font-size:11px; color:var(--warn); }
+
+/* ---------- online agora ---------- */
+.online-pill { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text-muted); text-decoration:none; border:1px solid var(--border-strong); border-radius:20px; padding:5px 10px; margin-right:10px; }
+.online-pill:hover { color:var(--text); border-color:var(--accent); }
+.od { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--field-border); }
+.online-pill .od, .od.on { background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
+.od.hoje { background:var(--warn); }
+tr.on-row td { color:var(--text); }

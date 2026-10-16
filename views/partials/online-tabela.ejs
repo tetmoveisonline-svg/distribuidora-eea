@@ -1,0 +1,21 @@
+<%
+  function papel(p) { return { cliente: 'Cliente', admin: 'Admin', operador: 'Admin operacional', representante: 'Representante', funcionario: 'Funcionário' }[p] || p; }
+%>
+<% if (lista.length === 0) { %>
+  <div class="empty">Ninguém acessou ainda.</div>
+<% } else { %>
+<table>
+  <thead><tr><th></th><th>Usuário</th><th>Tipo</th><th>Última página</th><th>Visto</th></tr></thead>
+  <tbody>
+    <% lista.forEach(function (u) { %>
+      <tr class="<%= u.online ? 'on-row' : '' %>">
+        <td><span class="od <%= u.online ? 'on' : (u.hoje ? 'hoje' : '') %>"></span></td>
+        <td><%= u.nome %><% if (u.cliente && u.cliente !== u.nome) { %> <span class="dim">· <%= u.cliente %></span><% } %> <span class="dim" style="font-size:11px"><%= u.login %></span></td>
+        <td><%= papel(u.papel) %></td>
+        <td><%= u.pagina %></td>
+        <td class="dim"><% if (u.online) { %><b style="color:var(--ok)"><%= u.ha %></b><% } else { %><%= u.ha %> atrás · <%= u.visto %><% } %></td>
+      </tr>
+    <% }); %>
+  </tbody>
+</table>
+<% } %>

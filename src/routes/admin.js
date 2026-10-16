@@ -60,6 +60,40 @@ router.use(exigeAdmin);
 router.use(['/representantes', '/funcionarios', '/repasses', '/administradores'], exigeAdminFull);
 router.post(['/produtos/:id/custos', '/pedido/:id/comissao', '/pedido/:id/funcionario', '/pedido/:id/excluir', '/clientes/:id/excluir'], exigeAdminFull);
 
+// ===================== ONLINE AGORA =====================
+// Online = visto nos ultimos 5 minutos. "Hoje" = visto hoje (Sao Paulo).
+const ROTULO_PAGINA = [
+  [/^\/novo/, 'Novo envio'], [/^\/meus-envios/, 'Meus envios'], [/^\/financeiro/, 'Financeiro'], [/^\/estoque/, 'Estoque'],
+  [/^\/admin\/pedidos/, 'Pedidos recebidos'], [/^\/admin\/pedido\//, 'Pedido'], [/^\/admin\/bipagem/, 'Bipagem'], [/^\/admin\/financeiro/, 'Financeiro'],
+  [/^\/admin\/clientes/, 'Clientes'], [/^\/admin\/produtos/, 'Produtos'], [/^\/admin\/estoque/, 'Estoque'], [/^\/admin\/precos/, 'Preços por cliente'],
+  [/^\/admin\/representantes/, 'Representantes'], [/^\/admin\/funcionarios/, 'Funcionários'], [/^\/admin\/administradores/, 'Administradores'],
+  [/^\/rep\//, 'Meus pedidos'], [/^\/func\//, 'Pedidos e taxas'], [/^\/pedido\//, 'Documentos do pedido'],
+];
+function rotuloPagina(p) { if (!p) return '—'; for (const [re, r] of ROTULO_PAGINA) { if (re.test(p)) return r; } return p; }
+async function dadosOnline() {
+  const r = await db.query(
+    `SELECT u.id, u.nome, u.login, u.papel, u.ultima_pagina, u.visto_em, c.nome AS cliente_nome,
+            EXTRACT(EPOCH FROM (now() - u.visto_em))::int AS seg,
+            (u.visto_em >= date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo') AS hoje
+     FROM usuarios u LEFT JOIN clientes c ON c.id = u.cliente_id
+     WHERE u.visto_em IS NOT NULL ORDER BY u.visto_em DESC LIMIT 200`
+  );
+  const lista = r.rows.map((x) => ({
+    id: x.id, nome: x.nome, login: x.login, papel: x.papel, cliente: x.cliente_nome || null,
+    pagina: rotuloPagina(x.ultima_pagina), seg: x.seg, online: x.seg <= 300, hoje: !!x.hoje,
+    ha: x.seg < 60 ? 'agora' : (x.seg < 3600 ? Math.floor(x.seg / 60) + ' min' : (x.seg < 86400 ? Math.floor(x.seg / 3600) + ' h' : Math.floor(x.seg / 86400) + ' d')),
+    visto: formatDateTime(x.visto_em),
+  }));
+  return { lista, online: lista.filter((x) => x.online).length, hoje: lista.filter((x) => x.hoje).length,
+    porPapel: ['cliente', 'admin', 'operador', 'representante', 'funcionario'].map((p) => ({ papel: p, n: lista.filter((x) => x.online && x.papel === p).length })) };
+}
+router.get('/online', async (req, res, next) => {
+  try { res.render('admin/online', { ativo: 'online', dados: await dadosOnline() }); } catch (e) { next(e); }
+});
+router.get('/online.json', async (req, res) => {
+  try { res.json(Object.assign({ ok: true }, await dadosOnline())); } catch (e) { res.status(500).json({ ok: false }); }
+});
+
 // ===================== ADMINISTRADORES =====================
 router.get('/administradores', async (req, res, next) => {
   try {

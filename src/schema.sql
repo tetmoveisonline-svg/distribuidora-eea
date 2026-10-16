@@ -315,3 +315,7 @@ CREATE INDEX IF NOT EXISTS idx_itens_cliente_produto ON itens(cliente_id, produt
 -- Peso e medidas do produto (informativo para o cliente na aba Estoque).
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS peso_gramas INTEGER;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS medidas TEXT;
+
+-- Presenca: ultimo acesso de cada usuario (para "online agora" no admin).
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS visto_em TIMESTAMPTZ;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ultima_pagina TEXT;

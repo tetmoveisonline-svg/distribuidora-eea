@@ -2,6 +2,9 @@
 <div class="topbar">
   <div class="brand"><span class="logo-pill"><img src="/img/logo.png" alt="E&amp;A Móveis" /></span> <%= empresa.nome %></div>
   <div class="top-right">
+    <% if (user.papel === 'admin' || user.papel === 'operador') { %>
+      <a class="online-pill" href="/admin/online" id="onlinePill" title="usuários no site nos últimos 5 minutos"><span class="od"></span> <span id="onlineN">…</span> online</a>
+    <% } %>
     <%- include('theme-select') %>
     <div class="user-menu">
       <span class="uname"><%= user.nome %></span>
@@ -39,6 +42,7 @@
     <% } else { %>
       <div class="grp">Operação</div>
       <a class="nav-item <%= ativo === 'pedidos' ? 'on' : '' %>" href="/admin/pedidos"><span class="ico">&#9776;</span> Pedidos recebidos</a>
+      <a class="nav-item <%= ativo === 'online' ? 'on' : '' %>" href="/admin/online"><span class="ico">&#9679;</span> Quem está online</a>
       <a class="nav-item <%= ativo === 'bipagem' ? 'on' : '' %>" href="/admin/bipagem"><span class="ico">&#8942;</span> Bipagem</a>
       <a class="nav-item <%= ativo === 'adm-financeiro' ? 'on' : '' %>" href="/admin/financeiro"><span class="ico">&#36;</span> Financeiro</a>
       <div class="grp">Cadastros</div>
