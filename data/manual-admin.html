@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Manual do Administrador — Distribuidora E&A</title>
+<style>
+  /* Documento para leitura e impressão: uma coluna, títulos numerados por área do sistema. */
+  @page { size: A4; margin: 16mm 15mm; }
+  :root { --ink: #1b1f1d; --muted: #5d6762; --line: #d9ded b; --accent: #2f7d55; --soft: #e9f3ee; --warn: #8a5a12; --warn-soft: #fbf1dc; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; color: var(--ink); background: #fff; font: 11.5pt/1.5 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  .page { max-width: 180mm; margin: 0 auto; padding: 10mm 0; }
+  h1 { font-size: 24pt; margin: 0 0 4px; letter-spacing: -.2px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  h2 { font-size: 15pt; margin: 26px 0 8px; padding-top: 10px; border-top: 2px solid var(--accent); color: var(--accent); page-break-after: avoid; }
+  h3 { font-size: 12pt; margin: 16px 0 6px; page-break-after: avoid; }
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 10px; padding-left: 20px; }
+  li { margin: 3px 0; }
+  b { font-weight: 600; }
+  .box { background: var(--soft); border-left: 3px solid var(--accent); padding: 8px 12px; margin: 10px 0; border-radius: 4px; page-break-inside: avoid; }
+  .warn { background: var(--warn-soft); border-left-color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10.5pt; page-break-inside: avoid; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #dfe4e1; vertical-align: top; }
+  th { background: #f3f5f4; font-weight: 600; }
+  code { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 10pt; background: #f3f5f4; padding: 1px 5px; border-radius: 3px; }
+  .toc { columns: 2; column-gap: 24px; font-size: 10.5pt; }
+  .toc li { break-inside: avoid; }
+  .cap { color: var(--muted); font-size: 10pt; }
+  .break { page-break-before: always; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Manual do Administrador</h1>
+<p class="sub">Distribuidora E&amp;A Móveis · sistema de etiquetas, estoque e financeiro · <b>distribuidoraeea.up.railway.app</b> · outubro de 2026</p>
+
+<div class="box">
+<b>Como o sistema funciona em uma frase:</b> o cliente sobe o PDF das etiquetas e aceita o pedido; isso reserva estoque, gera um lançamento financeiro e consome o limite de crédito. Você separa e despacha na Bipagem, encerra o pedido, dá baixa no pagamento e repassa comissões a representantes e funcionários.
+</div>
+
+<h3>Índice</h3>
+<ol class="toc">
+  <li>Acesso e tipos de conta</li>
+  <li>Pedidos recebidos</li>
+  <li>Bipagem (separação e despacho)</li>
+  <li>Financeiro dos clientes</li>
+  <li>Clientes (prazo, limite, exclusão)</li>
+  <li>Produtos (cores, SKU, custo, preço sugerido)</li>
+  <li>Estoque (físico, reservado, disponível)</li>
+  <li>Preços por cliente (negociações e promoções)</li>
+  <li>Representantes e Funcionários (repasses)</li>
+  <li>Administradores</li>
+  <li>Variáveis de configuração no Railway</li>
+  <li>Rotina diária sugerida</li>
+</ol>
+
+<h2>1. Acesso e tipos de conta</h2>
+<p>Entre em <b>distribuidoraeea.up.railway.app</b> com login e senha. O menu da área administrativa tem dois grupos: <b>Operação</b> (Pedidos recebidos, Bipagem, Financeiro) e <b>Cadastros</b> (Clientes, Representantes, Funcionários, Produtos, Estoque, Preços por cliente, Administradores).</p>
+<table>
+<tr><th>Conta</th><th>O que vê</th></tr>
+<tr><td><b>Administrador completo</b></td><td>Tudo.</td></tr>
+<tr><td><b>Administrador operacional</b></td><td>Toda a operação, mas sem custo, lucro e preço sugerido de produto, sem comissões e taxas, e sem as telas Representantes, Funcionários e Administradores. Também não exclui pedido nem cliente.</td></tr>
+<tr><td>Cliente</td><td>Novo envio, Meus envios, Financeiro e Estoque da própria loja.</td></tr>
+<tr><td>Representante / Funcionário</td><td>Só os próprios pedidos e ganhos.</td></tr>
+</table>
+
+<h2>2. Pedidos recebidos</h2>
+<p>Lista todos os pedidos aceitos pelos clientes: número (ex.: DS-1050), cliente, etiquetas, valor, representante, comissão, taxa do funcionário e status. Clique no número para abrir o pedido.</p>
+<h3>Dentro do pedido</h3>
+<ul>
+  <li><b>Linha do tempo</b>: Aceito, Recebido, Em separação, Despachado.</li>
+  <li><b>Itens</b>: arquivo, produto com cor e SKU, quantidade, valor unitário e total.</li>
+  <li><b>Etiquetas (térmico)</b>: download do PDF, válido por 72 horas após o aceite. <b>Relatório / comprovante</b>: permanente.</li>
+  <li><b>Representante e comissão</b>: escolha quem atende este cliente; a % vem do cadastro e pode ser ajustada só neste pedido.</li>
+  <li><b>Funcionário</b>: escolha quem separa; a taxa por etiqueta vem do cadastro e pode ser ajustada.</li>
+  <li><b>Etiquetas e horário do bipe</b>: situação de cada etiqueta (Aguardando, Separada, Despachada, Não enviada) com data e hora.</li>
+  <li><b>Excluir este pedido</b> (só admin completo, com senha): apaga pedido, etiquetas, comprovante, financeiro e repasses, e estorna estoque e crédito. Use para testes ou lançamentos errados.</li>
+</ul>
+
+<h2>3. Bipagem (separação e despacho)</h2>
+<p>Escolha o <b>cliente</b>; o sistema lista todos os pedidos abertos dele juntos. Você não precisa saber de qual pedido é a etiqueta: ao bipar o código de barras (rastreio BR... ou chave da nota), o sistema encontra a etiqueta certa.</p>
+<ol>
+  <li><b>Separação</b>: bipe cada etiqueta ao separar. O pedido passa a "Em separação" e o cliente vê "Separando". Na coluna aparece o código lido em verde.</li>
+  <li><b>Despacho (caminhão)</b>: bipe de novo ao carregar. Só aceita etiqueta já separada. Cada etiqueta despachada <b>consome 1 do estoque</b> (físico e reserva). Quando todas são despachadas, o pedido vira "Despachado" sozinho.</li>
+  <li><b>Marcar manual</b>: etiqueta sem código legível tem o botão "marcar separada / despachada".</li>
+  <li><b>Finalizar / atualizar para o cliente</b>: confirma o parcial e deixa o pedido aberto para o resto.</li>
+  <li><b>Encerrar pedido (N ficam de fora)</b>: aparece quando há despacho parcial. As etiquetas não despachadas viram "não enviada", saem da cobrança e liberam a reserva de estoque. O valor delas vira crédito para o cliente (abate a cobrança se ainda não pagou; vira crédito em conta se já pagou).</li>
+</ol>
+<div class="box warn">Encerrar é definitivo: o pedido fecha e não recebe mais bipes. Confira a mensagem de confirmação, que mostra quantas serão cobradas e quanto vira crédito.</div>
+
+<h2>4. Financeiro dos clientes</h2>
+<p>Cada pedido aceito gera <b>um lançamento</b> com o valor total e vencimento = data do aceite + prazo do cliente. Situações: <b>Em aberto</b>, <b>Vencido</b> (calculado pela data, sem ação sua), <b>Pago</b>, <b>Cancelado</b>.</p>
+<ul>
+  <li><b>Cards</b>: a receber, vencido, recebido no mês, próximo vencimento. <b>Em aberto por cliente</b> mostra quem deve.</li>
+  <li><b>Filtros</b>: cliente, situação e mês do vencimento.</li>
+  <li><b>Marcar pago</b>: abra "detalhe" do lançamento, informe data, forma (Pix, boleto, etc.) e observação. "Desfazer pagamento" reabre.</li>
+  <li><b>Detalhe</b>: itens que compuseram o valor; em pedidos encerrados com sobras, mostra reservado no aceite, despachadas, não enviadas e valor a pagar.</li>
+</ul>
+<div class="box">Dar baixa no pagamento tem três efeitos: libera o limite de crédito do cliente, libera o repasse do representante e do funcionário daquele pedido e, se o pedido foi encerrado com sobras depois de pago, gera crédito em conta.</div>
+
+<h2>5. Clientes</h2>
+<p>Cadastro com nome, e-mail, login e senha. Na lista, cada cliente tem edição inline de:</p>
+<table>
+<tr><th>Campo</th><th>Efeito</th></tr>
+<tr><td><b>Prazo (dias)</b></td><td>Vencimento dos lançamentos = aceite + prazo. Padrão 7.</td></tr>
+<tr><td><b>Limite (R$)</b></td><td>Limite de crédito. Vazio = sem controle. Disponível = limite − em aberto + crédito em conta.</td></tr>
+<tr><td><b>bloq.</b></td><td>Com pedido vencido, bloqueia novos envios do cliente até pagar.</td></tr>
+</table>
+<p>Quando o envio passa do disponível, o cliente vê o aviso com duas saídas: reduzir a quantidade (o sistema sugere quantas cabem) ou pedir antecipação pelo <b>WhatsApp</b>, que abre com mensagem pronta contendo pedido em aberto, crédito e valor a liberar.</p>
+<p><b>Desativar</b> bloqueia o login mantendo o histórico. <b>Excluir</b> (com sua senha) apaga o cliente com tudo: login, negociações, pedidos, etiquetas, comprovantes e financeiro.</p>
+
+<h2 class="break">6. Produtos</h2>
+<p>Catálogo geral. Cada produto tem nome, descrição, <b>cores</b> e, em cada cor, o <b>SKU</b> (código usado nos marketplaces, ex.: DULCE1). Produto sem cores é "cor única".</p>
+<h3>Quadro de custos (só admin completo)</h3>
+<ul>
+  <li><b>Custo R$</b>, <b>Lucro R$</b> desejado, <b>Representante</b> e <b>Funcionário</b> escolhidos nos dropdowns. A comissão e a taxa vêm do cadastro de cada um e mudam junto.</li>
+  <li><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro) ÷ (1 − % do representante). A linha do representante mostra a comissão em R$.</li>
+</ul>
+<div class="box"><b>O preço sugerido é o preço de venda padrão para todos os clientes.</b> Mudou o custo ou o lucro, mudou o preço para todos, exceto onde há negociação (seção 8).</div>
+<h3>Estoque por cor</h3>
+<p>Ao lado de cada cor: disponível, físico e reservado, e o lançamento manual: <b>Entrada</b> soma, <b>Saída manual</b> subtrai, <b>Ajuste</b> aceita positivo ou negativo.</p>
+<h3>Importar catálogo do relatório</h3>
+<p>Botão que lê o arquivo de catálogo do projeto e cria produtos, cores, SKUs e custos que faltam, sem apagar nada. Pode ser clicado mais de uma vez.</p>
+<p><b>Desativar</b> esconde o produto das novas vendas; <b>Excluir</b> remove o produto e as negociações ligadas a ele (pedidos antigos não mudam).</p>
+
+<h2>7. Estoque</h2>
+<p>Três números por cor:</p>
+<table>
+<tr><th>Número</th><th>Significado</th><th>O que mexe</th></tr>
+<tr><td><b>Físico</b></td><td>O que está no depósito</td><td>Entradas e ajustes manuais; despacho (−1 por etiqueta)</td></tr>
+<tr><td><b>Reservado</b></td><td>Comprometido com pedidos aceitos e não despachados</td><td>Aceite (+quantidade); despacho (−1); encerramento com sobras (−não enviadas)</td></tr>
+<tr><td><b>Disponível</b></td><td>Físico − reservado; o que o cliente vê</td><td>Resultado dos dois acima</td></tr>
+</table>
+<p>A tela Estoque mostra os saldos e o <b>histórico de movimentos</b> (quando, cor, motivo, quantidade, reserva, saldo após, pedido, quem). Disponível negativo fica em vermelho: significa que vendeu mais do que tinha; lance a entrada.</p>
+
+<h2>8. Preços por cliente</h2>
+<p>Todo cliente vê todos os produtos pelo preço sugerido. Esta tela guarda só as <b>negociações</b>: um preço diferente para um cliente, que substitui o sugerido e vale para todas as cores.</p>
+<ul>
+  <li><b>Nova negociação</b>: escolha o produto (o campo já vem com o sugerido) e informe o preço. Abaixo do item aparece a observação com o <b>lucro por unidade</b> nesse preço e a diferença para o sugerido.</li>
+  <li><b>Promoção</b>: por item, em % de desconto ou R$ (preço promocional), com data final e início opcional. Mostra ativa, agendada ou encerrada; o cliente vê o preço promocional e o pedido grava o valor cobrado no aceite.</li>
+  <li><b>Remover</b>: o produto volta ao sugerido para aquele cliente.</li>
+</ul>
+
+<h2>9. Representantes e Funcionários (repasses)</h2>
+<p>As duas telas têm o mesmo desenho: seletor da pessoa, <b>+ cadastro</b> (recolhido: criar, ativar/desativar, editar comissão ou taxa padrão), cards e abas <b>Pendente</b>, <b>Liberado</b>, <b>Pago</b>, com filtro por mês do aceite.</p>
+<table>
+<tr><th></th><th>Representante</th><th>Funcionário</th></tr>
+<tr><td>Atribuição</td><td>Na tela do pedido</td><td>Na tela do pedido</td></tr>
+<tr><td>Cálculo</td><td>Valor cobrado do pedido × %</td><td>Etiquetas despachadas × taxa (previsto com todas antes do encerramento)</td></tr>
+<tr><td>Libera quando</td><td colspan="2">O cliente paga o pedido no Financeiro</td></tr>
+<tr><td>Pagar</td><td colspan="2">"Marcar pago" por pedido (data e forma) ou "Pagar todos liberados" de uma vez; "desfazer" reabre</td></tr>
+</table>
+
+<h2>10. Administradores</h2>
+<p>Crie contas <b>completas</b> ou <b>operacionais</b> informando nome, login, senha e confirmando com a <b>sua</b> senha. Dá para desativar qualquer conta (menos a sua) e redefinir senha. Digite as senhas à mão: o preenchimento automático do navegador pode trazer uma senha antiga.</p>
+
+<h2>11. Variáveis de configuração no Railway</h2>
+<table>
+<tr><th>Variável</th><th>Para que serve</th></tr>
+<tr><td><code>EMPRESA_NOME</code>, <code>EMPRESA_CNPJ</code>, <code>EMPRESA_CONTATO</code></td><td>Cabeçalho do sistema e do comprovante; contato mostrado ao cliente.</td></tr>
+<tr><td><code>EMPRESA_WHATSAPP</code></td><td>Número (só dígitos, com DDI) do botão "Pedir antecipação no WhatsApp". Hoje: 5517992325005.</td></tr>
+<tr><td><code>ADMIN_LOGIN</code>, <code>ADMIN_SENHA</code></td><td>Admin inicial criado no primeiro boot (não altera depois).</td></tr>
+<tr><td><code>RADIO_URL</code>, <code>RADIO_NOME</code></td><td>Rádio da área do cliente. Vazio em <code>RADIO_URL</code> desliga.</td></tr>
+<tr><td><code>COMPROVANTE_FORMA_PAGAMENTO</code>, <code>COMPROVANTE_PRAZO_DESPACHO</code></td><td>Textos do comprovante.</td></tr>
+</table>
+<p class="cap">Ao salvar uma variável, o Railway pede "Deploy" para aplicar. O código vai para o ar sozinho a cada envio ao GitHub.</p>
+
+<h2>12. Rotina diária sugerida</h2>
+<ol>
+  <li><b>Pedidos recebidos</b>: abra os novos, atribua representante e funcionário.</li>
+  <li><b>Bipagem</b>: separe e despache por cliente. Encerre os pedidos que ficarão com sobra.</li>
+  <li><b>Financeiro</b>: dê baixa nos pagamentos confirmados; confira os vencidos e o "em aberto por cliente".</li>
+  <li><b>Representantes / Funcionários</b>: pague os repasses liberados.</li>
+  <li><b>Produtos / Estoque</b>: lance as entradas que chegaram; olhe o disponível em vermelho ou amarelo.</li>
+</ol>
+
+</div>
+</body>
+</html>
