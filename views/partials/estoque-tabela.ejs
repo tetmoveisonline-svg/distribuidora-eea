@@ -1,24 +1,34 @@
 <%
+  // Cartoes por produto: nome, peso/medidas, preco (com promocao) e as cores como chips com saldo.
   function precoCell(p) {
-    if (p.promo) return '<b style="color:var(--ok)">' + p.preco_txt + '</b> <span class="badge ok" style="margin-left:4px">' + p.promo_rotulo + '</span><div class="dim" style="font-size:11px;text-decoration:line-through">' + p.preco_original_txt + '</div>';
-    return '<b>' + p.preco_txt + '</b>';
+    if (p.promo) return '<span class="ec-preco promo">' + p.preco_txt + '</span><span class="ec-was">' + p.preco_original_txt + '</span><span class="badge ok">' + p.promo_rotulo + '</span>';
+    return '<span class="ec-preco">' + p.preco_txt + '</span>';
   }
-  function tag(n) { return '<span class="saldo-tag ' + (n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : '')) + '">' + n + '</span>'; }
-  function meu(x) { return x.meu_reservado > 0 ? '<span style="color:var(--warn)">' + x.meu_reservado + '</span> <span class="dim" style="font-size:11px">' + x.meus_pedidos + '</span>' : '<span class="dim">—</span>'; }
+  function cls(n) { return n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : 'ok'); }
+  function chip(nome, sku, disp, meu, pedidos) {
+    return '<span class="ec-chip ' + cls(disp) + '"><span class="ec-cor">' + nome + '</span>' + (sku ? '<span class="ec-sku">' + sku + '</span>' : '') +
+      '<b class="ec-n">' + disp + '</b>' + (meu > 0 ? '<span class="ec-meu" title="' + pedidos + '">· ' + meu + ' seus</span>' : '') + '</span>';
+  }
 %>
 <% if (produtos.length === 0) { %>
-  <div class="empty">Você ainda não tem produtos negociados.</div>
+  <div class="empty">Nenhum produto disponível no momento.</div>
 <% } else { %>
-<table>
-  <thead><tr><th>Produto</th><th class="num">Seu preço</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead>
-  <tbody>
-    <% produtos.forEach(function (p) { %>
-      <% if (p.cores.length === 0) { %>
-        <tr><td><%= p.nome %><% if (p.obs) { %> <span class="mono dim" style="font-size:11px;white-space:nowrap"><%= p.obs %></span><% } %></td><td class="num"><%- precoCell(p) %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><%- tag(p.disponivel) %></td><td class="num"><%- meu(p) %></td></tr>
-      <% } else { p.cores.forEach(function (c, i) { %>
-        <tr><td><% if (i === 0) { %><%= p.nome %><% if (p.obs) { %> <span class="mono dim" style="font-size:11px;white-space:nowrap"><%= p.obs %></span><% } %><% } %></td><td class="num"><%- i === 0 ? precoCell(p) : '' %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><%- tag(c.disponivel) %></td><td class="num"><%- meu(c) %></td></tr>
-      <% }); } %>
-    <% }); %>
-  </tbody>
-</table>
+<div class="ec-grid">
+  <% produtos.forEach(function (p) { %>
+    <div class="ec-card">
+      <div class="ec-head">
+        <div class="ec-nome"><%= p.nome %></div>
+        <div class="ec-right"><%- precoCell(p) %></div>
+      </div>
+      <% if (p.obs) { %><div class="ec-obs mono"><%= p.obs %></div><% } %>
+      <div class="ec-chips">
+        <% if (p.cores.length === 0) { %>
+          <%- chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos) %>
+        <% } else { p.cores.forEach(function (c) { %>
+          <%- chip(c.nome, c.sku || '', c.disponivel, c.meu_reservado, c.meus_pedidos) %>
+        <% }); } %>
+      </div>
+    </div>
+  <% }); %>
+</div>
 <% } %>

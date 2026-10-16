@@ -383,3 +383,22 @@ td.res { color:var(--warn); font-weight:600; }
 .logo-box img { height:44px; display:block; }
 
 .mono { font-family:var(--mono); }
+
+/* ---------- estoque do cliente: cartoes por produto ---------- */
+.ec-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; }
+.ec-card { background:var(--field-bg); border:1px solid var(--border); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+.ec-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.ec-nome { font-weight:600; font-size:14px; min-width:0; }
+.ec-right { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.ec-preco { font-weight:650; font-size:14px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.ec-preco.promo { color:var(--ok); }
+.ec-was { font-size:11px; color:var(--text-dim); text-decoration:line-through; }
+.ec-obs { font-size:11px; color:var(--text-dim); margin-top:-4px; }
+.ec-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.ec-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border-strong); border-radius:20px; padding:4px 10px; font-size:12px; background:var(--card); }
+.ec-chip .ec-sku { font-family:var(--mono); font-size:10px; color:var(--text-dim); }
+.ec-chip .ec-n { font-variant-numeric:tabular-nums; }
+.ec-chip.ok .ec-n { color:var(--ok); }
+.ec-chip.baixo { border-color:var(--warn); } .ec-chip.baixo .ec-n { color:var(--warn); }
+.ec-chip.zero { border-color:var(--danger); opacity:.8; } .ec-chip.zero .ec-n { color:var(--danger); }
+.ec-chip .ec-meu { font-size:11px; color:var(--warn); }

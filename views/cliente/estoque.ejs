@@ -17,7 +17,7 @@
   </div>
 </div>
 
-<div class="hint-box">Disponível em <span style="color:var(--danger)">vermelho</span> está esgotado; em <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos). "Reservado p/ você" é o que seus pedidos aceitos ainda vão consumir no despacho. Ao subir etiquetas, o sistema avisa se a quantidade passa do disponível, mas o pedido segue; a distribuidora confirma a reposição.</div>
+<div class="hint-box">Cada cartão é um produto; cada chip é uma cor com o SKU e o <b>disponível</b>: <span style="color:var(--ok)">verde</span> tem estoque, <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos), <span style="color:var(--danger)">vermelho</span> esgotado. "N seus" é o que seus pedidos aceitos ainda vão consumir no despacho. Ao subir etiquetas, o sistema avisa se a quantidade passa do disponível, mas o pedido segue; a distribuidora confirma a reposição.</div>
 
 <script>
 (function () {
@@ -63,19 +63,26 @@
   });
   function render(produtos) {
     if (!produtos.length) { box.innerHTML = '<div class="empty">' + (filtro === 'com' ? 'Nenhuma cor com estoque disponível agora.' : (filtro === 'sem' ? 'Nenhuma cor sem estoque.' : 'Nenhum produto disponível no momento.')) + '</div>'; return; }
-    function obs(p) { return p.obs ? ' <span class="mono dim" style="font-size:11px;white-space:nowrap">' + esc(p.obs) + '</span>' : ''; }
-  function meu(x) { return x.meu_reservado > 0 ? '<span style="color:var(--warn)">' + x.meu_reservado + '</span> <span class="dim" style="font-size:11px">' + esc(x.meus_pedidos) + '</span>' : '<span class="dim">—</span>'; }
-    var h = '<table><thead><tr><th>Produto</th><th class="num">Seu preço</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead><tbody>';
+    // Cartoes por produto com as cores como chips (mesmo desenho do partial renderizado no servidor)
+    function cls(n) { return n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : 'ok'); }
+    function chip(nome, sku, disp, meu, pedidos) {
+      return '<span class="ec-chip ' + cls(disp) + '"><span class="ec-cor">' + esc(nome) + '</span>' + (sku ? '<span class="ec-sku">' + esc(sku) + '</span>' : '') +
+        '<b class="ec-n">' + disp + '</b>' + (meu > 0 ? '<span class="ec-meu" title="' + esc(pedidos) + '">· ' + meu + ' seus</span>' : '') + '</span>';
+    }
+    function precoCard(p) {
+      if (p.promo) return '<span class="ec-preco promo">' + esc(p.preco_txt) + '</span><span class="ec-was">' + esc(p.preco_original_txt) + '</span><span class="badge ok">' + esc(p.promo_rotulo) + '</span>';
+      return '<span class="ec-preco">' + esc(p.preco_txt) + '</span>';
+    }
+    var h = '<div class="ec-grid">';
     produtos.forEach(function (p) {
-      if (!p.cores.length) {
-        h += '<tr><td>' + esc(p.nome) + obs(p) + '</td><td class="num">' + preco(p) + '</td><td class="dim">cor única</td><td class="dim">—</td><td class="num">' + tag(p.disponivel) + '</td><td class="num">' + meu(p) + '</td></tr>';
-      } else {
-        p.cores.forEach(function (c, i) {
-          h += '<tr><td>' + (i === 0 ? esc(p.nome) + obs(p) : '') + '</td><td class="num">' + (i === 0 ? preco(p) : '') + '</td><td>' + esc(c.nome) + '</td><td class="mono dim">' + esc(c.sku || '—') + '</td><td class="num">' + tag(c.disponivel) + '</td><td class="num">' + meu(c) + '</td></tr>';
-        });
-      }
+      h += '<div class="ec-card"><div class="ec-head"><div class="ec-nome">' + esc(p.nome) + '</div><div class="ec-right">' + precoCard(p) + '</div></div>';
+      if (p.obs) h += '<div class="ec-obs mono">' + esc(p.obs) + '</div>';
+      h += '<div class="ec-chips">';
+      if (!p.cores.length) h += chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos);
+      else p.cores.forEach(function (c) { h += chip(c.nome, c.sku || '', c.disponivel, c.meu_reservado, c.meus_pedidos); });
+      h += '</div></div>';
     });
-    box.innerHTML = h + '</tbody></table>';
+    box.innerHTML = h + '</div>';
   }
   function atualizar() {
     fetch('/api/estoque').then(function (r) { return r.json(); }).then(function (d) {
