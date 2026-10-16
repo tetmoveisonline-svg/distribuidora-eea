@@ -3,72 +3,83 @@
 <head>
 <meta charset="utf-8">
 <title>Convite · Seja parceiro da Distribuidora E&A Móveis</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-  /* Peça de uma página, A4 retrato: faixa de capa escura, grade de vantagens, lista de produtos e chamada final com WhatsApp. */
+  /* Peça vibrante, A4 retrato: fundo verde profundo com formas em lima e laranja, título gigante, cartões coloridos e CTA em destaque. */
   @page { size: A4 portrait; margin: 0; }
-  :root { --bg: #0f1412; --panel: #161c19; --card: #1c2420; --line: #2a3530; --fg: #eef2ef; --muted: #a7b3ac; --dim: #6f7c75; --accent: #3f9d6b; --accent-dk: #2f7d55; --accent-soft: rgba(63,157,107,.16); --gold: #c9973f; }
+  :root { --bg: #0b3d2e; --bg2: #0e4a37; --lime: #c8f04a; --orange: #ff8a3d; --cream: #fff6e5; --ink: #0a2a20; --fg: #f4fff3; --muted: #bfe3cf; --card: rgba(255,255,255,.07); --line: rgba(255,255,255,.14); }
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; width: 210mm; height: 297mm; background: var(--bg); color: var(--fg); font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 10.5pt; line-height: 1.45; overflow: hidden; }
-  .sheet { position: relative; width: 210mm; height: 297mm; padding: 14mm 14mm 12mm; display: flex; flex-direction: column; gap: 7mm; }
-  .glow { position: absolute; right: -40mm; top: -40mm; width: 150mm; height: 150mm; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,157,107,.22), transparent 70%); }
-  .brand { display: flex; align-items: center; gap: 8px; font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: .3px; font-size: 11pt; }
-  .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-  .brand small { font-family: 'IBM Plex Sans', sans-serif; font-weight: 400; color: var(--muted); font-size: 9pt; margin-left: 6px; }
-  .hero { position: relative; }
-  .eyebrow { font-family: ui-monospace, Consolas, monospace; font-size: 8.5pt; letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); margin-bottom: 4mm; }
-  h1 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 30pt; line-height: 1.08; margin: 0 0 4mm; max-width: 150mm; letter-spacing: -.3px; }
-  h1 em { font-style: normal; color: var(--accent); }
-  .lead { font-size: 12pt; color: var(--muted); max-width: 150mm; margin: 0; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 5mm 5mm 4.5mm; }
-  .card .ic { width: 28px; height: 28px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 12pt; margin-bottom: 3mm; }
-  .card h3 { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 11pt; margin: 0 0 1.5mm; }
-  .card p { margin: 0; color: var(--muted); font-size: 9.5pt; }
-  .prod { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 5mm 6mm; display: grid; grid-template-columns: 1.1fr 2fr; gap: 6mm; align-items: center; }
-  .prod h3 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 14pt; margin: 0 0 2mm; }
-  .prod p { margin: 0; color: var(--muted); font-size: 9.5pt; }
+  .sheet { position: relative; width: 210mm; height: 297mm; padding: 12mm 13mm 11mm; display: flex; flex-direction: column; gap: 6mm; background: linear-gradient(160deg, var(--bg2) 0%, var(--bg) 55%, #082d22 100%); overflow: hidden; }
+  .shape { position: absolute; border-radius: 50%; }
+  .s1 { width: 120mm; height: 120mm; right: -50mm; top: -45mm; background: radial-gradient(closest-side, rgba(200,240,74,.35), rgba(200,240,74,0)); }
+  .s2 { width: 70mm; height: 70mm; left: -30mm; top: 95mm; background: radial-gradient(closest-side, rgba(255,138,61,.28), rgba(255,138,61,0)); }
+  .s3 { width: 26mm; height: 26mm; right: 18mm; top: 62mm; background: var(--orange); opacity: .9; transform: rotate(12deg); border-radius: 30% 70% 60% 40% / 50% 40% 60% 50%; }
+  .s4 { width: 14mm; height: 14mm; right: 42mm; top: 52mm; background: var(--lime); border-radius: 60% 40% 50% 50% / 50% 60% 40% 50%; }
+  .s5 { width: 9mm; height: 9mm; right: 30mm; top: 86mm; border: 3px solid var(--lime); background: transparent; }
+  .brand { position: relative; display: flex; align-items: center; justify-content: space-between; }
+  .brand .name { display: flex; align-items: center; gap: 8px; font-family: 'Manrope', sans-serif; font-weight: 800; letter-spacing: .4px; font-size: 11pt; }
+  .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 5px rgba(200,240,74,.2); }
+  .tag { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 9pt; letter-spacing: 1px; text-transform: uppercase; background: var(--lime); color: var(--ink); padding: 2mm 4mm; border-radius: 20px; transform: rotate(-2deg); }
+  .hero { position: relative; margin-top: 2mm; }
+  h1 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 36pt; line-height: 1.02; margin: 0 0 4mm; max-width: 165mm; letter-spacing: -.6px; }
+  h1 .hi { color: var(--lime); }
+  h1 .hi2 { background: var(--orange); color: var(--ink); padding: 0 3mm; border-radius: 6px; display: inline-block; transform: rotate(-1.5deg); }
+  .lead { font-size: 12.5pt; color: var(--muted); max-width: 150mm; margin: 0; font-weight: 500; }
+  .grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .card { border-radius: 14px; padding: 5mm; color: var(--ink); min-height: 34mm; display: flex; flex-direction: column; gap: 1.5mm; }
+  .card.lime { background: var(--lime); }
+  .card.cream { background: var(--cream); }
+  .card.orange { background: var(--orange); }
+  .card .big { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 22pt; line-height: 1; }
+  .card h3 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 11.5pt; margin: 1mm 0 0; }
+  .card p { margin: 0; font-size: 9.5pt; opacity: .85; }
+  .prod { position: relative; border: 2px dashed rgba(200,240,74,.5); border-radius: 16px; padding: 5mm 6mm; }
+  .prod h3 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 14pt; margin: 0 0 1mm; color: var(--lime); }
+  .prod p { margin: 0 0 3mm; color: var(--muted); font-size: 9.5pt; }
   .chips { display: flex; flex-wrap: wrap; gap: 2.2mm; }
-  .chip { font-size: 9pt; padding: 2mm 3.2mm; border-radius: 20px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
-  .chip b { color: var(--accent); font-weight: 600; }
-  .how { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
-  .step { position: relative; padding: 4mm 4mm 3.5mm 4mm; border-top: 2px solid var(--accent); }
-  .step .n { font-family: 'Manrope', sans-serif; font-weight: 800; color: var(--accent); font-size: 16pt; line-height: 1; margin-bottom: 2mm; }
-  .step h4 { margin: 0 0 1mm; font-size: 10.5pt; font-family: 'Manrope', sans-serif; font-weight: 700; }
+  .chip { font-size: 9pt; padding: 2mm 3.4mm; border-radius: 20px; background: rgba(255,255,255,.1); border: 1px solid var(--line); white-space: nowrap; }
+  .chip b { color: var(--lime); font-weight: 600; }
+  .how { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4mm; }
+  .step .n { display: inline-flex; align-items: center; justify-content: center; width: 9mm; height: 9mm; border-radius: 50%; background: var(--orange); color: var(--ink); font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 12pt; margin-bottom: 2mm; }
+  .step h4 { margin: 0 0 1mm; font-size: 10.5pt; font-family: 'Manrope', sans-serif; font-weight: 800; }
   .step p { margin: 0; color: var(--muted); font-size: 9pt; }
-  .cta { margin-top: auto; background: linear-gradient(135deg, var(--accent-dk), var(--accent)); color: #06110b; border-radius: 14px; padding: 6mm 7mm; display: grid; grid-template-columns: 1fr auto; gap: 6mm; align-items: center; }
-  .cta h2 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 17pt; margin: 0 0 1.5mm; line-height: 1.15; }
-  .cta p { margin: 0; font-size: 10pt; color: #0b2e1a; }
-  .wa { background: #06110b; color: #fff; border-radius: 10px; padding: 4mm 5mm; text-align: center; min-width: 58mm; }
-  .wa .num { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 15pt; letter-spacing: .2px; }
-  .wa .lbl { font-size: 8.5pt; color: #9aa8a0; text-transform: uppercase; letter-spacing: 1px; }
-  .wa .site { font-size: 8.5pt; color: #cfe9db; margin-top: 1.5mm; }
-  .foot { display: flex; justify-content: space-between; color: var(--dim); font-size: 8pt; }
+  .cta { position: relative; margin-top: auto; background: var(--lime); color: var(--ink); border-radius: 18px; padding: 6mm 7mm; display: grid; grid-template-columns: 1fr auto; gap: 6mm; align-items: center; overflow: hidden; }
+  .cta::after { content: ""; position: absolute; right: 66mm; top: -20mm; width: 40mm; height: 60mm; background: rgba(255,255,255,.35); transform: rotate(18deg); }
+  .cta h2 { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 19pt; margin: 0 0 1.5mm; line-height: 1.1; position: relative; }
+  .cta p { margin: 0; font-size: 10pt; position: relative; }
+  .wa { position: relative; background: var(--ink); color: #fff; border-radius: 12px; padding: 4mm 5.5mm; text-align: center; min-width: 60mm; transform: rotate(1.5deg); }
+  .wa .num { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 16pt; letter-spacing: .2px; color: var(--lime); }
+  .wa .lbl { font-size: 8.5pt; color: #bfe3cf; text-transform: uppercase; letter-spacing: 1.2px; }
+  .wa .site { font-size: 8.5pt; color: #e8ffe0; margin-top: 1.5mm; }
+  .foot { position: relative; display: flex; justify-content: space-between; color: #8fc4a9; font-size: 8pt; }
 </style>
 </head>
 <body>
 <div class="sheet">
-  <div class="glow"></div>
-  <div class="brand"><span class="dot"></span> DISTRIBUIDORA E&amp;A MÓVEIS <small>· atacado de móveis para lojistas e vendedores online</small></div>
+  <div class="shape s1"></div><div class="shape s2"></div><div class="shape s3"></div><div class="shape s4"></div><div class="shape s5"></div>
+
+  <div class="brand">
+    <div class="name"><span class="dot"></span> DISTRIBUIDORA E&amp;A MÓVEIS</div>
+    <div class="tag">Convite para parceiros</div>
+  </div>
 
   <div class="hero">
-    <div class="eyebrow">Convite para lojistas, marketplaces e revendedores</div>
-    <h1>Venda móveis sem estoque parado. <em>A gente separa, embala e despacha</em> por você.</h1>
-    <p class="lead">Você vende na Shopee, Mercado Livre, loja física ou redes sociais. Sobe as etiquetas no nosso sistema, e o pedido sai do nosso depósito com rastreio, prazo e preço combinado.</p>
+    <h1>Venda móveis <span class="hi">sem estoque parado.</span><br>A gente <span class="hi2">separa, embala e despacha</span> por você.</h1>
+    <p class="lead">Você vende na Shopee, no Mercado Livre, na loja ou nas redes. Sobe as etiquetas no nosso sistema e o pedido sai do nosso depósito com rastreio, prazo e preço combinado.</p>
   </div>
 
   <div class="grid">
-    <div class="card"><div class="ic">1</div><h3>Estoque em tempo real</h3><p>Veja o disponível de cada produto e cor antes de anunciar. O que você aceita fica reservado para você.</p></div>
-    <div class="card"><div class="ic">$</div><h3>Preço e prazo combinados</h3><p>Tabela por parceiro, promoções por período e limite de crédito com vencimento após o aceite.</p></div>
-    <div class="card"><div class="ic">▶</div><h3>Acompanhe cada etiqueta</h3><p>Separação, coleta e despacho com horário, mais comprovante em PDF e extrato financeiro na sua área.</p></div>
+    <div class="card lime"><div class="big">24h</div><h3>Estoque em tempo real</h3><p>Veja o disponível de cada cor antes de anunciar. O que você aceita fica reservado para você.</p></div>
+    <div class="card cream"><div class="big">R$</div><h3>Preço e prazo combinados</h3><p>Tabela por parceiro, promoções por período e limite de crédito com vencimento após o aceite.</p></div>
+    <div class="card orange"><div class="big">100%</div><h3>Rastreável</h3><p>Separação, coleta e despacho com horário, comprovante em PDF e extrato financeiro na sua área.</p></div>
   </div>
 
   <div class="prod">
-    <div>
-      <h3>Linha completa para casa</h3>
-      <p>Produção própria e parceiros, pronta entrega no depósito. Cores: branco, preto, nature, off white, ripado e amadeirado.</p>
-    </div>
+    <h3>Linha completa para casa, pronta entrega</h3>
+    <p>Cores: branco, preto, nature, off white, ripado e amadeirado.</p>
     <div class="chips">
       <span class="chip"><b>Penteadeiras</b> Dulce, Anne, Bali, Alana em L, 1 metro, 60 cm, New</span>
       <span class="chip"><b>Escrivaninhas</b> Facility, Star, 6011, Gamer RTX</span>
@@ -80,16 +91,16 @@
   </div>
 
   <div class="how">
-    <div class="step"><div class="n">1</div><h4>Cadastro</h4><p>Você recebe login, tabela de preços e limite de crédito.</p></div>
+    <div class="step"><div class="n">1</div><h4>Cadastro</h4><p>Login, tabela de preços e limite de crédito.</p></div>
     <div class="step"><div class="n">2</div><h4>Anuncie e venda</h4><p>Nos seus canais, com o estoque que você vê na hora.</p></div>
-    <div class="step"><div class="n">3</div><h4>Suba as etiquetas</h4><p>PDF das etiquetas no sistema; escolha produto e cor; aceite.</p></div>
-    <div class="step"><div class="n">4</div><h4>Nós despachamos</h4><p>Separação, embalagem e coleta com rastreio e comprovante.</p></div>
+    <div class="step"><div class="n">3</div><h4>Suba as etiquetas</h4><p>PDF no sistema, escolha produto e cor, aceite.</p></div>
+    <div class="step"><div class="n">4</div><h4>Nós despachamos</h4><p>Separação, embalagem e coleta com rastreio.</p></div>
   </div>
 
   <div class="cta">
     <div>
-      <h2>Quer fazer parte? Chame no WhatsApp.</h2>
-      <p>Conte o que você vende e em quais canais. A gente monta sua tabela e libera o acesso ao sistema.</p>
+      <h2>Bora vender junto? Chama no WhatsApp.</h2>
+      <p>Conte o que você vende e em quais canais. A gente monta sua tabela e libera seu acesso no mesmo dia.</p>
     </div>
     <div class="wa">
       <div class="lbl">WhatsApp</div>
