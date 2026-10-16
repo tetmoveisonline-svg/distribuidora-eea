@@ -524,16 +524,20 @@ router.post('/produtos/importar', async (req, res, next) => {
         const ins = await client.query('INSERT INTO produtos (nome, descricao, custo_centavos) VALUES ($1,$2,$3) RETURNING id', [nome, p.descricao || null, custo]);
         pid = ins.rows[0].id; criados++;
       }
+      // cores: "Nome" ou { nome, sku } (SKU da Shopee / marketplace)
       const cores = Array.isArray(p.cores) ? p.cores : [];
       for (let i = 0; i < cores.length; i++) {
-        const cn = String(cores[i] || '').trim();
+        const c = cores[i];
+        const cn = String((c && typeof c === 'object') ? c.nome : c || '').trim();
+        const sku = (c && typeof c === 'object' && c.sku) ? normSku(c.sku) : null;
         if (!cn) continue;
         const r = await client.query(
-          `INSERT INTO produto_cores (produto_id, nome, ordem)
-           SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM produto_cores c WHERE c.produto_id = $1 AND upper(c.nome) = upper($2))`,
-          [pid, cn, i]
+          `INSERT INTO produto_cores (produto_id, nome, sku, ordem)
+           SELECT $1, $2, $4, $3 WHERE NOT EXISTS (SELECT 1 FROM produto_cores c WHERE c.produto_id = $1 AND upper(c.nome) = upper($2))`,
+          [pid, cn, i, sku]
         );
         coresNovas += r.rowCount;
+        if (r.rowCount === 0 && sku) await client.query('UPDATE produto_cores SET sku = COALESCE(sku, $3) WHERE produto_id = $1 AND upper(nome) = upper($2)', [pid, cn, sku]);
       }
     }
     await client.query('COMMIT');
