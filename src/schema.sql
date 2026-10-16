@@ -319,3 +319,19 @@ ALTER TABLE produtos ADD COLUMN IF NOT EXISTS medidas TEXT;
 -- Presenca: ultimo acesso de cada usuario (para "online agora" no admin).
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS visto_em TIMESTAMPTZ;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ultima_pagina TEXT;
+
+-- ===================== NOVIDADES (feed do cliente) =====================
+-- Eventos gerados pelo sistema: produto liberado, cor nova, estoque reposto/esgotado, promocao,
+-- negociacao, pedido e pagamento. cliente_id NULL = vale para todos os clientes.
+CREATE TABLE IF NOT EXISTS novidades (
+  id          SERIAL PRIMARY KEY,
+  tipo        TEXT NOT NULL,                -- produto | cor | reposto | esgotou | promo | negociado | pedido | financeiro
+  cliente_id  INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+  produto_id  INTEGER REFERENCES produtos(id) ON DELETE CASCADE,
+  pedido_id   INTEGER REFERENCES pedidos(id) ON DELETE CASCADE,
+  titulo      TEXT NOT NULL,
+  detalhe     TEXT,
+  criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_novidades_tempo ON novidades(criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_novidades_cliente ON novidades(cliente_id, criado_em DESC);

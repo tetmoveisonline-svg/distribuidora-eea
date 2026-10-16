@@ -254,6 +254,39 @@ router.get('/meus-envios', exigeCliente, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ---------- Inicio (painel do cliente) ----------
+router.get('/inicio', exigeCliente, async (req, res, next) => {
+  try {
+    const clienteId = req.session.user.clienteId;
+    const [credito, catalogo, fin] = await Promise.all([
+      financeiro.creditoCliente(clienteId),
+      estoque.saldosParaCliente(clienteId),
+      financeiro.listar({ clienteId }),
+    ]);
+    const resumoFin = financeiro.resumo(fin);
+    // pedidos em andamento com progresso de despacho e itens
+    const ped = await db.query(
+      `SELECT p.id, p.numero, p.status, p.total_etiquetas, p.total_centavos, p.aceite_em, p.etiquetas_expira_em,
+              (SELECT count(*) FROM etiquetas e WHERE e.pedido_id = p.id AND e.status = 'despachado')::int AS despachadas,
+              (SELECT count(*) FROM etiquetas e WHERE e.pedido_id = p.id AND e.status = 'conferido')::int AS separadas,
+              (SELECT string_agg(l.item_nome || ' · ' || l.quantidade, ', ' ORDER BY l.id) FROM linhas l WHERE l.pedido_id = p.id) AS itens
+       FROM pedidos p WHERE p.cliente_id = $1 AND p.status <> 'despachado' ORDER BY p.id DESC`, [clienteId]
+    );
+    const andamento = ped.rows.map((p) => ({ ...p, pct: p.total_etiquetas ? Math.round(p.despachadas / p.total_etiquetas * 100) : 0, horas: horasRestantes(p.etiquetas_expira_em), expirado: etiquetasExpiradas(p.etiquetas_expira_em) }));
+    const reservado = catalogo.reduce((n, p) => n + (p.cores.length ? p.cores.reduce((m, c) => m + (c.meu_reservado || 0), 0) : (p.meu_reservado || 0)), 0);
+    const coresReservadas = catalogo.reduce((n, p) => n + (p.cores.length ? p.cores.filter((c) => c.meu_reservado > 0).length : (p.meu_reservado > 0 ? 1 : 0)), 0);
+    const nov = await require('../novidades').listarParaCliente(clienteId, catalogo.map((p) => p.id), 30);
+    const hora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    const h = parseInt(hora.slice(0, 2), 10);
+    const saud = h < 12 ? 'Bom dia' : (h < 18 ? 'Boa tarde' : 'Boa noite');
+    res.render('cliente/inicio', {
+      credito, resumoFin, andamento, reservado, coresReservadas, novidades: nov, saud, hora,
+      etiquetasDesp: andamento.reduce((n, p) => n + p.despachadas, 0), etiquetasTotal: andamento.reduce((n, p) => n + p.total_etiquetas, 0),
+      novasHoje: nov.filter((n) => n.hoje).length, formatBRL, formatDateTime,
+    });
+  } catch (e) { next(e); }
+});
+
 // ---------- Estoque (produtos com preco negociado) ----------
 router.get('/estoque', exigeCliente, async (req, res, next) => {
   try {

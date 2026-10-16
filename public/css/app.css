@@ -410,3 +410,20 @@ td.res { color:var(--warn); font-weight:600; }
 .online-pill .od, .od.on { background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
 .od.hoje { background:var(--warn); }
 tr.on-row td { color:var(--text); }
+
+/* ---------- inicio do cliente ---------- */
+.ini-grid { display:grid; grid-template-columns:1.35fr 1fr; gap:16px; }
+.ini-peds { display:flex; flex-direction:column; gap:8px; }
+.ini-ped { display:grid; grid-template-columns:84px 1fr auto; gap:12px; align-items:center; padding:10px 12px; background:var(--field-bg); border:1px solid var(--border); border-radius:10px; }
+.ini-ped-itens { font-size:12.5px; }
+.ini-ped-st { white-space:nowrap; }
+.nov-list { display:flex; flex-direction:column; gap:6px; max-height:520px; overflow:auto; }
+.nov { display:flex; gap:10px; padding:9px 11px; background:var(--field-bg); border-radius:9px; }
+.nov-dot { width:8px; height:8px; border-radius:50%; margin-top:6px; flex:none; background:var(--text-dim); }
+.nov.produto .nov-dot, .nov.cor .nov-dot, .nov.negociado .nov-dot { background:var(--accent); }
+.nov.reposto .nov-dot, .nov.pedido .nov-dot, .nov.financeiro .nov-dot { background:var(--ok); }
+.nov.promo .nov-dot { background:var(--warn); }
+.nov.esgotou .nov-dot { background:var(--danger); }
+.nov-body { min-width:0; font-size:13px; }
+.nov-tag { font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); margin-right:4px; }
+@media (max-width:900px) { .ini-grid { grid-template-columns:1fr; } .ini-ped { grid-template-columns:1fr; } }

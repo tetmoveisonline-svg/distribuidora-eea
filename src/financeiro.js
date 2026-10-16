@@ -92,6 +92,8 @@ async function encerrarPedido(client, pedidoId) {
       );
     }
   }
+  const pn = await client.query('SELECT numero FROM pedidos WHERE id = $1', [pedidoId]);
+  await require('./novidades').registrar(client, { tipo: 'pedido', clienteId, pedidoId, titulo: 'Pedido ' + (pn.rowCount ? pn.rows[0].numero : pedidoId) + ' encerrado', detalhe: despachadas + ' despachada(s), ' + sobras + ' não enviada(s)' + (creditoGerado > 0 ? ' · ' + require('./util').formatBRL(creditoGerado) + (jaPago ? ' viraram crédito em conta' : ' saíram da cobrança') : '') });
   return { despachadas, naoEnviadas: sobras, valorCobrado: Number(valor_despachadas), creditoGerado, jaPago };
 }
 

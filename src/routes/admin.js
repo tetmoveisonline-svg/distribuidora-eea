@@ -8,6 +8,7 @@ const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
 const repasses = require('../repasses');
+const novidades = require('../novidades');
 
 // Tela de repasses (Representantes / Funcionarios): seletor, cards, abas e tabela por pedido.
 async function telaRepasses(tipo, req, res, next) {
@@ -360,6 +361,8 @@ router.post('/financeiro/:id/pagar', async (req, res, next) => {
        WHERE id = $1 AND status <> 'pago' RETURNING pedido_id`, [id, forma, obs, data]
     );
     if (r.rowCount === 0) return res.redirect(voltarFin(req, { erro: 'Lançamento não encontrado ou já pago.' }));
+    const pn = await db.query('SELECT p.numero, p.cliente_id FROM pedidos p WHERE p.id = $1', [r.rows[0].pedido_id]);
+    if (pn.rowCount) await novidades.registrar(db, { tipo: 'financeiro', clienteId: pn.rows[0].cliente_id, pedidoId: r.rows[0].pedido_id, titulo: 'Pagamento do pedido ' + pn.rows[0].numero + ' confirmado', detalhe: 'via ' + forma + ' · crédito liberado' });
     res.redirect(voltarFin(req, { ok: 'Pagamento registrado.' }));
   } catch (e) { next(e); }
 });
@@ -582,6 +585,7 @@ router.post('/produtos/:id/cores', async (req, res, next) => {
     if (!nome) throw new Error('Informe o nome da cor.');
     const ord = await db.query('SELECT COALESCE(max(ordem), -1) + 1 AS o FROM produto_cores WHERE produto_id = $1', [pid]);
     await db.query('INSERT INTO produto_cores (produto_id, nome, sku, ordem) VALUES ($1,$2,$3,$4)', [pid, nome, normSku(req.body.sku), ord.rows[0].o]);
+    { const pn = await db.query('SELECT nome FROM produtos WHERE id = $1', [pid]); if (pn.rowCount) await novidades.registrar(db, { tipo: 'cor', produtoId: pid, titulo: pn.rows[0].nome + ' · cor nova: ' + nome, detalhe: normSku(req.body.sku) ? 'SKU ' + normSku(req.body.sku) : null }); }
     responder(req, res, { reload: true }, '/admin/produtos');
   } catch (e) { if (e && e.code === '23505') e = new Error('Essa cor já existe neste produto.'); responderErro(req, res, e, '/admin/produtos'); }
 });
@@ -607,6 +611,7 @@ router.post('/produtos/importar', async (req, res, next) => {
       } else {
         const ins = await client.query('INSERT INTO produtos (nome, descricao, custo_centavos) VALUES ($1,$2,$3) RETURNING id', [nome, p.descricao || null, custo]);
         pid = ins.rows[0].id; criados++;
+        if (custo !== null) { const cs = Array.isArray(p.cores) ? p.cores : []; await novidades.registrar(client, { tipo: 'produto', produtoId: pid, titulo: nome + ' liberado', detalhe: (p.descricao || '') + (cs.length ? ' · ' + cs.map((c) => (c && typeof c === 'object') ? c.nome : c).join(', ') : '') }); }
       }
       // cores: "Nome" ou { nome, sku } (SKU da Shopee / marketplace)
       const cores = Array.isArray(p.cores) ? p.cores : [];
@@ -639,8 +644,13 @@ router.post('/produtos/:id/custos', async (req, res, next) => {
     const repId = pInt(req.body.rep_id), funcId = pInt(req.body.func_id);
     const okRep = repId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]) : { rowCount: 0 };
     const okFunc = funcId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'funcionario'", [funcId]) : { rowCount: 0 };
+    const antes = await db.query('SELECT nome, custo_centavos FROM produtos WHERE id = $1', [pInt(req.params.id)]);
     await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5 WHERE id = $1',
       [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null]);
+    // produto que ganhou custo pela primeira vez passa a ter preco sugerido: fica liberado para os clientes
+    if (antes.rowCount && antes.rows[0].custo_centavos === null && custo !== null) {
+      await novidades.registrar(db, { tipo: 'produto', produtoId: pInt(req.params.id), titulo: antes.rows[0].nome + ' liberado', detalhe: 'já disponível para envio' });
+    }
     if (isAjax(req)) {
       // devolve o quadro recalculado para a tela atualizar sem recarregar
       const ref = await refCustos();
@@ -760,6 +770,7 @@ router.post('/precos', async (req, res, next) => {
     } else {
       await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos, negociado) VALUES ($1,$2,$3,$4,TRUE)', [clienteId, produtoId, prod.rows[0].nome, preco]);
     }
+    await novidades.registrar(db, { tipo: 'negociado', clienteId, produtoId, titulo: prod.rows[0].nome + ' com preço negociado para você', detalhe: formatBRL(preco) + ' por unidade, válido para todas as cores' });
     res.redirect('/admin/precos?cliente=' + clienteId + '&ok=' + encodeURIComponent('Negociação salva: substitui o preço sugerido para este cliente.'));
   } catch (e) { const cid = pInt(req.body.cliente_id) || ''; res.redirect('/admin/precos?cliente=' + cid + '&erro=' + encodeURIComponent(msgErro(e))); }
 });
@@ -780,6 +791,11 @@ router.post('/precos/:id/promo', async (req, res, next) => {
     if (!fim) throw new Error('Informe até quando vale a promoção.');
     if (ini && fim < ini) throw new Error('A data final é anterior à inicial.');
     await db.query('UPDATE itens SET promo_tipo = $2, promo_valor = $3, promo_inicio = $4, promo_fim = $5 WHERE id = $1', [id, tipo, valor, ini, fim]);
+    {
+      const it = await db.query('SELECT nome, produto_id, preco_centavos FROM itens WHERE id = $1', [id]);
+      const novo = tipo === 'percentual' ? Math.round(it.rows[0].preco_centavos * (10000 - valor) / 10000) : valor;
+      await novidades.registrar(db, { tipo: 'promo', clienteId: cid, produtoId: it.rows[0].produto_id, titulo: it.rows[0].nome + ' em promoção' + (fim ? ' até ' + brDate(fim) : ''), detalhe: (tipo === 'percentual' ? formatPercent(valor) + ' off · ' : '') + 'de ' + formatBRL(it.rows[0].preco_centavos) + ' por ' + formatBRL(novo) });
+    }
     res.redirect('/admin/precos?cliente=' + cid + '&ok=' + encodeURIComponent('Promoção aplicada.'));
   } catch (e) { res.redirect('/admin/precos?cliente=' + cid + '&erro=' + encodeURIComponent(msgErro(e))); }
 });

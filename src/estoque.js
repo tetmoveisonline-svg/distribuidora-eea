@@ -16,16 +16,27 @@ const MOTIVOS = ['Entrada', 'Ajuste', 'Saída manual'];
 async function movimentar(client, m) {
   const q = Number(m.quantidade || 0), r = Number(m.reserva || 0);
   if (!q && !r) return null;
-  let saldo, reservado;
+  let saldo, reservado, antes;
   if (m.corId) {
+    const b = await client.query('SELECT saldo - reservado AS d FROM produto_cores WHERE id = $1', [m.corId]); antes = b.rowCount ? Number(b.rows[0].d) : null;
     const x = await client.query('UPDATE produto_cores SET saldo = saldo + $2, reservado = GREATEST(0, reservado + $3) WHERE id = $1 AND produto_id = $4 RETURNING saldo, reservado, nome', [m.corId, q, r, m.produtoId]);
     if (x.rowCount === 0) return null;
     saldo = x.rows[0].saldo; reservado = x.rows[0].reservado; m.corNome = m.corNome || x.rows[0].nome;
   } else {
+    const b = await client.query('SELECT saldo - reservado AS d FROM produtos WHERE id = $1', [m.produtoId]); antes = b.rowCount ? Number(b.rows[0].d) : null;
     const x = await client.query('UPDATE produtos SET saldo = saldo + $2, reservado = GREATEST(0, reservado + $3) WHERE id = $1 RETURNING saldo, reservado', [m.produtoId, q, r]);
     if (x.rowCount === 0) return null;
     saldo = x.rows[0].saldo; reservado = x.rows[0].reservado;
   }
+  // Novidades para os clientes: estoque reposto (saiu de <=5 para >5) ou esgotou (saiu de >0 para <=0)
+  try {
+    const depois = saldo - reservado;
+    const nome = await client.query('SELECT nome FROM produtos WHERE id = $1', [m.produtoId]);
+    const rot = (nome.rowCount ? nome.rows[0].nome : 'Produto') + (m.corNome ? ' · ' + m.corNome : '');
+    const nov = require('./novidades');
+    if (antes !== null && antes <= 5 && depois > 5 && q > 0) await nov.registrarUnico(client, { tipo: 'reposto', produtoId: m.produtoId, titulo: rot + ' reposto', detalhe: antes + ' → ' + depois + ' disponíveis' }, 120);
+    else if (antes !== null && antes > 0 && depois <= 0) await nov.registrarUnico(client, { tipo: 'esgotou', produtoId: m.produtoId, titulo: rot + ' esgotou', detalhe: 'avisamos quando repor' }, 120);
+  } catch (e) { /* feed nao pode travar o estoque */ }
   await client.query(
     `INSERT INTO estoque_mov (produto_id, cor_id, cor_nome, quantidade, reserva, saldo_apos, reservado_apos, motivo, observacao, pedido_id, etiqueta_id, linha_id, usuario_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,

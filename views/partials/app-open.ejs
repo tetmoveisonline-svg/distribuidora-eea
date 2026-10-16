@@ -16,6 +16,7 @@
   <aside class="side">
     <% if (user.papel === 'cliente') { %>
       <div class="grp">Cliente</div>
+      <a class="nav-item <%= ativo === 'inicio' ? 'on' : '' %>" href="/inicio"><span class="ico">&#8962;</span> Início</a>
       <a class="nav-item <%= ativo === 'novo' ? 'on' : '' %>" href="/novo"><span class="ico">&#8593;</span> Novo envio</a>
       <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
       <a class="nav-item <%= ativo === 'financeiro' ? 'on' : '' %>" href="/financeiro"><span class="ico">&#36;</span> Financeiro</a>

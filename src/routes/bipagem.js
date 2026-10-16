@@ -114,6 +114,8 @@ async function aposMarcar(client, pedidoId, modo) {
         "UPDATE pedidos SET status = 'despachado', despachado_em = now(), separacao_em = COALESCE(separacao_em, now()) WHERE id = $1",
         [pedidoId]
       );
+      const pn = await client.query('SELECT numero, cliente_id, total_etiquetas FROM pedidos WHERE id = $1', [pedidoId]);
+      if (pn.rowCount) await require('../novidades').registrar(client, { tipo: 'pedido', clienteId: pn.rows[0].cliente_id, pedidoId, titulo: 'Pedido ' + pn.rows[0].numero + ' despachado por completo', detalhe: pn.rows[0].total_etiquetas + ' etiquetas no caminhão' });
     }
   }
 }

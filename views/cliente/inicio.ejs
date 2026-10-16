@@ -1,0 +1,74 @@
+<%- include('../partials/app-open', { titulo: 'Início', ativo: 'inicio' }) %>
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+  <h2 class="title"><%= saud %>, <%= user.nome %></h2>
+  <span class="dim" style="font-size:12.5px"><%= formatDateTime(new Date()).slice(0, 10) %> · <%= hora %></span>
+</div>
+<p class="sub">Seu crédito, seus pedidos em andamento e as novidades da distribuidora.</p>
+
+<div class="kpis four">
+  <% if (credito && credito.controlado) { %>
+    <div class="kpi <%= credito.bloqueado ? 'danger' : '' %>"><div class="kl">Crédito disponível</div><div class="kv"><%= formatBRL(credito.disponivel) %></div><div class="ks">de <%= formatBRL(credito.limite) %><%= credito.creditoConta > 0 ? ' · inclui ' + formatBRL(credito.creditoConta) + ' a seu favor' : '' %></div></div>
+  <% } else { %>
+    <div class="kpi"><div class="kl">Crédito</div><div class="kv">Sem limite</div><div class="ks"><%= credito && credito.creditoConta > 0 ? formatBRL(credito.creditoConta) + ' a seu favor' : 'envios liberados' %></div></div>
+  <% } %>
+  <div class="kpi <%= resumoFin.vencido_qtd ? 'danger' : '' %>"><div class="kl">Em aberto</div><div class="kv" style="color:<%= resumoFin.vencido_qtd ? 'var(--danger)' : 'var(--warn)' %>"><%= formatBRL(resumoFin.aberto_centavos) %></div><div class="ks"><%= resumoFin.vencido_qtd ? resumoFin.vencido_qtd + ' vencido(s)' : (resumoFin.proximo ? 'vence ' + resumoFin.proximo.vencimento_br + ' · ' + resumoFin.proximo.numero : 'nada em aberto') %></div></div>
+  <div class="kpi"><div class="kl">Pedidos em andamento</div><div class="kv"><%= andamento.length %></div><div class="ks"><%= etiquetasTotal %> etiquetas · <%= etiquetasDesp %> despachadas</div></div>
+  <div class="kpi"><div class="kl">Reservado p/ você</div><div class="kv"><%= reservado %></div><div class="ks"><%= reservado ? 'unidades em ' + coresReservadas + ' cor(es)' : 'nenhuma reserva' %></div></div>
+</div>
+
+<div class="ini-grid">
+  <div class="card pad">
+    <div class="section-title">Pedidos em andamento</div>
+    <% if (andamento.length === 0) { %>
+      <div class="empty">Nenhum pedido em andamento. Suba as etiquetas em "Novo envio".</div>
+    <% } else { %>
+      <div class="ini-peds">
+        <% andamento.forEach(function (p) { %>
+          <div class="ini-ped">
+            <div class="ini-ped-n"><b><%= p.numero %></b><div class="dim" style="font-size:11px"><%= formatDateTime(p.aceite_em).slice(0, 10) %></div></div>
+            <div class="ini-ped-mid">
+              <div class="ini-ped-itens"><%= p.itens || '—' %></div>
+              <div class="pbar" style="height:6px;margin-top:6px"><div class="pfill" style="width:<%= p.pct %>%;background:<%= p.despachadas > 0 ? 'var(--ok)' : 'var(--warn)' %>"></div></div>
+            </div>
+            <div class="ini-ped-st">
+              <% if (p.despachadas > 0) { %><span class="badge ok"><%= p.despachadas %> de <%= p.total_etiquetas %> coletadas</span>
+              <% } else if (p.status === 'separacao' || p.status === 'preparando' || p.separadas > 0) { %><span class="badge neutral">Em separação<%= p.separadas ? ' · ' + p.separadas : '' %></span>
+              <% } else { %><span class="badge warn">Aguardando</span><% } %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+    <div class="actions-inline" style="margin-top:14px">
+      <a class="btn sm" href="/novo">Novo envio</a>
+      <% andamento.filter(function (p) { return !p.expirado; }).slice(0, 2).forEach(function (p) { %>
+        <a class="doc-link" href="/pedido/<%= p.id %>/etiquetas">Etiquetas <%= p.numero %> <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span></a>
+      <% }); %>
+      <a class="doc-link" href="/meus-envios">Meus envios</a>
+      <a class="doc-link" href="/financeiro">Financeiro</a>
+    </div>
+  </div>
+
+  <div class="card pad">
+    <div class="section-title" style="display:flex;align-items:center;gap:8px">Novidades <% if (novasHoje) { %><span class="badge ok" style="padding:1px 7px"><%= novasHoje %> hoje</span><% } %></div>
+    <% if (novidades.length === 0) { %>
+      <div class="empty">Sem novidades por enquanto. Produtos liberados, reposições de estoque e promoções aparecem aqui.</div>
+    <% } else { %>
+      <div class="nov-list">
+        <% novidades.forEach(function (n) { %>
+          <div class="nov <%= n.tipo %>">
+            <span class="nov-dot"></span>
+            <div class="nov-body">
+              <div><span class="nov-tag"><%= n.rotulo %></span> <b><%= n.titulo %></b></div>
+              <% if (n.detalhe) { %><div class="dim" style="font-size:12px"><%= n.detalhe %></div><% } %>
+              <div class="dim" style="font-size:11px;margin-top:2px"><%= n.quando %><% if (n.produto_id) { %> · <a href="/estoque" style="color:var(--accent)">ver no estoque</a><% } else if (n.pedido_id) { %> · <a href="/meus-envios" style="color:var(--accent)">ver pedido</a><% } %></div>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<%- include('../partials/app-close') %>
