@@ -58,3 +58,14 @@ document.addEventListener('click', function (ev) {
   function up() { fetch('/admin/online.json').then(function (r) { return r.json(); }).then(function (d) { if (d && d.ok) n.textContent = d.online; }).catch(function () {}); }
   up(); setInterval(up, 30000);
 })();
+
+// Menu lateral como gaveta no celular.
+(function () {
+  var btn = document.getElementById('menuBtn'), side = document.getElementById('sideNav'), bd = document.getElementById('sideBackdrop');
+  if (!btn || !side || !bd) return;
+  function set(aberto) { side.classList.toggle('open', aberto); bd.classList.toggle('on', aberto); btn.setAttribute('aria-expanded', aberto ? 'true' : 'false'); document.body.style.overflow = aberto ? 'hidden' : ''; }
+  btn.addEventListener('click', function () { set(!side.classList.contains('open')); });
+  bd.addEventListener('click', function () { set(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') set(false); });
+  side.querySelectorAll('a.nav-item').forEach(function (a) { a.addEventListener('click', function () { set(false); }); });
+})();

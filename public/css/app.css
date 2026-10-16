@@ -427,3 +427,67 @@ tr.on-row td { color:var(--text); }
 .nov-body { min-width:0; font-size:13px; }
 .nov-tag { font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); margin-right:4px; }
 @media (max-width:900px) { .ini-grid { grid-template-columns:1fr; } .ini-ped { grid-template-columns:1fr; } }
+
+/* ======================= CELULAR / TELAS ESTREITAS ======================= */
+.menu-btn { display:none; }
+.side-backdrop { display:none; }
+@media (max-width:820px) {
+  /* topo */
+  .topbar { padding:10px 12px; gap:10px; }
+  .menu-btn { display:inline-flex; flex-direction:column; justify-content:center; gap:4px; width:40px; height:40px; border-radius:10px; border:1px solid var(--border-strong); background:var(--field-bg); cursor:pointer; padding:0 10px; flex:none; }
+  .menu-btn span { display:block; height:2px; background:var(--text); border-radius:2px; }
+  .brand { gap:8px; font-size:13px; min-width:0; }
+  .brand-nome { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .top-right { gap:8px; }
+  .top-right .uname { display:none; }
+  .online-pill { margin-right:0; padding:5px 8px; }
+  .theme-picker { display:none; }
+  /* menu lateral vira gaveta */
+  .shell { display:block; min-height:auto; }
+  .side { display:flex; position:fixed; top:0; left:0; bottom:0; width:min(82vw, 300px); z-index:60; transform:translateX(-105%); transition:transform .22s ease; box-shadow:0 0 40px rgba(0,0,0,.45); overflow-y:auto; padding-top:18px; }
+  .side.open { transform:translateX(0); }
+  .side-backdrop { display:block; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:55; opacity:0; pointer-events:none; transition:opacity .2s ease; }
+  .side-backdrop.on { opacity:1; pointer-events:auto; }
+  .nav-item { padding:12px 12px; font-size:15px; }
+  .main { padding:16px 14px 70px; max-width:none; }
+  .title { font-size:20px; }
+  /* toque */
+  .btn, .btn.sm, .cbtn, .mini { min-height:40px; }
+  .field input, .field select, .field textarea, .cat-tools input, .cat-tools select, .fin-filters select, .rep-sel select { font-size:16px; }
+  /* cards e grades */
+  .kpis, .kpis.four { grid-template-columns:1fr 1fr; gap:10px; }
+  .kpi .kv { font-size:19px; }
+  .grid2, .ini-grid, .ec-grid { grid-template-columns:1fr; }
+  .card.pad { padding:14px; }
+  .totalbar { flex-wrap:wrap; gap:10px; padding:14px 12px; }
+  .totalbar > div:last-child { width:100%; justify-content:space-between; }
+  .credit-bar { gap:10px; }
+  .dropzone { padding:20px 12px; }
+  .file-controls > div { flex:1 1 140px; }
+  .file-controls select { min-width:0; width:100%; }
+  .modal { max-width:none; max-height:94vh; border-radius:12px; }
+  .overlay { padding:10px; align-items:flex-end; }
+  /* tabelas rolam na horizontal sem quebrar a pagina */
+  .card > table, .card.pad > table, .disc-body table, .fin-table, .prod-table, .etq-table, .etqt { display:block; overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch; }
+  .card > table thead, .fin-table thead, .prod-table thead { display:table-header-group; }
+  table th, table td { padding:8px 8px; }
+  .prod-table .prod-nome { min-width:220px; }
+  .prod-table .custo-box { max-width:260px; }
+  .cor-row { flex-wrap:wrap; }
+  .cor-row input { width:110px; }
+  .fin-filters, .rep-tabs, .cat-tools, .rep-top { gap:6px; }
+  .rep-tabs .tab { padding:8px 10px; font-size:12.5px; }
+  .rep-sel select { min-width:0; width:100%; }
+  .price-main { grid-template-columns:1fr auto; }
+  .promo-grid { grid-template-columns:1fr 1fr; }
+  .hint-box { font-size:12px; }
+  .radio { padding:12px 10px 20px; }
+  .danger-zone .fin-form { flex-direction:column; align-items:stretch; }
+}
+@media (max-width:480px) {
+  .kpis, .kpis.four { grid-template-columns:1fr; }
+  .promo-grid { grid-template-columns:1fr; }
+  .price-main { grid-template-columns:1fr; }
+  .price-value { text-align:left; }
+  .bip-modes .bip-mode { flex:1; text-align:center; }
+}

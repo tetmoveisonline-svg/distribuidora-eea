@@ -1,6 +1,7 @@
 <%- include('head', { titulo: titulo }) %>
 <div class="topbar">
-  <div class="brand"><span class="logo-pill"><img src="/img/logo.png" alt="E&amp;A Móveis" /></span> <%= empresa.nome %></div>
+  <button type="button" class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-controls="sideNav" aria-expanded="false"><span></span><span></span><span></span></button>
+  <div class="brand"><span class="logo-pill"><img src="/img/logo.png" alt="E&amp;A Móveis" /></span> <span class="brand-nome"><%= empresa.nome %></span></div>
   <div class="top-right">
     <% if (user.papel === 'admin' || user.papel === 'operador') { %>
       <a class="online-pill" href="/admin/online" id="onlinePill" title="usuários no site nos últimos 5 minutos"><span class="od"></span> <span id="onlineN">…</span> online</a>
@@ -13,7 +14,8 @@
   </div>
 </div>
 <div class="shell">
-  <aside class="side">
+  <div class="side-backdrop" id="sideBackdrop"></div>
+  <aside class="side" id="sideNav">
     <% if (user.papel === 'cliente') { %>
       <div class="grp">Cliente</div>
       <a class="nav-item <%= ativo === 'inicio' ? 'on' : '' %>" href="/inicio"><span class="ico">&#8962;</span> Início</a>
