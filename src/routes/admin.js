@@ -405,16 +405,16 @@ router.get('/clientes', async (req, res, next) => {
       const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
       const linhas = [
         // Simbolos do plano basico do Unicode (3 bytes): o WhatsApp para Windows quebra emojis de 4 bytes vindos por link.
-        'Olá, ' + a.nome + '! Seu acesso ao sistema da ' + nomeEmpresa + ' está pronto. ✅',
+        'Olá, ' + a.nome + '! Seu acesso ao sistema da ' + nomeEmpresa + ' está pronto. ✨',
         '',
-        '➡ Site: ' + site,
-        '▪ Login: ' + a.login,
-        '▪ Senha: ' + a.senha,
+        '⭐ Site: ' + site,
+        '✅ Login: ' + a.login,
+        '✅ Senha: ' + a.senha,
         '',
         'Por lá você sobe as etiquetas, acompanha cada pedido, vê o estoque em tempo real e o seu financeiro.',
         'Os prazos e o limite de crédito combinados com você aparecem na aba Financeiro.',
         '',
-        '♫ Não esqueça de ouvir a rádio no menu do sistema para alegrar o seu dia!',
+        '☀️ Não esqueça de ouvir a rádio no menu do sistema para alegrar o seu dia!',
         '',
         'Qualquer dúvida, é só chamar aqui. Bons envios!',
       ];
