@@ -39,7 +39,7 @@
                 <div class="custo-grid">
                   <span>Custo do produto</span><span class="num"><%= p.custo_centavos !== null && p.custo_centavos !== undefined ? formatBRL(p.custo_centavos) : '—' %></span>
                   <span>Funcionário <span class="dim">· <%= p.func ? p.func.nome : 'ninguém' %></span></span><span class="num"><%= formatBRL(p.func_centavos) %></span>
-                  <span>Representante <span class="dim">· <%= p.rep ? p.rep.nome : 'ninguém' %></span></span><span class="num"><%= formatPercent(p.rep_bps_efetivo) %> da venda</span>
+                  <span>Representante <span class="dim">· <%= p.rep ? p.rep.nome : 'ninguém' %> · <%= formatPercent(p.rep_bps_efetivo) %> da venda</span></span><span class="num"><%= p.sugerido !== null ? formatBRL(Math.round(p.sugerido * p.rep_bps_efetivo / 10000)) : '—' %></span>
                   <span>Lucro desejado</span><span class="num"><%= p.lucro_centavos !== null && p.lucro_centavos !== undefined ? formatBRL(p.lucro_centavos) : '—' %></span>
                   <span class="tot">Preço sugerido</span><span class="num tot ok"><%= p.sugerido !== null ? formatBRL(p.sugerido) : '—' %></span>
                 </div>
