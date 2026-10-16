@@ -1,11 +1,15 @@
 <%- include('../partials/app-open', { titulo: 'Estoque', ativo: 'estoque' }) %>
 
 <h2 class="title">Estoque</h2>
-<p class="sub">Preço negociado e estoque disponível dos produtos que você tem negociação. Ao aceitar um envio, as etiquetas ficam reservadas para você; o despacho consome a reserva. Atualiza sozinho a cada 30 segundos.</p>
+<p class="sub">Seu preço e o estoque disponível de todos os produtos. Ao aceitar um envio, as etiquetas ficam reservadas para você; o despacho consome a reserva. Atualiza sozinho a cada 30 segundos.</p>
 
 <div class="card pad">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-    <div class="section-title" style="margin:0">Produtos negociados</div>
+    <div class="rep-tabs" style="margin:0" role="tablist" aria-label="Filtro de estoque">
+      <button type="button" class="tab on" data-filtro="todos" role="tab">Todos <span class="dim" id="nTodos"></span></button>
+      <button type="button" class="tab" data-filtro="com" role="tab">Com estoque <span class="dim" id="nCom"></span></button>
+      <button type="button" class="tab" data-filtro="sem" role="tab">Sem estoque <span class="dim" id="nSem"></span></button>
+    </div>
     <span class="dim" style="font-size:12px">Atualizado às <span id="estAtual"><%= formatDateTime(new Date()).slice(11) %></span> · <button type="button" class="btn ghost sm" id="estRefresh">Atualizar agora</button></span>
   </div>
   <div id="estBox">
@@ -25,8 +29,40 @@
     if (p.promo) return '<b style="color:var(--ok)">' + esc(p.preco_txt) + '</b> <span class="badge ok" style="margin-left:4px">' + esc(p.promo_rotulo) + '</span><div class="dim" style="font-size:11px;text-decoration:line-through">' + esc(p.preco_original_txt) + '</div>';
     return '<b>' + esc(p.preco_txt) + '</b>';
   }
+  var dados = <%- JSON.stringify(produtos) %>;
+  var filtro = 'todos';
+  try { var f0 = localStorage.getItem('estoqueFiltro'); if (f0 === 'com' || f0 === 'sem' || f0 === 'todos') filtro = f0; } catch (e) {}
+  // Filtro por cor: "com" = disponivel > 0; "sem" = disponivel <= 0. Produto de cor unica usa o proprio disponivel.
+  function aplicarFiltro(produtos, f) {
+    if (f === 'todos') return produtos;
+    var out = [];
+    produtos.forEach(function (p) {
+      if (!p.cores.length) { if ((f === 'com') === (p.disponivel > 0)) out.push(p); return; }
+      var cores = p.cores.filter(function (c) { return (f === 'com') === (c.disponivel > 0); });
+      if (cores.length) out.push(Object.assign({}, p, { cores: cores }));
+    });
+    return out;
+  }
+  function contar(produtos, f) {
+    var n = 0;
+    produtos.forEach(function (p) {
+      if (!p.cores.length) { if (f === 'todos' || (f === 'com') === (p.disponivel > 0)) n++; return; }
+      p.cores.forEach(function (c) { if (f === 'todos' || (f === 'com') === (c.disponivel > 0)) n++; });
+    });
+    return n;
+  }
+  function renderTudo() {
+    document.getElementById('nTodos').textContent = contar(dados, 'todos');
+    document.getElementById('nCom').textContent = contar(dados, 'com');
+    document.getElementById('nSem').textContent = contar(dados, 'sem');
+    document.querySelectorAll('[data-filtro]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-filtro') === filtro); b.setAttribute('aria-selected', b.getAttribute('data-filtro') === filtro ? 'true' : 'false'); });
+    render(aplicarFiltro(dados, filtro));
+  }
+  document.querySelectorAll('[data-filtro]').forEach(function (b) {
+    b.addEventListener('click', function () { filtro = b.getAttribute('data-filtro'); try { localStorage.setItem('estoqueFiltro', filtro); } catch (e) {} renderTudo(); });
+  });
   function render(produtos) {
-    if (!produtos.length) { box.innerHTML = '<div class="empty">Você ainda não tem produtos negociados.</div>'; return; }
+    if (!produtos.length) { box.innerHTML = '<div class="empty">' + (filtro === 'com' ? 'Nenhuma cor com estoque disponível agora.' : (filtro === 'sem' ? 'Nenhuma cor sem estoque.' : 'Nenhum produto disponível no momento.')) + '</div>'; return; }
     function meu(x) { return x.meu_reservado > 0 ? '<span style="color:var(--warn)">' + x.meu_reservado + '</span> <span class="dim" style="font-size:11px">' + esc(x.meus_pedidos) + '</span>' : '<span class="dim">—</span>'; }
     var h = '<table><thead><tr><th>Produto</th><th class="num">Seu preço</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead><tbody>';
     produtos.forEach(function (p) {
@@ -43,12 +79,13 @@
   function atualizar() {
     fetch('/api/estoque').then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return;
-      render(d.produtos);
+      dados = d.produtos; renderTudo();
       at.textContent = String(d.atualizado_em).slice(11);
     }).catch(function () {});
   }
   document.getElementById('estRefresh').addEventListener('click', atualizar);
   setInterval(atualizar, 30000);
+  renderTudo();
 })();
 </script>
 

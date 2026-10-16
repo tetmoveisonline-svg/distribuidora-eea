@@ -1,0 +1,393 @@
+<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'><title>Guia do Cliente E&A</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  /* Layout: uma tela por cena, como um vídeo. Painel do "sistema" à esquerda, narração à direita; em celular empilha. */
+  :root {
+    --bg: #0f1412; --panel: #161c19; --card: #1c2420; --line: #2a3530; --line-strong: #3a4842;
+    --fg: #e8ede9; --muted: #9aa8a0; --dim: #6b776f;
+    --accent: #3f9d6b; --accent-soft: rgba(63,157,107,.16); --warn: #c9973f; --warn-soft: rgba(201,151,63,.16); --danger: #c0554e; --danger-soft: rgba(192,85,78,.16);
+    --display: 'Manrope', 'Segoe UI', system-ui, sans-serif; --body: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; padding-block: 0; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding-block: 24px 40px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; letter-spacing: .2px; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .brand small { font-family: var(--body); font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .count { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+  .stage { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .progress { height: 4px; background: var(--line); }
+  .progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+  .scene { display: none; grid-template-columns: 1.35fr 1fr; gap: 0; min-height: 440px; }
+  .scene.on { display: grid; }
+  .screen { padding: 22px; border-right: 1px solid var(--line); background: radial-gradient(1200px 400px at 80% -10%, rgba(63,157,107,.08), transparent 60%); min-width: 0; }
+  .talk { padding: 26px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .talk .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--accent); }
+  .talk h2 { font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1.2; margin: 0; text-wrap: balance; }
+  .talk p { margin: 0; color: var(--muted); max-width: 42ch; }
+  .talk ul { margin: 0; padding-left: 18px; color: var(--muted); }
+  .talk li { margin: 4px 0; }
+  .talk b { color: var(--fg); font-weight: 600; }
+  .tip { margin-top: auto; background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--fg); }
+
+  /* mock do sistema */
+  .app { border: 1px solid var(--line-strong); border-radius: 12px; background: var(--bg); overflow: hidden; font-size: 12.5px; }
+  .app .bar { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-bottom: 1px solid var(--line); font-family: var(--display); font-weight: 700; font-size: 12px; }
+  .app .bar .u { font-family: var(--body); font-weight: 400; color: var(--muted); }
+  .app .body { display: grid; grid-template-columns: 112px 1fr; min-height: 300px; }
+  .app nav { border-right: 1px solid var(--line); padding: 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .app nav .g { font-size: 9.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); padding: 4px 8px; }
+  .app nav a { padding: 7px 9px; border-radius: 7px; color: var(--muted); text-decoration: none; }
+  .app nav a.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+  .app main { padding: 14px; min-width: 0; }
+  .app h3 { font-family: var(--display); font-size: 15px; margin: 0 0 4px; }
+  .app .sub { color: var(--muted); font-size: 11.5px; margin: 0 0 12px; }
+  .drop { border: 1px dashed var(--accent); border-radius: 10px; padding: 16px; text-align: center; color: var(--muted); background: var(--accent-soft); }
+  .drop b { color: var(--fg); display: block; margin-bottom: 2px; }
+  .row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 70px 90px; gap: 8px; align-items: end; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .row .f { font-weight: 600; }
+  .row .d { color: var(--dim); font-size: 11px; }
+  .lbl { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .4px; }
+  .sel, .inp { display: block; width: 100%; background: var(--card); border: 1px solid var(--line-strong); border-radius: 7px; padding: 6px 8px; color: var(--fg); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inp.c { text-align: center; }
+  .tot { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; }
+  .big { font-family: var(--display); font-weight: 800; font-size: 18px; }
+  .btn { background: var(--accent); color: #06110b; border: none; border-radius: 8px; padding: 8px 12px; font-weight: 700; font-family: var(--body); font-size: 12px; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line-strong); }
+  .badge { display: inline-block; font-size: 10.5px; padding: 2px 8px; border-radius: 20px; }
+  .ok { background: var(--accent-soft); color: var(--accent); } .wn { background: var(--warn-soft); color: var(--warn); } .dg { background: var(--danger-soft); color: var(--danger); } .nt { background: var(--card); color: var(--muted); border: 1px solid var(--line-strong); }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; }
+  .kpi .l { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .4px; }
+  .kpi .v { font-family: var(--display); font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+  table.t { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .t th { text-align: left; font-size: 9.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .4px; padding: 6px 6px; border-bottom: 1px solid var(--line); }
+  .t td { padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .t .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .timeline { display: flex; align-items: center; gap: 0; margin: 10px 0 14px; }
+  .step { flex: 1; text-align: center; font-size: 10.5px; color: var(--muted); position: relative; }
+  .step i { display: block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); margin: 0 auto 5px; background: var(--bg); }
+  .step.done i { background: var(--accent); border-color: var(--accent); }
+  .step.cur i { border-color: var(--accent); }
+  .step + .step::before { content: ""; position: absolute; left: -50%; right: 50%; top: 6px; height: 2px; background: var(--line); z-index: -1; }
+  .credit { display: flex; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; margin-bottom: 12px; }
+  .credit .v { font-family: var(--display); font-weight: 800; font-size: 15px; }
+  .pbar { flex: 1; height: 7px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 20px; overflow: hidden; }
+  .pbar i { display: block; height: 100%; background: var(--warn); }
+  .alert { border: 1px solid var(--danger); background: var(--danger-soft); border-radius: 9px; padding: 10px 12px; font-size: 11.5px; }
+  .alert b { color: var(--danger); display: block; margin-bottom: 3px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .opt { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 11px; color: var(--muted); }
+  .opt b { color: var(--fg); display: block; margin-bottom: 3px; }
+  .wa { background: #25d366; color: #0b2e1a; border: none; border-radius: 7px; padding: 5px 9px; font-weight: 700; font-size: 11px; margin-top: 6px; }
+
+  /* animações sutis de entrada */
+  .scene.on .screen { animation: rise .5s ease both; }
+  .scene.on .talk > * { animation: rise .5s ease both; }
+  .scene.on .talk > :nth-child(2) { animation-delay: .08s } .scene.on .talk > :nth-child(3) { animation-delay: .16s } .scene.on .talk > :nth-child(4) { animation-delay: .24s } .scene.on .talk > :nth-child(5) { animation-delay: .32s }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(63,157,107,.45) } 50% { box-shadow: 0 0 0 8px rgba(63,157,107,0) } }
+  @media (prefers-reduced-motion: reduce) { .scene.on .screen, .scene.on .talk > *, .pulse { animation: none; } .progress > i { transition: none; } }
+
+  .controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--card); }
+  .controls .grp { display: flex; gap: 8px; align-items: center; }
+  .cbtn { background: transparent; color: var(--fg); border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 12px; font-family: var(--body); font-size: 13px; cursor: pointer; }
+  .cbtn:hover { border-color: var(--accent); }
+  .cbtn.primary { background: var(--accent); color: #06110b; border-color: var(--accent); font-weight: 700; min-width: 110px; }
+  .cbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dots { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dots button { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--line-strong); background: transparent; padding: 0; cursor: pointer; }
+  .dots button.on { background: var(--accent); border-color: var(--accent); }
+  .dots button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .index { margin-top: 22px; }
+  .index h3 { font-family: var(--display); font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 700; }
+  .index ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 28px; color: var(--muted); }
+  .index li { margin: 3px 0; break-inside: avoid; }
+  .index a { color: var(--fg); text-decoration: none; }
+  .index a:hover { color: var(--accent); }
+  footer.ft { margin-top: 26px; color: var(--dim); font-size: 12.5px; }
+  @media (max-width: 820px) {
+    .scene { grid-template-columns: 1fr; }
+    .screen { border-right: none; border-bottom: 1px solid var(--line); padding: 14px; }
+    .app .body { grid-template-columns: 1fr; } .app nav { display: none; }
+    .row { grid-template-columns: 1fr 1fr; }
+    .index ol { columns: 1; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  html, body { background: #0f1412 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { padding: 0 !important; }
+  .wrap { max-width: none; padding-block: 0; }
+  header.top { margin-bottom: 8px; }
+  .count, .controls, .progress, .index, footer.ft { display: none !important; }
+  .stage { border: none; border-radius: 0; background: transparent; }
+  .scene { display: grid !important; grid-template-columns: 1.35fr 1fr; min-height: 0; page-break-after: always; break-after: page; border: 1px solid #2a3530; border-radius: 14px; overflow: hidden; margin-bottom: 8px; background: #161c19; }
+  .scene:last-of-type { page-break-after: auto; break-after: auto; }
+  .scene .screen, .scene .talk > *, .pulse { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .talk { padding: 20px; }
+  .talk .tip { margin-top: 12px; }
+</style>
+
+</head><body><div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="dot"></span> Distribuidora E&amp;A Móveis <small>· como funciona a sua área</small></div>
+    <div class="count"><span id="cur">1</span> / <span id="tot">7</span></div>
+  </header>
+
+  <div class="stage" id="stage" aria-live="polite">
+    <div class="progress"><i id="prog"></i></div>
+
+    <!-- 1 · Entrar -->
+    <section class="scene" data-dur="9000" id="s1">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span><span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px"></span>DISTRIBUIDORA E&amp;A MOVEIS</span><span class="u">Entrar</span></div>
+          <div class="body" style="grid-template-columns:1fr">
+            <main style="max-width:340px;margin:18px auto">
+              <h3>Entrar</h3>
+              <p class="sub">Use o login e a senha que a distribuidora enviou.</p>
+              <span class="lbl">Login</span><div class="inp">sua.loja</div>
+              <span class="lbl" style="margin-top:8px">Senha</span><div class="inp">••••••••</div>
+              <div style="margin-top:12px"><span class="btn pulse">Entrar</span></div>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 1 de 7 · acesso</div>
+        <h2>Entre com o seu login</h2>
+        <p>O endereço é <b>distribuidoraeea.up.railway.app</b>. Funciona no computador e no celular, sem instalar nada.</p>
+        <p>Ao entrar, você vê quatro áreas no menu: <b>Novo envio</b>, <b>Meus envios</b>, <b>Financeiro</b> e <b>Estoque</b>.</p>
+        <div class="tip">Salve o endereço nos favoritos. Login e senha são pessoais da sua loja.</div>
+      </div>
+    </section>
+
+    <!-- 2 · Subir etiquetas -->
+    <section class="scene" data-dur="12000" id="s2">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span>DISTRIBUIDORA E&amp;A MOVEIS</span><span class="u">sua loja · Sair</span></div>
+          <div class="body">
+            <nav><span class="g">Cliente</span><a class="on">Novo envio</a><a>Meus envios</a><a>Financeiro</a><a>Estoque</a></nav>
+            <main>
+              <h3>Novo envio</h3>
+              <p class="sub">Suba os PDFs das etiquetas (1 etiqueta por página). O sistema conta as páginas.</p>
+              <div class="credit"><div><div class="lbl">Crédito disponível</div><div class="v">R$ 4.200,00</div></div><div class="pbar"><i style="width:30%"></i></div><span class="badge nt">R$ 1.800,00 em aberto</span></div>
+              <div class="drop pulse"><b>Arraste os PDFs das etiquetas aqui</b>ou clique para selecionar</div>
+              <div class="row">
+                <div><div class="f">etiquetas-dulce.pdf</div><div class="d">30 páginas · 30 etiquetas</div></div>
+                <div><span class="lbl">Item</span><div class="sel">PENTEADEIRA DULCE · R$ 141,99</div></div>
+                <div><span class="lbl">Cor</span><div class="sel">Branco · DULCE1 · 61 disp.</div></div>
+                <div><span class="lbl">Qtd</span><div class="inp c">30</div></div>
+                <div style="text-align:right;font-weight:700">R$ 4.259,70</div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 2 de 7 · novo envio</div>
+        <h2>Suba o PDF das etiquetas</h2>
+        <ul>
+          <li>Arraste o PDF térmico das etiquetas, <b>uma etiqueta por página</b>.</li>
+          <li>O sistema conta as páginas e já preenche a <b>quantidade</b>.</li>
+          <li>Escolha o <b>produto</b> e a <b>cor</b>. O preço já aparece.</li>
+          <li>Se reduzir a quantidade, valem sempre as <b>primeiras páginas</b> do PDF.</li>
+        </ul>
+        <div class="tip">A barra do topo mostra seu crédito disponível antes de você revisar.</div>
+      </div>
+    </section>
+
+    <!-- 3 · Limite de crédito -->
+    <section class="scene" data-dur="12000" id="s3">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span>DISTRIBUIDORA E&amp;A MOVEIS</span><span class="u">sua loja</span></div>
+          <div class="body">
+            <nav><span class="g">Cliente</span><a class="on">Novo envio</a><a>Meus envios</a><a>Financeiro</a><a>Estoque</a></nav>
+            <main>
+              <div class="credit"><div><div class="lbl">Crédito disponível</div><div class="v">R$ 2.000,00</div></div><div class="pbar"><i style="width:60%"></i></div></div>
+              <div class="alert"><b>Este envio ultrapassa seu limite de crédito</b>O pedido fica em R$ 4.259,70 e você tem R$ 2.000,00 disponíveis. Excede em R$ 2.259,70.
+                <div class="opts">
+                  <div class="opt"><b>Enviar menos etiquetas agora</b>Cabem até 14 etiquetas. As outras 16 vão num próximo envio.<br><span class="btn" style="font-size:10.5px;padding:5px 8px;margin-top:6px;display:inline-block">Ajustar para 14</span></div>
+                  <div class="opt"><b>Liberar mais saldo</b>Antecipe o pagamento do pedido em aberto.<br><span class="wa" style="display:inline-block">Pedir antecipação no WhatsApp</span></div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 3 de 7 · limite de crédito</div>
+        <h2>Se passar do seu crédito, o sistema avisa</h2>
+        <p>Cada loja tem um limite combinado. O que está em aberto no financeiro consome o limite; quando você paga, ele volta.</p>
+        <ul>
+          <li><b>Ajustar</b>: o sistema diz quantas etiquetas cabem e preenche para você.</li>
+          <li><b>WhatsApp</b>: abre a conversa com a distribuidora já com a mensagem pronta para antecipar o pagamento.</li>
+        </ul>
+        <div class="tip">"Revisar pedido" libera assim que o total couber no crédito.</div>
+      </div>
+    </section>
+
+    <!-- 4 · Revisar e aceitar -->
+    <section class="scene" data-dur="11000" id="s4">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span>Revisar pedido</span><span class="u">confira antes de aceitar</span></div>
+          <div class="body" style="grid-template-columns:1fr">
+            <main>
+              <table class="t"><thead><tr><th>Arquivo</th><th>Item</th><th class="n">Qtd</th><th class="n">Unit.</th><th class="n">Total</th></tr></thead>
+                <tbody><tr><td>etiquetas-dulce.pdf</td><td>PENTEADEIRA DULCE · Branco (DULCE1)</td><td class="n">30</td><td class="n">R$ 141,99</td><td class="n">R$ 4.259,70</td></tr></tbody></table>
+              <div class="tot"><span class="badge nt">30 etiquetas</span><span class="big">R$ 4.259,70</span></div>
+              <div style="margin-top:10px;font-size:11.5px;color:var(--muted)"><span style="display:inline-block;width:12px;height:12px;border:1px solid var(--accent);border-radius:3px;background:var(--accent);vertical-align:-2px;margin-right:6px"></span>Confirmo os envios e os valores listados acima.</div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><span class="btn ghost">Voltar</span><span class="btn pulse">Aceitar e gerar PDF</span></div>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 4 de 7 · aceite</div>
+        <h2>Revise e aceite o pedido</h2>
+        <p>A revisão mostra arquivo, produto, cor, quantidade e valor. Marque a confirmação e clique em <b>Aceitar e gerar PDF</b>.</p>
+        <ul>
+          <li>Nasce o <b>pedido</b> com número, por exemplo DS-1050.</li>
+          <li>O <b>comprovante em PDF</b> fica guardado com data e hora.</li>
+          <li>As etiquetas ficam <b>reservadas no estoque</b> para você.</li>
+        </ul>
+        <div class="tip">Depois do aceite não dá para editar. Se errou, fale com a distribuidora.</div>
+      </div>
+    </section>
+
+    <!-- 5 · Meus envios -->
+    <section class="scene" data-dur="12000" id="s5">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span>DISTRIBUIDORA E&amp;A MOVEIS</span><span class="u">sua loja</span></div>
+          <div class="body">
+            <nav><span class="g">Cliente</span><a>Novo envio</a><a class="on">Meus envios</a><a>Financeiro</a><a>Estoque</a></nav>
+            <main>
+              <h3>Meus envios</h3>
+              <div style="display:flex;justify-content:space-between;align-items:center"><span><b>DS-1050</b> <span class="d" style="color:var(--dim);font-size:11px">· 30 etiquetas · R$ 4.259,70</span></span><span class="badge nt">Em separação</span></div>
+              <div class="timeline"><div class="step done"><i></i>Aceito</div><div class="step done"><i></i>Recebido</div><div class="step cur"><i></i>Em separação</div><div class="step"><i></i>Despachado</div></div>
+              <div style="display:flex;gap:6px;margin-bottom:10px"><span class="btn ghost">Etiquetas <span class="badge wn">71h</span></span><span class="btn ghost">Comprovante</span></div>
+              <table class="t"><thead><tr><th>#</th><th>Produto</th><th>Situação</th><th>Bipe da coleta</th></tr></thead>
+                <tbody>
+                  <tr><td>1</td><td>PENTEADEIRA DULCE · Branco</td><td><span class="badge ok">✓ Coletado</span></td><td>15/10 14:02</td></tr>
+                  <tr><td>2</td><td>PENTEADEIRA DULCE · Branco</td><td><span class="badge ok">✓ Coletado</span></td><td>15/10 14:03</td></tr>
+                  <tr><td>3</td><td>PENTEADEIRA DULCE · Branco</td><td><span style="color:var(--accent)">● Separando</span></td><td>—</td></tr>
+                  <tr><td>4</td><td>PENTEADEIRA DULCE · Branco</td><td><span style="color:var(--warn)">● Aguardando</span></td><td>—</td></tr>
+                </tbody></table>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 5 de 7 · acompanhamento</div>
+        <h2>Acompanhe cada etiqueta</h2>
+        <p>Em <b>Meus envios</b> você vê a linha do tempo do pedido e a situação de cada etiqueta: <b>Aguardando</b>, <b>Separando</b> e <b>Coletado</b>, com a hora do bipe.</p>
+        <ul>
+          <li><b>Etiquetas</b>: baixe o PDF para imprimir. Vale por <b>72 horas</b>.</li>
+          <li><b>Comprovante</b>: fica disponível para sempre.</li>
+        </ul>
+        <div class="tip">Se sobrar etiqueta no encerramento, você paga só as despachadas; o resto vira crédito.</div>
+      </div>
+    </section>
+
+    <!-- 6 · Financeiro -->
+    <section class="scene" data-dur="12000" id="s6">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span>DISTRIBUIDORA E&amp;A MOVEIS</span><span class="u">sua loja</span></div>
+          <div class="body">
+            <nav><span class="g">Cliente</span><a>Novo envio</a><a>Meus envios</a><a class="on">Financeiro</a><a>Estoque</a></nav>
+            <main>
+              <h3>Financeiro</h3>
+              <div class="kpis"><div class="kpi"><div class="l">Em aberto</div><div class="v" style="color:var(--warn)">R$ 4.259,70</div></div><div class="kpi"><div class="l">Vencido</div><div class="v">R$ 0,00</div></div><div class="kpi"><div class="l">Crédito a seu favor</div><div class="v" style="color:var(--accent)">R$ 283,98</div></div></div>
+              <table class="t"><thead><tr><th>Pedido</th><th>Vencimento</th><th class="n">Valor</th><th>Situação</th></tr></thead>
+                <tbody>
+                  <tr><td><b>DS-1050</b></td><td>22/10/2026</td><td class="n">R$ 4.259,70</td><td><span class="badge wn">Em aberto</span></td></tr>
+                  <tr><td><b>DS-1046</b></td><td>21/10/2026</td><td class="n">R$ 3.600,00</td><td><span class="badge ok">Pago 20/10</span></td></tr>
+                </tbody></table>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 6 de 7 · financeiro</div>
+        <h2>Veja o que vence e o que já pagou</h2>
+        <p>Cada pedido aceito vira um lançamento com <b>vencimento</b> igual à data do aceite mais o prazo combinado. A baixa é feita pela distribuidora quando o pagamento é confirmado.</p>
+        <ul>
+          <li>Abra o <b>detalhe</b> para ver os itens que compuseram o valor.</li>
+          <li><b>Crédito a seu favor</b> aparece quando sobra valor de um pedido já pago e abate o próximo automaticamente.</li>
+        </ul>
+        <div class="tip">Pagou? O crédito disponível para novos envios volta assim que a baixa é registrada.</div>
+      </div>
+    </section>
+
+    <!-- 7 · Estoque -->
+    <section class="scene" data-dur="11000" id="s7">
+      <div class="screen">
+        <div class="app">
+          <div class="bar"><span>DISTRIBUIDORA E&amp;A MOVEIS</span><span class="u">sua loja</span></div>
+          <div class="body">
+            <nav><span class="g">Cliente</span><a>Novo envio</a><a>Meus envios</a><a>Financeiro</a><a class="on">Estoque</a></nav>
+            <main>
+              <h3>Estoque</h3>
+              <p class="sub">Atualiza sozinho a cada 30 segundos.</p>
+              <table class="t"><thead><tr><th>Produto</th><th class="n">Seu preço</th><th>Cor</th><th>SKU</th><th class="n">Disponível</th><th class="n">Reservado p/ você</th></tr></thead>
+                <tbody>
+                  <tr><td>PENTEADEIRA DULCE</td><td class="n"><b>R$ 141,99</b></td><td>Branco</td><td style="font-family:var(--mono)">DULCE1</td><td class="n"><span class="badge ok">61</span></td><td class="n" style="color:var(--warn)">30 <span style="color:var(--dim);font-size:10px">DS-1050</span></td></tr>
+                  <tr><td></td><td></td><td>Nature/Off</td><td style="font-family:var(--mono)">DULCE2</td><td class="n"><span class="badge ok">100</span></td><td class="n" style="color:var(--dim)">—</td></tr>
+                  <tr><td>SAP. AGATHA 3P</td><td class="n"><b>R$ 136,71</b></td><td>Branco</td><td style="font-family:var(--mono)">AGATHA1</td><td class="n"><span class="badge wn">4</span></td><td class="n" style="color:var(--dim)">—</td></tr>
+                  <tr><td></td><td></td><td>Nature/Off</td><td style="font-family:var(--mono)">AGATHA2</td><td class="n"><span class="badge dg">0</span></td><td class="n" style="color:var(--dim)">—</td></tr>
+                </tbody></table>
+            </main>
+          </div>
+        </div>
+      </div>
+      <div class="talk">
+        <div class="eyebrow">Passo 7 de 7 · estoque</div>
+        <h2>Consulte o estoque em tempo real</h2>
+        <p>Todos os produtos aparecem com o <b>seu preço</b>, as cores com SKU e o saldo <b>disponível</b>. O que seus pedidos aceitos ainda vão consumir aparece em <b>Reservado p/ você</b>.</p>
+        <ul>
+          <li><span class="badge ok">verde</span> disponível · <span class="badge wn">amarelo</span> baixo · <span class="badge dg">vermelho</span> esgotado</li>
+          <li>Ao subir etiquetas acima do disponível, o sistema avisa, mas o pedido segue e a distribuidora confirma a reposição.</li>
+        </ul>
+        <div class="tip">Dúvidas? Fale com a distribuidora pelo WhatsApp que aparece no próprio sistema.</div>
+      </div>
+    </section>
+
+    <div class="controls">
+      <div class="grp">
+        <button class="cbtn" id="prev" aria-label="Passo anterior">‹ Anterior</button>
+        <button class="cbtn primary" id="play" aria-label="Pausar ou continuar">Pausar</button>
+        <button class="cbtn" id="next" aria-label="Próximo passo">Próximo ›</button>
+      </div>
+      <div class="dots" id="dots" role="tablist" aria-label="Passos"></div>
+    </div>
+  </div>
+
+  <div class="index">
+    <h3>Índice</h3>
+    <ol>
+      <li><a href="#s1" data-go="0">Entrar com o seu login</a></li>
+      <li><a href="#s2" data-go="1">Subir o PDF das etiquetas</a></li>
+      <li><a href="#s3" data-go="2">Limite de crédito e avisos</a></li>
+      <li><a href="#s4" data-go="3">Revisar e aceitar o pedido</a></li>
+      <li><a href="#s5" data-go="4">Acompanhar em Meus envios</a></li>
+      <li><a href="#s6" data-go="5">Financeiro: vencimentos e crédito</a></li>
+      <li><a href="#s7" data-go="6">Estoque em tempo real</a></li>
+    </ol>
+  </div>
+
+  <footer class="ft">Os valores das telas são exemplos. O sistema roda sozinho; use Pausar para ler com calma, ou as setas do teclado para avançar e voltar.</footer>
+</div>
+
+</body></html>
