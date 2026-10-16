@@ -491,3 +491,10 @@ tr.on-row td { color:var(--text); }
   .price-value { text-align:left; }
   .bip-modes .bip-mode { flex:1; text-align:center; }
 }
+@media (max-width:820px) {
+  /* impede que o conteudo das grades (tabelas largas) alargue a pagina */
+  .grid2, .ini-grid, .ec-grid { grid-template-columns:minmax(0, 1fr); }
+  .grid2 > *, .ini-grid > *, .ec-grid > *, .kpis > * { min-width:0; max-width:100%; }
+  .main { min-width:0; overflow-x:clip; }
+  .card { max-width:100%; }
+}
