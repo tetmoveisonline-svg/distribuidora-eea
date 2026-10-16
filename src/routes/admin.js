@@ -410,7 +410,9 @@ router.get('/clientes', async (req, res, next) => {
         '🔑 Senha: ' + a.senha,
         '',
         'Por lá você sobe as etiquetas, acompanha cada pedido, vê o estoque em tempo real e o seu financeiro.',
-        (a.limite !== null ? 'Seu limite de crédito é ' + formatBRL(a.limite) + ', com vencimento ' + a.prazo + ' dias após o aceite de cada pedido.' : 'Seus pedidos vencem ' + a.prazo + ' dias após o aceite.'),
+        'Os prazos e o limite de crédito combinados com você aparecem na aba Financeiro.',
+        '',
+        '📻 Não esqueça de ouvir a rádio no menu do sistema para alegrar o seu dia!',
         '',
         'Qualquer dúvida, é só chamar aqui. Bons envios!',
       ];
