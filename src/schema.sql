@@ -304,3 +304,10 @@ BEGIN
     INSERT INTO migracoes (nome) VALUES ('reserva_inicial');
   END IF;
 END $$;
+
+-- ===================== PRECO PADRAO = SUGERIDO; NEGOCIACAO POR CLIENTE =====================
+-- itens.negociado = TRUE: preco negociado para o cliente (substitui o sugerido).
+-- FALSE: vinculo criado automaticamente no aceite, so para ligar linhas/etiquetas ao produto;
+-- o preco cobrado e o sugerido do produto no momento do aceite.
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS negociado BOOLEAN NOT NULL DEFAULT TRUE;
+CREATE INDEX IF NOT EXISTS idx_itens_cliente_produto ON itens(cliente_id, produto_id);

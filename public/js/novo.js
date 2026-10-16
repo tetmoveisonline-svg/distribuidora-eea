@@ -75,7 +75,7 @@
   // ---------- upload ----------
   function upload(fileListOrig) {
     if (!fileListOrig || fileListOrig.length === 0) return;
-    if (ITENS.length === 0) { showUploadMsg('Cadastre itens antes de subir etiquetas.'); return; }
+    if (ITENS.length === 0) { showUploadMsg('Nenhum produto com preço disponível no momento. Fale com a distribuidora.'); return; }
     // Copia a FileList: o input e limpo logo apos o change (fileInput.value = ''), e a leitura
     // dos codigos e assincrona. Sem a copia, o FormData seria montado com a lista ja vazia.
     var fileList = Array.prototype.slice.call(fileListOrig);
@@ -158,7 +158,7 @@
 
   function bind() {
     filesBox.querySelectorAll('.sel-item').forEach(function (el) {
-      el.addEventListener('change', function () { var r = rows[+el.dataset.idx]; r.itemId = parseInt(el.value, 10); r.corId = null; render(); });
+      el.addEventListener('change', function () { var r = rows[+el.dataset.idx]; r.itemId = /^p\d+$/.test(el.value) ? el.value : parseInt(el.value, 10); r.corId = null; render(); });
     });
     filesBox.querySelectorAll('.sel-cor').forEach(function (el) {
       el.addEventListener('change', function () { rows[+el.dataset.idx].corId = el.value ? parseInt(el.value, 10) : null; render(); });

@@ -73,16 +73,11 @@ async function liberarReservaPedido(client, pedidoId, usuarioId) {
   }
 }
 
-// Saldos dos produtos que o cliente tem preco negociado, com o reservado para os pedidos dele.
+// Catalogo do cliente (todos os produtos ativos com preco: negociado ou sugerido), com o
+// disponivel por cor e o reservado para os pedidos dele.
 async function saldosParaCliente(clienteId) {
-  const { precoEfetivo, formatBRL } = require('./util');
-  const p = await db.query(
-    `SELECT DISTINCT ON (p.id) p.id, p.nome, p.descricao, p.saldo, p.reservado,
-            i.preco_centavos, i.promo_tipo, i.promo_valor,
-            to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
-     FROM itens i JOIN produtos p ON p.id = i.produto_id
-     WHERE i.cliente_id = $1 AND i.ativo = TRUE AND p.ativo = TRUE ORDER BY p.id, i.id DESC`, [clienteId]
-  );
+  const { formatBRL } = require('./util');
+  const cat = await require('./precos').catalogoDoCliente(db, clienteId);
   // reservado para este cliente: linhas de pedidos abertos dele, por cor (ou produto)
   const mine = await db.query(
     `SELECT l.cor_id, i.produto_id, string_agg(DISTINCT pe.numero, ', ') AS pedidos,
@@ -92,17 +87,14 @@ async function saldosParaCliente(clienteId) {
      GROUP BY l.cor_id, i.produto_id`, [clienteId]
   );
   const mineMap = new Map(mine.rows.map((x) => [(x.produto_id) + ':' + (x.cor_id || 0), x]));
-  const rows = p.rows.map((x) => {
-    const ef = precoEfetivo(x);
-    const m = mineMap.get(x.id + ':0');
-    return { id: x.id, nome: x.nome, descricao: x.descricao, saldo: x.saldo, reservado: x.reservado, disponivel: x.saldo - x.reservado,
-      meu_reservado: m ? m.reservado : 0, meus_pedidos: m ? m.pedidos : '',
-      preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo,
-      preco_txt: formatBRL(ef.preco_centavos), preco_original_txt: formatBRL(ef.preco_original) };
-  }).sort((a, b) => a.nome.localeCompare(b.nome));
-  const out = await anexarCores(rows);
-  out.forEach((prod) => prod.cores.forEach((c) => { const m = mineMap.get(prod.id + ':' + c.id); c.meu_reservado = m ? m.reservado : 0; c.meus_pedidos = m ? m.pedidos : ''; }));
-  return out;
+  return cat.map((x) => {
+    const m = mineMap.get(x.produto_id + ':0');
+    return { id: x.produto_id, nome: x.nome, descricao: x.descricao, saldo: x.fisico, reservado: x.reservado, disponivel: x.saldo,
+      meu_reservado: m ? m.reservado : 0, meus_pedidos: m ? m.pedidos : '', origem: x.origem,
+      preco_centavos: x.preco_centavos, preco_original: x.preco_original, promo: x.promo, promo_rotulo: x.promo_rotulo,
+      preco_txt: formatBRL(x.preco_centavos), preco_original_txt: formatBRL(x.preco_original),
+      cores: x.cores.map((c) => { const mc = mineMap.get(x.produto_id + ':' + c.id); return { id: c.id, nome: c.nome, sku: c.sku, saldo: c.fisico, reservado: c.reservado, disponivel: c.saldo, meu_reservado: mc ? mc.reservado : 0, meus_pedidos: mc ? mc.pedidos : '' }; }) };
+  });
 }
 async function saldosTodos() {
   const p = await db.query('SELECT id, nome, descricao, saldo, reservado, (saldo - reservado) AS disponivel, ativo FROM produtos ORDER BY nome');

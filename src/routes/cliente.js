@@ -8,30 +8,13 @@ const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('..
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
-const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay, precoEfetivo, skuCor } = require('../util');
+const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
 
-// Itens ativos do cliente com o preco efetivo (promocao aplicada se estiver no periodo)
-// e as cores do produto (cada cor com seu SKU). Produto sem cores = cor unica.
-const SQL_ITENS = `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id, p.sku AS produto_sku, (p.saldo - p.reservado) AS produto_saldo,
-                          to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
-                   FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
-                   WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`;
+// Catalogo do cliente: todos os produtos ativos ao preco sugerido, ou ao negociado quando houver
+// (com promocao), com cores, SKU e estoque disponivel. Ver src/precos.js.
+const precos = require('../precos');
 async function itensComPreco(q, clienteId) {
-  const r = await q.query(SQL_ITENS, [clienteId]);
-  const pids = r.rows.map((i) => i.produto_id).filter(Boolean);
-  const coresMap = new Map();
-  if (pids.length) {
-    const c = await q.query('SELECT id, produto_id, nome, sku, (saldo - reservado) AS saldo FROM produto_cores WHERE produto_id = ANY($1::int[]) ORDER BY ordem, id', [pids]);
-    for (const row of c.rows) {
-      if (!coresMap.has(row.produto_id)) coresMap.set(row.produto_id, []);
-      coresMap.get(row.produto_id).push(row);
-    }
-  }
-  return r.rows.map((i) => {
-    const ef = precoEfetivo(i);
-    const cores = (coresMap.get(i.produto_id) || []).map((c) => ({ id: c.id, nome: c.nome, sku: skuCor(i.produto_sku, c), saldo: Number(c.saldo || 0) }));
-    return { id: i.id, nome: i.nome, sku: null, preco_centavos: ef.preco_centavos, preco_original: ef.preco_original, promo: ef.promo, promo_rotulo: ef.promo_rotulo, cores, saldo: i.produto_id ? Number(i.produto_saldo || 0) : null };
-  });
+  return (await precos.catalogoDoCliente(q, clienteId)).map((x) => ({ ...x, sku: null }));
 }
 
 const router = express.Router();
@@ -131,11 +114,13 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     let totalCentavos = 0, totalEtiquetas = 0;
     for (const l of linhasReq) {
       const arquivoId = parseInt(l.arquivoId, 10);
-      const itemId = parseInt(l.itemId, 10);
+      const itemKey = typeof l.itemId === 'string' && /^p\d+$/.test(l.itemId) ? l.itemId : parseInt(l.itemId, 10);
       const quantidade = parseInt(l.quantidade, 10);
-      if (!arquivoId || !itemId || !quantidade || quantidade < 1) throw httpErr(400, 'Dados invalidos em uma das linhas.');
-      const item = itensMap.get(itemId);
+      if (!arquivoId || !itemKey || !quantidade || quantidade < 1) throw httpErr(400, 'Dados invalidos em uma das linhas.');
+      const item = itensMap.get(itemKey);
       if (!item) throw httpErr(400, 'Item invalido para este cliente.');
+      // produto sem negociacao: cria o vinculo (itens) no aceite, ao preco sugerido de agora
+      item.id = await precos.garantirItem(client, clienteId, item);
       // Cor: obrigatoria quando o produto tem cores cadastradas.
       let cor = null;
       if (item.cores.length > 0) {

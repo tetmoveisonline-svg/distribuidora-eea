@@ -51,22 +51,8 @@ const {
   precoSugerido, lucroCom,
 } = require('../util');
 
-// Representantes (comissao %) e funcionarios (taxa por etiqueta) ativos, para o calculo de preco.
-async function refCustos() {
-  const reps = await db.query("SELECT id, nome, COALESCE(comissao_bps, 0)::int AS bps FROM usuarios WHERE papel = 'representante' AND ativo = TRUE ORDER BY nome");
-  const funcs = await db.query("SELECT id, nome, COALESCE(taxa_etiqueta_centavos, 0)::int AS taxa FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE ORDER BY nome");
-  return { reps: reps.rows, funcs: funcs.rows };
-}
-// Anexa ao produto quem foi escolhido (ou ninguem), as taxas lidas do cadastro e o preco sugerido.
-function comCustos(p, ref) {
-  const rep = ref.reps.find((r) => r.id === p.rep_usuario_id) || null;
-  const func = ref.funcs.find((f) => f.id === p.func_usuario_id) || null;
-  const repBps = rep ? rep.bps : 0;
-  const funcCentavos = func ? func.taxa : 0;
-  const base = { custo_centavos: p.custo_centavos, lucro_centavos: p.lucro_centavos, rep_bps: repBps };
-  const sugerido = precoSugerido(base, funcCentavos);
-  return { ...p, rep, func, rep_bps_efetivo: repBps, func_centavos: funcCentavos, sugerido, temCustos: p.custo_centavos !== null || p.lucro_centavos !== null };
-}
+// Calculo de preco sugerido e taxas: modulo compartilhado com a area do cliente.
+const { refCustos, comCustos } = require('../precos');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -366,7 +352,7 @@ router.get('/clientes', async (req, res, next) => {
       `SELECT c.id, c.nome, c.ativo, c.prazo_dias, c.limite_centavos, c.bloquear_vencido, u.login,
               (SELECT COALESCE(sum(f.valor_centavos), 0) FROM financeiro f WHERE f.cliente_id = c.id AND f.status = 'aberto')::int AS em_aberto,
               (SELECT count(*) FROM pedidos p WHERE p.cliente_id = c.id)::int AS pedidos,
-              (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo) AS produtos
+              (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo AND i.negociado) AS produtos
        FROM clientes c LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente' ORDER BY c.nome`
     );
     res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL });
@@ -669,7 +655,7 @@ router.get('/precos', async (req, res, next) => {
                 to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim,
                 p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id
          FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
-         WHERE i.cliente_id = $1 AND i.ativo = TRUE ORDER BY i.nome`, [clienteId]
+         WHERE i.cliente_id = $1 AND i.ativo = TRUE AND i.negociado = TRUE ORDER BY i.nome`, [clienteId]
       );
       const cn = await db.query('SELECT nome FROM clientes WHERE id = $1', [clienteId]);
       clienteNome = cn.rowCount ? cn.rows[0].nome : '';
@@ -701,8 +687,14 @@ router.post('/precos', async (req, res, next) => {
     if (preco === null) throw new Error('Informe o preço negociado.');
     const prod = await db.query('SELECT nome FROM produtos WHERE id = $1', [produtoId]);
     if (prod.rowCount === 0) throw new Error('Produto inválido.');
-    await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos) VALUES ($1,$2,$3,$4)', [clienteId, produtoId, prod.rows[0].nome, preco]);
-    res.redirect('/admin/precos?cliente=' + clienteId);
+    // ja existe vinculo (negociacao anterior ou vinculo automatico do aceite)? vira negociacao
+    const ex = await db.query('SELECT id FROM itens WHERE cliente_id = $1 AND produto_id = $2 ORDER BY ativo DESC, id DESC LIMIT 1', [clienteId, produtoId]);
+    if (ex.rowCount) {
+      await db.query('UPDATE itens SET preco_centavos = $2, nome = $3, negociado = TRUE, ativo = TRUE WHERE id = $1', [ex.rows[0].id, preco, prod.rows[0].nome]);
+    } else {
+      await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos, negociado) VALUES ($1,$2,$3,$4,TRUE)', [clienteId, produtoId, prod.rows[0].nome, preco]);
+    }
+    res.redirect('/admin/precos?cliente=' + clienteId + '&ok=' + encodeURIComponent('Negociação salva: substitui o preço sugerido para este cliente.'));
   } catch (e) { const cid = pInt(req.body.cliente_id) || ''; res.redirect('/admin/precos?cliente=' + cid + '&erro=' + encodeURIComponent(msgErro(e))); }
 });
 // Promocao no preco negociado: tipo 'valor' (preco promocional em R$) ou 'percentual' (% de desconto), com periodo.
@@ -733,7 +725,8 @@ router.post('/precos/:id/promo/remover', async (req, res, next) => {
 });
 router.post('/precos/:id/remove', async (req, res, next) => {
   try {
-    const it = await db.query('UPDATE itens SET ativo = FALSE WHERE id = $1 RETURNING cliente_id', [req.params.id]);
+    // remover a negociacao: o produto volta ao preco sugerido (o vinculo fica, sem negociacao, para o historico)
+    const it = await db.query('UPDATE itens SET negociado = FALSE, promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL WHERE id = $1 RETURNING cliente_id', [req.params.id]);
     res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : ''));
   } catch (e) { next(e); }
 });

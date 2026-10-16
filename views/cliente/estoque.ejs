@@ -28,7 +28,7 @@
   function render(produtos) {
     if (!produtos.length) { box.innerHTML = '<div class="empty">Você ainda não tem produtos negociados.</div>'; return; }
     function meu(x) { return x.meu_reservado > 0 ? '<span style="color:var(--warn)">' + x.meu_reservado + '</span> <span class="dim" style="font-size:11px">' + esc(x.meus_pedidos) + '</span>' : '<span class="dim">—</span>'; }
-    var h = '<table><thead><tr><th>Produto</th><th class="num">Preço negociado</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead><tbody>';
+    var h = '<table><thead><tr><th>Produto</th><th class="num">Seu preço</th><th>Cor</th><th>SKU</th><th class="num">Disponível</th><th class="num">Reservado p/ você</th></tr></thead><tbody>';
     produtos.forEach(function (p) {
       if (!p.cores.length) {
         h += '<tr><td>' + esc(p.nome) + '</td><td class="num">' + preco(p) + '</td><td class="dim">cor única</td><td class="dim">—</td><td class="num">' + tag(p.disponivel) + '</td><td class="num">' + meu(p) + '</td></tr>';
