@@ -29,7 +29,7 @@
       <div class="field"><label>Produto</label>
         <select name="produto_id" id="prodSel">
           <% if (produtos.length === 0) { %><option value="">— cadastre um produto antes —</option><% } %>
-          <% produtos.forEach(function (p) { %><option value="<%= p.id %>" data-sugerido="<%= p.sugerido !== null ? (p.sugerido / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>"><%= p.nome %><%= p.sugerido !== null ? ' · sugerido ' + formatBRL(p.sugerido) : '' %></option><% }); %>
+          <% produtos.forEach(function (p) { %><option value="<%= p.id %>" data-sugerido="<%= (isFull && p.sugerido !== null) ? (p.sugerido / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>"><%= p.nome %><%= (isFull && p.sugerido !== null) ? ' · sugerido ' + formatBRL(p.sugerido) : '' %></option><% }); %>
         </select>
       </div>
       <div class="field"><label>Preço negociado (R$)</label><input name="preco" id="precoIn" placeholder="4,50" />
@@ -48,7 +48,7 @@
         <div class="price-row" id="pr-<%= i.id %>">
           <div class="price-main">
             <div class="price-name"><%= i.nome %>
-              <% if (i.lucroInfo) { var li = i.lucroInfo; var cor = li.lucro >= li.lucroAlvo ? 'var(--ok)' : (li.lucro > 0 ? 'var(--warn)' : 'var(--danger)'); %>
+              <% if (isFull && i.lucroInfo) { var li = i.lucroInfo; var cor = li.lucro >= li.lucroAlvo ? 'var(--ok)' : (li.lucro > 0 ? 'var(--warn)' : 'var(--danger)'); %>
                 <div class="price-obs">obs: lucro <b style="color:<%= cor %>"><%= formatBRL(li.lucro) %></b> por unidade
                   <% if (li.diffSugerido === 0) { %>· igual ao sugerido
                   <% } else if (li.diffSugerido !== null && li.diffSugerido < 0) { %>· <%= formatBRL(-li.diffSugerido) %> abaixo do sugerido (<%= formatBRL(li.sugerido) %>)
@@ -123,7 +123,7 @@
     function aplicar() {
       var s = sug();
       if (!tocado || !inp.value) inp.value = s;
-      hint.textContent = s ? 'Sugerido: R$ ' + s + '. Altere se a negociação for diferente.' : 'Produto sem custo cadastrado; informe o preço.';
+      hint.textContent = s ? 'Sugerido: R$ ' + s + '. Altere se a negociação for diferente.' : (<%= isFull ? 'true' : 'false' %> ? 'Produto sem custo cadastrado; informe o preço.' : 'Informe o preço negociado.');
     }
     inp.addEventListener('input', function () { tocado = !!inp.value; });
     sel.addEventListener('change', function () { tocado = false; aplicar(); });

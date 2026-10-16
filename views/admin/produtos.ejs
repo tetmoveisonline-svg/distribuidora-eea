@@ -34,6 +34,7 @@
         <% produtos.forEach(function (p) { %>
           <tr>
             <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %>
+              <% if (isFull) { %>
               <div class="custo-box">
                 <div class="custo-grid">
                   <span>Custo do produto</span><span class="num"><%= p.custo_centavos !== null && p.custo_centavos !== undefined ? formatBRL(p.custo_centavos) : '—' %></span>
@@ -60,6 +61,7 @@
                   <button class="btn ghost sm" type="submit">Salvar</button>
                 </form>
               </div>
+              <% } %>
             </td>
             <td>
               <% if (p.cores.length === 0) { %>
@@ -100,10 +102,12 @@
             <td>
               <div class="actions-inline" style="flex-wrap:nowrap">
                 <form method="post" action="/admin/produtos/<%= p.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= p.ativo ? 'Desativar' : 'Ativar' %></button></form>
+                <% if (isFull) { %>
                 <form method="post" action="/admin/produtos/<%= p.id %>/excluir" style="margin:0"
                       onsubmit="return confirm(<%- JSON.stringify('Excluir o produto "' + p.nome + '"?\n\n' + p.precos + ' preço(s) por cliente serão removidos junto. Pedidos já feitos não mudam.\n\nEssa ação não tem volta.').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') %>)">
                   <button class="btn ghost sm danger" type="submit">Excluir</button>
                 </form>
+                <% } %>
               </div>
             </td>
           </tr>
@@ -114,6 +118,6 @@
   </div>
 </div>
 
-<div class="hint-box"><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> cada cor tem físico, reservado e disponível (físico − reservado). O aceite de um pedido reserva a quantidade; cada etiqueta despachada na bipagem consome 1 do físico e 1 da reserva; encerrar com sobras libera a reserva. "Entrada" soma ao físico, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Disponível negativo fica em vermelho para repor. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
+<div class="hint-box"><% if (!isFull) { %>Sua conta é operacional: custo, lucro e preço sugerido ficam ocultos. <% } %><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> cada cor tem físico, reservado e disponível (físico − reservado). O aceite de um pedido reserva a quantidade; cada etiqueta despachada na bipagem consome 1 do físico e 1 da reserva; encerrar com sobras libera a reserva. "Entrada" soma ao físico, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Disponível negativo fica em vermelho para repor. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
 
 <%- include('../partials/app-close') %>

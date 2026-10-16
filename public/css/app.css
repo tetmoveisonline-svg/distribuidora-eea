@@ -354,3 +354,5 @@ td.res { color:var(--warn); font-weight:600; }
 .danger-zone { margin-top:18px; border-top:1px dashed var(--border); padding-top:10px; }
 .danger-zone summary { cursor:pointer; font-size:12px; color:var(--text-dim); }
 .danger-zone summary:hover { color:var(--danger); }
+.inline-det summary { list-style:none; display:inline-block; cursor:pointer; }
+.inline-det summary::-webkit-details-marker { display:none; }

@@ -36,6 +36,7 @@ app.use(session({
 // Expoe o usuario logado para todas as views.
 app.use((req, res, next) => {
   res.locals.user = currentUser(req);
+  res.locals.isFull = !!(res.locals.user && res.locals.user.papel === 'admin'); // admin completo (ve custos, lucros e comissoes)
   res.locals.empresa = {
     nome: process.env.EMPRESA_NOME || 'Central de Postagem',
   };

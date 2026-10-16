@@ -30,6 +30,7 @@
 
   <%- include('../partials/etiquetas-detalhe', { pid: pedido.id, etqs: etiquetas, desp: etqDespachadas, tot: etqTotal, admin: true, formatDateTime: formatDateTime }) %>
 
+  <% if (isFull) { %>
   <details class="danger-zone">
     <summary>Excluir este pedido (teste ou lançamento errado)</summary>
     <form method="post" action="/admin/pedido/<%= pedido.id %>/excluir" class="fin-form" style="margin-top:10px"
@@ -38,8 +39,10 @@
       <button class="btn danger sm" type="submit">Excluir pedido</button>
     </form>
   </details>
+  <% } %>
 </div>
 
+<% if (isFull) { %>
 <div class="grid2">
   <!-- comissão do representante -->
   <div class="comm-box">
@@ -83,6 +86,14 @@
       <button class="btn" type="submit" style="margin-top:6px">Salvar funcionário</button>
     </form>
     <div class="hint-box" style="margin-top:14px">Deixe a taxa em branco para usar a padrão do funcionário. O repasse final é etiquetas despachadas × taxa e aparece em Cadastros › Funcionários.</div>
+<% } else { %>
+<div class="grid2">
+  <div class="comm-box">
+    <div class="section-title">Representante e funcionário</div>
+    <div class="dim" style="font-size:12.5px">Valores de comissão e taxa ficam ocultos para contas operacionais. Representante: <b style="color:var(--text)"><%= pedido.rep_nome || '—' %></b>.</div>
+  </div>
+  <div class="comm-box">
+<% } %>
 
     <div class="section-title" style="margin-top:18px">Andamento</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">

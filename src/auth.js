@@ -13,12 +13,21 @@ function exigeLogin(req, res, next) {
   next();
 }
 
+// Admin completo ('admin') e admin operacional ('operador') entram na area administrativa.
 function exigeAdmin(req, res, next) {
   const u = currentUser(req);
   if (!u) return res.redirect('/login');
-  if (u.papel !== 'admin') return res.status(403).render('erro', { titulo: 'Acesso negado', mensagem: 'Esta area e restrita ao administrador.', user: u });
+  if (u.papel !== 'admin' && u.papel !== 'operador') return res.status(403).render('erro', { titulo: 'Acesso negado', mensagem: 'Esta area e restrita ao administrador.', user: u });
   next();
 }
+// So o admin completo: custos/lucros de produto, comissoes, taxas, repasses, contas de admin, exclusoes.
+function exigeAdminFull(req, res, next) {
+  const u = currentUser(req);
+  if (!u) return res.redirect('/login');
+  if (u.papel !== 'admin') return res.status(403).render('erro', { titulo: 'Acesso negado', mensagem: 'Esta area e restrita ao administrador completo (valores de custo, lucro e comissao).', user: u });
+  next();
+}
+function isAdminFull(u) { return !!(u && u.papel === 'admin'); }
 
 function exigeCliente(req, res, next) {
   const u = currentUser(req);
@@ -39,4 +48,4 @@ function exigePapel(papel, texto) {
 const exigeRepresentante = exigePapel('representante', 'Esta area e do representante.');
 const exigeFuncionario = exigePapel('funcionario', 'Esta area e do funcionario.');
 
-module.exports = { currentUser, exigeLogin, exigeAdmin, exigeCliente, exigeRepresentante, exigeFuncionario };
+module.exports = { currentUser, exigeLogin, exigeAdmin, exigeAdminFull, isAdminFull, exigeCliente, exigeRepresentante, exigeFuncionario };

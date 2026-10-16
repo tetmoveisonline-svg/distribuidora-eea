@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { exigeAdmin } = require('../auth');
+const { exigeAdmin, exigeAdminFull } = require('../auth');
 const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
@@ -70,6 +70,47 @@ function comCustos(p, ref) {
 
 const router = express.Router();
 router.use(exigeAdmin);
+// Areas com valores de custo/lucro/comissao e acoes sensiveis: so o admin completo.
+router.use(['/representantes', '/funcionarios', '/repasses', '/administradores'], exigeAdminFull);
+router.post(['/produtos/:id/custos', '/pedido/:id/comissao', '/pedido/:id/funcionario', '/pedido/:id/excluir', '/clientes/:id/excluir'], exigeAdminFull);
+
+// ===================== ADMINISTRADORES =====================
+router.get('/administradores', async (req, res, next) => {
+  try {
+    const r = await db.query("SELECT id, nome, login, papel, ativo, criado_em FROM usuarios WHERE papel IN ('admin','operador') ORDER BY papel, nome");
+    res.render('admin/administradores', { contas: r.rows, ativo: 'admins', ok: req.query.ok || null, erro: req.query.erro || null, formatDateTime });
+  } catch (e) { next(e); }
+});
+router.post('/administradores', async (req, res, next) => {
+  try {
+    const nome = (req.body.nome || '').trim(), login = (req.body.login || '').trim(), senha = req.body.senha || '';
+    const papel = req.body.papel === 'admin' ? 'admin' : 'operador';
+    if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
+    if (senha.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+    const adm = await db.query("SELECT senha_hash FROM usuarios WHERE id = $1 AND papel = 'admin'", [req.session.user.id]);
+    if (adm.rowCount === 0 || !(await bcrypt.compare(req.body.minha_senha || '', adm.rows[0].senha_hash))) throw new Error('Sua senha de administrador não confere.');
+    await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel) VALUES ($1,$2,$3,$4)', [nome, login, await bcrypt.hash(senha, 10), papel]);
+    res.redirect('/admin/administradores?ok=' + encodeURIComponent('Conta "' + login + '" criada como ' + (papel === 'admin' ? 'administrador completo' : 'administrador operacional') + '.'));
+  } catch (e) { res.redirect('/admin/administradores?erro=' + encodeURIComponent(msgErro(e))); }
+});
+router.post('/administradores/:id/toggle', async (req, res, next) => {
+  try {
+    const id = pInt(req.params.id);
+    if (id === req.session.user.id) return res.redirect('/admin/administradores?erro=' + encodeURIComponent('Você não pode desativar a própria conta.'));
+    await db.query("UPDATE usuarios SET ativo = NOT ativo WHERE id = $1 AND papel IN ('admin','operador')", [id]);
+    res.redirect('/admin/administradores');
+  } catch (e) { next(e); }
+});
+router.post('/administradores/:id/senha', async (req, res, next) => {
+  try {
+    const nova = req.body.senha || '';
+    if (nova.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+    const adm = await db.query("SELECT senha_hash FROM usuarios WHERE id = $1 AND papel = 'admin'", [req.session.user.id]);
+    if (adm.rowCount === 0 || !(await bcrypt.compare(req.body.minha_senha || '', adm.rows[0].senha_hash))) throw new Error('Sua senha de administrador não confere.');
+    await db.query("UPDATE usuarios SET senha_hash = $2 WHERE id = $1 AND papel IN ('admin','operador')", [pInt(req.params.id), await bcrypt.hash(nova, 10)]);
+    res.redirect('/admin/administradores?ok=' + encodeURIComponent('Senha redefinida.'));
+  } catch (e) { res.redirect('/admin/administradores?erro=' + encodeURIComponent(msgErro(e))); }
+});
 
 function pInt(v) { const n = parseInt(v, 10); return isNaN(n) ? null : n; }
 function msgErro(e) { if (e && e.code === '23505') return 'Login já em uso. Escolha outro.'; return (e && e.message) ? e.message : 'Falha ao salvar.'; }

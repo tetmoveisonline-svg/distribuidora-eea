@@ -13,7 +13,7 @@
       <thead>
         <tr>
           <th>Pedido</th><th>Cliente</th><th class="num">Etiq.</th><th class="num">Valor</th>
-          <th>Representante</th><th class="num">Comissão</th><th class="num">Taxa func.</th><th>Status</th>
+          <% if (isFull) { %><th>Representante</th><th class="num">Comissão</th><th class="num">Taxa func.</th><% } %><th>Status</th>
         </tr>
       </thead>
       <tbody>
@@ -23,9 +23,11 @@
             <td><%= p.cliente_nome %></td>
             <td class="num"><%= p.total_etiquetas %></td>
             <td class="num"><%= formatBRL(p.total_centavos) %></td>
+            <% if (isFull) { %>
             <td><%= p.rep_nome ? p.rep_nome : '—' %></td>
             <td class="num"><% if (p.comissao_centavos) { %><span class="badge gold"><%= formatBRL(p.comissao_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
             <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
+            <% } %>
             <td>
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
               <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
@@ -39,7 +41,7 @@
 </div>
 
 <div class="hint-box">
-  A coluna "Taxa func." aparece quando há um único funcionário ativo cadastrado
+  <% if (!isFull) { %>Sua conta é operacional: comissões e taxas ficam ocultas. <% } %>A coluna "Taxa func." aparece quando há um único funcionário ativo cadastrado
   <% if (!funcRef) { %>(no momento ela fica como — porque há zero ou mais de um funcionário; o valor de cada funcionário aparece na área dele).<% } %>
   Clique no número do pedido para atribuir o representante e a comissão, avançar o andamento e baixar os documentos.
 </div>

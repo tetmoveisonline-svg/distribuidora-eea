@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Papeis aceitos (recria a constraint de forma idempotente).
 ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_papel_check;
 ALTER TABLE usuarios ADD CONSTRAINT usuarios_papel_check
-  CHECK (papel IN ('admin','cliente','representante','funcionario'));
+  CHECK (papel IN ('admin','operador','cliente','representante','funcionario'));
+-- 'operador' = administrador operacional: tudo do admin, menos custos/lucros de produto e comissoes/taxas.
 
 -- Colunas extras por papel:
 --   representante: comissao_bps  (comissao padrao em pontos-base: 1% = 100, 5% = 500)

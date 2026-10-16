@@ -1,0 +1,61 @@
+<%- include('../partials/app-open', { titulo: 'Administradores', ativo: 'admins' }) %>
+
+<h2 class="title">Administradores</h2>
+<p class="sub">Contas com acesso à área administrativa. <b>Completo</b> vê tudo; <b>operacional</b> faz a operação toda (pedidos, bipagem, financeiro dos clientes, estoque, produtos, preços) sem ver custo e lucro de produto nem comissões e taxas de representantes e funcionários.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Nova conta</div>
+    <form method="post" action="/admin/administradores">
+      <div class="field"><label>Nome</label><input name="nome" placeholder="Maria Silva" /></div>
+      <div class="field"><label>Login</label><input name="login" placeholder="maria" autocomplete="off" /></div>
+      <div class="field"><label>Senha (mín. 6)</label><input name="senha" type="password" autocomplete="new-password" /></div>
+      <div class="field"><label>Tipo</label>
+        <select name="papel">
+          <option value="operador">Operacional · sem custos, lucros e comissões</option>
+          <option value="admin">Completo · vê tudo</option>
+        </select>
+      </div>
+      <div class="field"><label>Confirme com a sua senha</label><input name="minha_senha" type="password" autocomplete="current-password" required /></div>
+      <button class="btn block" type="submit">Criar conta</button>
+    </form>
+  </div>
+  <div class="card pad">
+    <div class="section-title">Contas</div>
+    <table>
+      <thead><tr><th>Nome</th><th>Login</th><th>Tipo</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <% contas.forEach(function (c) { %>
+          <tr>
+            <td><%= c.nome %><% if (c.id === user.id) { %> <span class="dim" style="font-size:11px">(você)</span><% } %></td>
+            <td class="dim"><%= c.login %></td>
+            <td><% if (c.papel === 'admin') { %><span class="badge gold">Completo</span><% } else { %><span class="badge neutral">Operacional</span><% } %></td>
+            <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
+            <td>
+              <div class="actions-inline" style="flex-wrap:nowrap">
+                <% if (c.id !== user.id) { %>
+                  <form method="post" action="/admin/administradores/<%= c.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form>
+                <% } %>
+                <details class="inline-det">
+                  <summary class="btn ghost sm">Nova senha</summary>
+                  <form method="post" action="/admin/administradores/<%= c.id %>/senha" class="fin-form" style="margin-top:8px">
+                    <input name="senha" type="password" placeholder="nova senha" autocomplete="new-password" class="date-sm" required />
+                    <input name="minha_senha" type="password" placeholder="sua senha" autocomplete="current-password" class="date-sm" required />
+                    <button class="btn sm" type="submit">Salvar</button>
+                  </form>
+                </details>
+              </div>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="hint-box">O que a conta operacional não vê: quadro de custo, lucro e preço sugerido em Produtos; observação de lucro em Preços por cliente; comissão e taxa em Pedidos; as telas Representantes, Funcionários e Administradores; exclusão de pedido e de cliente. Tudo o mais funciona igual.</div>
+
+<%- include('../partials/app-close') %>
