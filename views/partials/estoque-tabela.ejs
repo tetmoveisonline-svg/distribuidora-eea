@@ -14,9 +14,9 @@
   <tbody>
     <% produtos.forEach(function (p) { %>
       <% if (p.cores.length === 0) { %>
-        <tr><td><%= p.nome %></td><td class="num"><%- precoCell(p) %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><%- tag(p.disponivel) %></td><td class="num"><%- meu(p) %></td></tr>
+        <tr><td><%= p.nome %><% if (p.obs) { %> <span class="mono dim" style="font-size:11px;white-space:nowrap"><%= p.obs %></span><% } %></td><td class="num"><%- precoCell(p) %></td><td class="dim">cor única</td><td class="dim">—</td><td class="num"><%- tag(p.disponivel) %></td><td class="num"><%- meu(p) %></td></tr>
       <% } else { p.cores.forEach(function (c, i) { %>
-        <tr><td><%= i === 0 ? p.nome : '' %></td><td class="num"><%- i === 0 ? precoCell(p) : '' %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><%- tag(c.disponivel) %></td><td class="num"><%- meu(c) %></td></tr>
+        <tr><td><% if (i === 0) { %><%= p.nome %><% if (p.obs) { %> <span class="mono dim" style="font-size:11px;white-space:nowrap"><%= p.obs %></span><% } %><% } %></td><td class="num"><%- i === 0 ? precoCell(p) : '' %></td><td><%= c.nome %></td><td class="mono dim"><%= c.sku || '—' %></td><td class="num"><%- tag(c.disponivel) %></td><td class="num"><%- meu(c) %></td></tr>
       <% }); } %>
     <% }); %>
   </tbody>

@@ -484,7 +484,7 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.peso_gramas, p.medidas, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
               to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS criado_iso, to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS criado_br,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
@@ -497,14 +497,15 @@ router.get('/produtos', async (req, res, next) => {
       coresMap.get(c.produto_id).push(c);
     }
     const produtos = r.rows.map((p) => ({ ...comCustos(p, ref), cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })) }));
-    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent });
+    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, pesoTxt });
   } catch (e) { next(e); }
 });
 router.post('/produtos', async (req, res, next) => {
   try {
     const nome = (req.body.nome || '').trim();
     if (!nome) throw new Error('Informe o nome do produto.');
-    const ins = await db.query('INSERT INTO produtos (nome, descricao) VALUES ($1,$2) RETURNING id', [nome, (req.body.descricao || '').trim() || null]);
+    const pm = parsePesoMedidas(req.body);
+    const ins = await db.query('INSERT INTO produtos (nome, descricao, peso_gramas, medidas) VALUES ($1,$2,$3,$4) RETURNING id', [nome, (req.body.descricao || '').trim() || null, pm.peso, pm.medidas]);
     // Cores iniciais: "Branco (SKU123), Preto (SKU124)" -> SKU da cor entre parenteses
     const cores = parseCores(req.body.cores);
     for (let i = 0; i < cores.length; i++) {
@@ -512,6 +513,23 @@ router.post('/produtos', async (req, res, next) => {
     }
     res.redirect('/admin/produtos');
   } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(msgErro(e))); }
+});
+// Peso em kg ("12,5") -> gramas; medidas texto livre (ex.: "120 x 45 x 80 cm").
+function parsePesoMedidas(b) {
+  const pesoTxt = (b.peso || '').toString().trim().replace(',', '.');
+  const kg = pesoTxt === '' ? null : Number(pesoTxt);
+  const peso = (kg === null || !isFinite(kg) || kg < 0) ? null : Math.round(kg * 1000);
+  const medidas = (b.medidas || '').toString().trim().slice(0, 80) || null;
+  return { peso, medidas };
+}
+function pesoTxt(g) { if (g === null || g === undefined) return ''; return (Number(g) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' kg'; }
+// Peso e medidas (edicao inline)
+router.post('/produtos/:id/dados', async (req, res, next) => {
+  try {
+    const pm = parsePesoMedidas(req.body);
+    await db.query('UPDATE produtos SET peso_gramas = $2, medidas = $3 WHERE id = $1', [pInt(req.params.id), pm.peso, pm.medidas]);
+    responder(req, res, { obs: [pesoTxt(pm.peso), pm.medidas].filter(Boolean).join(' · ') }, '/admin/produtos');
+  } catch (e) { responderErro(req, res, e, '/admin/produtos'); }
 });
 function normSku(v) { const s = (v || '').toString().trim().toUpperCase().replace(/[^A-Z0-9\-_.\/]/g, '').slice(0, 40); return s || null; }
 function parseCores(txt) {

@@ -28,7 +28,7 @@ function comCustos(p, ref) {
 async function catalogoDoCliente(q, clienteId) {
   const ref = await refCustos();
   const prods = await q.query(
-    `SELECT p.id AS produto_id, p.nome, p.descricao, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+    `SELECT p.id AS produto_id, p.nome, p.descricao, p.peso_gramas, p.medidas, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
             p.saldo, p.reservado,
             i.id AS item_id, i.negociado, i.preco_centavos, i.promo_tipo, i.promo_valor,
             to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
@@ -60,6 +60,7 @@ async function catalogoDoCliente(q, clienteId) {
       // id do item: o da negociacao/vinculo existente, ou "p<produto>" (vinculo criado no aceite)
       id: x.item_id ? x.item_id : 'p' + x.produto_id,
       produto_id: x.produto_id, nome: x.nome, descricao: x.descricao,
+      obs: [x.peso_gramas !== null && x.peso_gramas !== undefined ? (Number(x.peso_gramas) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' kg' : '', x.medidas || ''].filter(Boolean).join(' · '),
       preco_centavos: preco, preco_original: original, promo, promo_rotulo: promoRotulo, origem,
       cores, saldo: Number(x.saldo) - Number(x.reservado), fisico: Number(x.saldo), reservado: Number(x.reservado),
     });

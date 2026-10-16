@@ -89,7 +89,7 @@ async function saldosParaCliente(clienteId) {
   const mineMap = new Map(mine.rows.map((x) => [(x.produto_id) + ':' + (x.cor_id || 0), x]));
   return cat.map((x) => {
     const m = mineMap.get(x.produto_id + ':0');
-    return { id: x.produto_id, nome: x.nome, descricao: x.descricao, saldo: x.fisico, reservado: x.reservado, disponivel: x.saldo,
+    return { id: x.produto_id, nome: x.nome, descricao: x.descricao, obs: x.obs || '', saldo: x.fisico, reservado: x.reservado, disponivel: x.saldo,
       meu_reservado: m ? m.reservado : 0, meus_pedidos: m ? m.pedidos : '', origem: x.origem,
       preco_centavos: x.preco_centavos, preco_original: x.preco_original, promo: x.promo, promo_rotulo: x.promo_rotulo,
       preco_txt: formatBRL(x.preco_centavos), preco_original_txt: formatBRL(x.preco_original),

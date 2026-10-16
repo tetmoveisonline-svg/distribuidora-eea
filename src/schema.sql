@@ -311,3 +311,7 @@ END $$;
 -- o preco cobrado e o sugerido do produto no momento do aceite.
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS negociado BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS idx_itens_cliente_produto ON itens(cliente_id, produto_id);
+
+-- Peso e medidas do produto (informativo para o cliente na aba Estoque).
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS peso_gramas INTEGER;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS medidas TEXT;

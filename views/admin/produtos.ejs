@@ -12,6 +12,10 @@
     <form method="post" action="/admin/produtos">
       <div class="field"><label>Nome do produto</label><input name="nome" placeholder="Sap. Agatha 3P" /></div>
       <div class="field"><label>Descrição (opcional)</label><input name="descricao" placeholder="Sapateira Agatha 3 portas" /></div>
+      <div class="row-2" style="grid-template-columns:110px 1fr">
+        <div class="field"><label>Peso (kg)</label><input name="peso" placeholder="12,5" /></div>
+        <div class="field"><label>Medidas</label><input name="medidas" placeholder="120 x 45 x 80 cm" /></div>
+      </div>
       <div class="field">
         <label>Cores (opcional) · separe por vírgula; SKU da cor entre parênteses</label>
         <input name="cores" placeholder="Branco (AG3P-BR01), Nature (AG3P-NT01)" />
@@ -54,6 +58,12 @@
         <% produtos.forEach(function (p) { %>
           <tr class="prod" data-id="<%= p.id %>" data-nome="<%= p.nome %>" data-criado="<%= p.criado_iso || '' %>" data-ativo="<%= p.ativo ? 1 : 0 %>" data-busca="<%= (p.nome + ' ' + (p.descricao || '') + ' ' + p.cores.map(function (c) { return c.nome + ' ' + (c.sku || ''); }).join(' ')).toLowerCase() %>">
             <td class="prod-nome"><b><%= p.nome %></b><% if (p.descricao) { %><div class="dim" style="font-size:11.5px"><%= p.descricao %></div><% } %><div class="dim" style="font-size:11px;margin-top:2px">cadastrado <%= p.criado_br || '—' %></div>
+              <div class="dim obs-pm" style="font-size:11.5px;margin-top:4px;font-family:var(--mono)"><%= [pesoTxt(p.peso_gramas), p.medidas].filter(Boolean).join(' · ') || 'sem peso/medidas' %></div>
+              <form method="post" action="/admin/produtos/<%= p.id %>/dados" class="prazo-form" style="margin-top:6px;flex-wrap:wrap">
+                <input name="peso" value="<%= p.peso_gramas !== null && p.peso_gramas !== undefined ? (p.peso_gramas / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '' %>" placeholder="kg" style="width:54px" title="peso em kg" />
+                <input name="medidas" value="<%= p.medidas || '' %>" placeholder="medidas" style="width:130px" title="medidas (ex.: 120 x 45 x 80 cm)" />
+                <button class="btn ghost sm" type="submit">ok</button>
+              </form>
               <% if (isFull) { %>
               <div class="custo-box">
                 <div class="custo-grid">
@@ -234,6 +244,9 @@
           var q = form.querySelector('[name="quantidade"]') || tr.querySelector('[form="' + form.id + '"][name="quantidade"]'); if (q) q.value = '';
           salvo(sub || form, '✓ salvo · ' + j.disponivel + ' disp.'); aplicar();
         } else if (/\/sku$/.test(action)) {
+          salvo(sub || form);
+        } else if (/\/dados$/.test(action)) {
+          var ob = form.closest('tr.prod').querySelector('.obs-pm'); if (ob) ob.textContent = j.obs || 'sem peso/medidas';
           salvo(sub || form);
         } else if (/\/custos$/.test(action)) {
           var g = form.closest('.custo-box').querySelector('.custo-grid'); var n = g.querySelectorAll('.num');
