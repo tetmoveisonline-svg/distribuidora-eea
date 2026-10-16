@@ -22,9 +22,13 @@
       </div>
       <% if (p.obs) { %><div class="ec-obs mono"><%= p.obs %></div><% } %>
       <% if (p.imagens && p.imagens.length) { %>
-      <button type="button" class="ec-fotos" data-galeria="<%= p.id %>" data-nome="<%= p.nome %>" data-imgs="<%= p.imagens.map(function (i) { return i.id; }).join(',') %>">
-        <img src="/produtos/<%= p.id %>/imagens/<%= p.imagens[0].id %>" alt="" loading="lazy" /> Ver <%= p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens' %> · baixar
-      </button>
+      <% var ids = p.imagens.map(function (i) { return i.id; }).join(','); %>
+      <div class="ec-acoes">
+        <button type="button" class="ec-fotos" data-galeria="<%= p.id %>" data-nome="<%= p.nome %>" data-imgs="<%= ids %>">
+          <img src="/produtos/<%= p.id %>/imagens/<%= p.imagens[0].id %>" alt="" loading="lazy" /> Ver <%= p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens' %>
+        </button>
+        <button type="button" class="ec-baixar" data-galeria="<%= p.id %>" data-imgs="<%= ids %>" title="baixar todas as imagens">⬇ Baixar</button>
+      </div>
       <% } %>
       <div class="ec-chips">
         <% if (p.cores.length === 0) { %>

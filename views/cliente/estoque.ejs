@@ -19,6 +19,22 @@
 
 <div class="hint-box">Cada cartão é um produto; cada chip é uma cor com o SKU e o <b>disponível</b>: <span style="color:var(--ok)">verde</span> tem estoque, <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos), <span style="color:var(--danger)">vermelho</span> esgotado. "N seus" é o que seus pedidos aceitos ainda vão consumir no despacho. Ao subir etiquetas, o sistema avisa se a quantidade passa do disponível, mas o pedido segue; a distribuidora confirma a reposição.</div>
 
+<!-- Galeria de imagens do produto -->
+<div class="overlay gal" id="galeria">
+  <div class="card pad modal gal-box">
+    <div class="gal-top"><b id="galTit"></b><span class="dim" id="galN"></span><button type="button" class="btn ghost sm" id="galFechar">Fechar</button></div>
+    <div class="gal-stage">
+      <button type="button" class="gal-nav" id="galPrev" aria-label="anterior">‹</button>
+      <img id="galImg" src="" alt="imagem do produto" />
+      <button type="button" class="gal-nav" id="galNext" aria-label="próxima">›</button>
+    </div>
+    <div class="gal-bottom">
+      <div class="gal-thumbs" id="galThumbs"></div>
+      <a class="btn sm" id="galDown" href="#" download>Baixar imagem</a>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   var box = document.getElementById('estBox');
@@ -78,8 +94,10 @@
       h += '<div class="ec-card"><div class="ec-head"><div class="ec-nome">' + esc(p.nome) + '</div><div class="ec-right">' + precoCard(p) + '</div></div>';
       if (p.obs) h += '<div class="ec-obs mono">' + esc(p.obs) + '</div>';
       if (p.imagens && p.imagens.length) {
-        h += '<button type="button" class="ec-fotos" data-galeria="' + p.id + '" data-nome="' + esc(p.nome) + '" data-imgs="' + p.imagens.map(function (i) { return i.id; }).join(',') + '">' +
-          '<img src="/produtos/' + p.id + '/imagens/' + p.imagens[0].id + '" alt="" loading="lazy" /> Ver ' + (p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens') + ' · baixar</button>';
+        var ids = p.imagens.map(function (i) { return i.id; }).join(',');
+        h += '<div class="ec-acoes"><button type="button" class="ec-fotos" data-galeria="' + p.id + '" data-nome="' + esc(p.nome) + '" data-imgs="' + ids + '">' +
+          '<img src="/produtos/' + p.id + '/imagens/' + p.imagens[0].id + '" alt="" loading="lazy" /> Ver ' + (p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens') + '</button>' +
+          '<button type="button" class="ec-baixar" data-galeria="' + p.id + '" data-imgs="' + ids + '" title="baixar todas as imagens">⬇ Baixar</button></div>';
       }
       h += '<div class="ec-chips">';
       if (!p.cores.length) h += chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos);
@@ -117,7 +135,16 @@
     gal.querySelectorAll('.gal-nav').forEach(function (b) { b.style.display = gIds.length > 1 ? '' : 'none'; });
     galMostrar(0); gal.classList.add('on');
   }
-  box.addEventListener('click', function (e) { var b = e.target.closest('.ec-fotos'); if (b) galAbrir(b); });
+  box.addEventListener('click', function (e) {
+    var b = e.target.closest('.ec-fotos'); if (b) return galAbrir(b);
+    var d = e.target.closest('.ec-baixar'); if (d) baixarTodas(d.getAttribute('data-galeria'), d.getAttribute('data-imgs').split(','));
+  });
+  // Baixa uma por vez (o navegador pode pedir permissao para varios downloads na primeira vez).
+  function baixarTodas(pid, ids) {
+    ids.forEach(function (id, k) {
+      setTimeout(function () { var a = document.createElement('a'); a.href = '/produtos/' + pid + '/imagens/' + id + '?baixar=1'; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); }, k * 400);
+    });
+  }
   document.getElementById('galPrev').addEventListener('click', function () { galMostrar(gI - 1); });
   document.getElementById('galNext').addEventListener('click', function () { galMostrar(gI + 1); });
   document.getElementById('galFechar').addEventListener('click', function () { gal.classList.remove('on'); });
@@ -128,21 +155,5 @@
   });
 })();
 </script>
-
-<!-- Galeria de imagens do produto -->
-<div class="overlay gal" id="galeria">
-  <div class="card pad modal gal-box">
-    <div class="gal-top"><b id="galTit"></b><span class="dim" id="galN"></span><button type="button" class="btn ghost sm" id="galFechar">Fechar</button></div>
-    <div class="gal-stage">
-      <button type="button" class="gal-nav" id="galPrev" aria-label="anterior">‹</button>
-      <img id="galImg" src="" alt="imagem do produto" />
-      <button type="button" class="gal-nav" id="galNext" aria-label="próxima">›</button>
-    </div>
-    <div class="gal-bottom">
-      <div class="gal-thumbs" id="galThumbs"></div>
-      <a class="btn sm" id="galDown" href="#" download>Baixar imagem</a>
-    </div>
-  </div>
-</div>
 
 <%- include('../partials/app-close') %>

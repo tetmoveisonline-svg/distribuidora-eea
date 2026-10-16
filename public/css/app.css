@@ -521,3 +521,6 @@ tr.on-row td { color:var(--text); }
 .gal-thumbs { display:flex; gap:6px; flex-wrap:wrap; min-width:0; }
 .gal-thumbs img { width:46px; height:46px; object-fit:cover; border-radius:8px; border:2px solid transparent; cursor:pointer; opacity:.7; }
 .gal-thumbs img.on { border-color:var(--accent); opacity:1; }
+.ec-acoes { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.ec-baixar { display:inline-flex; align-items:center; border:1px solid var(--border-strong); background:var(--card); color:var(--text); border-radius:20px; padding:3px 12px; font-size:12px; cursor:pointer; font-family:inherit; min-height:36px; }
+.ec-baixar:hover { border-color:var(--ok); color:var(--ok); }
