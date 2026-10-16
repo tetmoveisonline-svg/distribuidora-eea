@@ -6,12 +6,38 @@
 <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
 <% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 
+<% if (acesso) { %>
+<div class="card pad acesso-box" style="margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <div class="section-title" style="margin:0">Mensagem de acesso para <%= acesso.nome %></div>
+    <span class="dim" style="font-size:12px">A senha aparece só agora; depois ela não pode ser recuperada, apenas redefinida.</span>
+  </div>
+  <textarea id="acessoMsg" class="acesso-msg" readonly rows="11"><%= acesso.mensagem %></textarea>
+  <div class="actions-inline" style="margin-top:10px">
+    <button type="button" class="btn sm" id="acessoCopiar">Copiar mensagem</button>
+    <% var wa = acesso.telefone ? ('https://wa.me/' + (acesso.telefone.length <= 11 ? '55' + acesso.telefone : acesso.telefone) + '?text=' + encodeURIComponent(acesso.mensagem)) : ('https://wa.me/?text=' + encodeURIComponent(acesso.mensagem)); %>
+    <a class="btn sm whats" href="<%= wa %>" target="_blank" rel="noopener">Enviar no WhatsApp<%= acesso.telefone ? '' : ' (escolher contato)' %></a>
+  </div>
+</div>
+<script>
+  (function () {
+    var b = document.getElementById('acessoCopiar'), t = document.getElementById('acessoMsg'); if (!b) return;
+    b.addEventListener('click', function () {
+      var done = function () { b.textContent = 'Copiado ✓'; setTimeout(function () { b.textContent = 'Copiar mensagem'; }, 2000); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(done).catch(function () { t.select(); document.execCommand('copy'); done(); });
+      else { t.select(); document.execCommand('copy'); done(); }
+    });
+  })();
+</script>
+<% } %>
+
 <div class="grid2">
   <div class="card pad">
     <div class="section-title">Novo cliente</div>
     <form method="post" action="/admin/clientes">
       <div class="field"><label>Nome / empresa</label><input name="nome" placeholder="Loja do Cliente Ltda" /></div>
       <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
+      <div class="field"><label>WhatsApp (DDD + número)</label><input name="telefone" placeholder="17999990000" inputmode="numeric" /></div>
       <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
       <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
       <div class="field"><label>Prazo de pagamento (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>

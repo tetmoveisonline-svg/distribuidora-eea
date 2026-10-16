@@ -335,3 +335,6 @@ CREATE TABLE IF NOT EXISTS novidades (
 );
 CREATE INDEX IF NOT EXISTS idx_novidades_tempo ON novidades(criado_em DESC);
 CREATE INDEX IF NOT EXISTS idx_novidades_cliente ON novidades(cliente_id, criado_em DESC);
+
+-- WhatsApp do cliente (so digitos, com DDD) para enviar o acesso e avisos.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefone TEXT;

@@ -390,13 +390,33 @@ router.post('/clientes/:id/prazo', async (req, res, next) => {
 router.get('/clientes', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT c.id, c.nome, c.ativo, c.prazo_dias, c.limite_centavos, c.bloquear_vencido, u.login,
+      `SELECT c.id, c.nome, c.ativo, c.prazo_dias, c.limite_centavos, c.bloquear_vencido, c.telefone, u.login,
               (SELECT COALESCE(sum(f.valor_centavos), 0) FROM financeiro f WHERE f.cliente_id = c.id AND f.status = 'aberto')::int AS em_aberto,
               (SELECT count(*) FROM pedidos p WHERE p.cliente_id = c.id)::int AS pedidos,
               (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo AND i.negociado) AS produtos
        FROM clientes c LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente' ORDER BY c.nome`
     );
-    res.render('admin/clientes', { clientes: r.rows, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL });
+    // acesso recem-criado (uma vez so)
+    let acesso = null;
+    if (req.session.acessoCliente) {
+      const a = req.session.acessoCliente; delete req.session.acessoCliente;
+      const site = 'https://' + (req.get('host') || 'distribuidoraeea.up.railway.app');
+      const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
+      const linhas = [
+        'Olá, ' + a.nome + '! Seu acesso ao sistema da ' + nomeEmpresa + ' está pronto. 🎉',
+        '',
+        '🔗 Site: ' + site,
+        '👤 Login: ' + a.login,
+        '🔑 Senha: ' + a.senha,
+        '',
+        'Por lá você sobe as etiquetas, acompanha cada pedido, vê o estoque em tempo real e o seu financeiro.',
+        (a.limite !== null ? 'Seu limite de crédito é ' + formatBRL(a.limite) + ', com vencimento ' + a.prazo + ' dias após o aceite de cada pedido.' : 'Seus pedidos vencem ' + a.prazo + ' dias após o aceite.'),
+        '',
+        'Qualquer dúvida, é só chamar aqui. Bons envios!',
+      ];
+      acesso = { nome: a.nome, login: a.login, telefone: a.telefone, mensagem: linhas.join('\n'), site };
+    }
+    res.render('admin/clientes', { clientes: r.rows, acesso, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL });
   } catch (e) { next(e); }
 });
 router.post('/clientes', async (req, res, next) => {
@@ -408,11 +428,14 @@ router.post('/clientes', async (req, res, next) => {
     const limTxt = (req.body.limite || '').toString().trim();
     const limite = limTxt === '' ? null : parsePrecoToCentavos(limTxt);
     if (limTxt !== '' && limite === null) throw new Error('Limite inválido. Use por exemplo 5000 ou 5.000,00 (vazio = sem limite).');
+    const telefone = (req.body.telefone || '').toString().replace(/\D/g, '').slice(0, 15) || null;
     await client.query('BEGIN');
-    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias, limite_centavos) VALUES ($1,$2,$3,$4) RETURNING id', [nome, email || null, prazo, limite]);
+    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias, limite_centavos, telefone) VALUES ($1,$2,$3,$4,$5) RETURNING id', [nome, email || null, prazo, limite, telefone]);
     await client.query('INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)', [nome, login, await bcrypt.hash(senha, 10), 'cliente', c.rows[0].id]);
     await client.query('COMMIT');
-    res.redirect('/admin/clientes');
+    // Mensagem de boas-vindas com o acesso: mostrada uma unica vez na proxima tela (a senha nao vai na URL).
+    req.session.acessoCliente = { nome, login, senha, telefone, prazo, limite };
+    res.redirect('/admin/clientes?ok=' + encodeURIComponent('Cliente "' + nome + '" cadastrado. A mensagem com o acesso está pronta abaixo.'));
   } catch (e) { await client.query('ROLLBACK'); res.redirect('/admin/clientes?erro=' + encodeURIComponent(msgErro(e))); } finally { client.release(); }
 });
 // Excluir cliente: exige a senha do admin logado. Apaga usuarios, precos, pedidos, etiquetas,
