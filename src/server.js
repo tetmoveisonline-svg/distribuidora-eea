@@ -67,6 +67,7 @@ app.use((req, res, next) => {
 // Rotas.
 const authRoutes = require('./routes/auth');
 app.use('/', authRoutes);
+app.use('/', require('./routes/dimensionamento')); // publico, sem login
 app.use('/', require('./routes/cliente'));
 app.use('/admin/bipagem', require('./routes/bipagem'));
 app.use('/admin', require('./routes/admin'));

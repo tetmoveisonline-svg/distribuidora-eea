@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= titulo %></title>
+  <meta name="description" content="Calcule a carga térmica da piscina e receba a indicação preliminar de bomba de calor." />
+  <link rel="stylesheet" href="/css/dimensionamento.css" />
+</head>
+<body>
+  <header class="dim-top">
+    <div class="dim-wrap dim-top-in">
+      <a class="dim-brand" href="/dimensionamento"><span class="dim-dot"></span><%= marca.nome %></a>
+      <span class="dim-fab"><%= marca.fabricante %></span>
+    </div>
+  </header>
+
+  <main class="dim-wrap dim-main" id="app">
+    <aside class="dim-hero">
+      <p class="dim-eyebrow">Ferramenta técnica para profissionais</p>
+      <h1><%= marca.titulo %></h1>
+      <p class="dim-lead"><%= marca.subtitulo %></p>
+      <div class="dim-pill"><strong>Dimensionamento consultivo</strong><span>Resultado em poucos minutos</span></div>
+      <ol class="dim-steps" id="steps">
+        <li data-step="1" class="on"><b>01</b> Dados do projeto</li>
+        <li data-step="2"><b>02</b> Condições</li>
+        <li data-step="3"><b>03</b> Contato</li>
+      </ol>
+    </aside>
+
+    <section class="dim-card" id="card">
+      <div class="dim-card-head">
+        <div><p class="dim-eyebrow" id="stepLabel">Etapa 1 de 3</p><h2 id="stepTitle">Piscina</h2></div>
+        <div class="dim-bar"><i id="bar" style="width:33%"></i></div>
+      </div>
+
+      <!-- ETAPA 1 -->
+      <form class="dim-step" data-step="1" id="step1" novalidate>
+        <div class="dim-q"><span class="dim-num">01</span><div><h3>Qual é o volume da piscina?</h3><p>Use o volume total em litros ou calcule pelas medidas.</p></div></div>
+
+        <label class="dim-label">Forma de cálculo</label>
+        <div class="dim-seg" role="tablist">
+          <button type="button" data-modo="litros" class="on">Já sei o volume</button>
+          <button type="button" data-modo="medidas">Calcular pelas medidas</button>
+        </div>
+
+        <div id="modoLitros">
+          <label class="dim-label" for="litros">Volume total</label>
+          <div class="dim-field"><input id="litros" name="litros" type="number" inputmode="decimal" min="1000" step="100" value="50000" /><span>litros</span></div>
+          <div class="dim-note"><strong>Inclua todo o volume.</strong> Some piscina, spa, prainha e deck molhado antes de continuar.</div>
+        </div>
+
+        <div id="modoMedidas" hidden>
+          <p class="dim-sub">Medidas da piscina principal</p>
+          <div class="dim-grid3">
+            <div><label class="dim-label" for="pComp">Comprimento</label><div class="dim-field"><input id="pComp" type="number" inputmode="decimal" step="0.1" value="8" /><span>m</span></div></div>
+            <div><label class="dim-label" for="pLarg">Largura</label><div class="dim-field"><input id="pLarg" type="number" inputmode="decimal" step="0.1" value="4" /><span>m</span></div></div>
+            <div><label class="dim-label" for="pProf">Profundidade média</label><div class="dim-field"><input id="pProf" type="number" inputmode="decimal" step="0.1" value="1.4" /><span>m</span></div></div>
+          </div>
+          <label class="dim-check"><input type="checkbox" id="temPrainha" /><span><strong>Adicionar prainha / deck molhado</strong><small>Soma o volume e a carga térmica da superfície</small></span></label>
+          <div id="prainhaBox" class="dim-grid3" hidden>
+            <div><label class="dim-label" for="prComp">Comprimento</label><div class="dim-field"><input id="prComp" type="number" inputmode="decimal" step="0.1" /><span>m</span></div></div>
+            <div><label class="dim-label" for="prLarg">Largura</label><div class="dim-field"><input id="prLarg" type="number" inputmode="decimal" step="0.1" /><span>m</span></div></div>
+            <div><label class="dim-label" for="prProf">Profundidade</label><div class="dim-field"><input id="prProf" type="number" inputmode="decimal" step="0.05" value="0.3" /><span>m</span></div></div>
+          </div>
+          <div class="dim-note"><strong>O volume é somado automaticamente.</strong> Piscina principal + prainha formam o total considerado no cálculo. <span id="volPreview"></span></div>
+        </div>
+
+        <p class="dim-err" id="err1" hidden></p>
+        <div class="dim-actions"><span></span><button type="submit" class="dim-btn">Continuar <span>→</span></button></div>
+      </form>
+
+      <!-- ETAPA 2 -->
+      <form class="dim-step" data-step="2" id="step2" hidden novalidate>
+        <div class="dim-q"><span class="dim-num">02</span><div><h3>Como a piscina será usada?</h3><p>Temperatura, exposição e acessórios alteram a carga térmica.</p></div></div>
+
+        <div class="dim-grid2">
+          <div><label class="dim-label" for="tIni">Temperatura inicial</label><div class="dim-field"><input id="tIni" type="number" inputmode="decimal" step="1" value="20" /><span>°C</span></div></div>
+          <div><label class="dim-label" for="tDes">Temperatura desejada</label><div class="dim-field"><input id="tDes" type="number" inputmode="decimal" step="1" value="32" /><span>°C</span></div></div>
+        </div>
+
+        <div class="dim-tariff">
+          <div><label class="dim-label" for="tarifa">Tarifa final de energia</label><div class="dim-field"><input id="tarifa" type="number" inputmode="decimal" step="0.01" value="1.00" /><span>R$/kWh</span></div></div>
+          <p>Use o valor total do kWh da conta, com impostos. Ele será aplicado à projeção de janeiro a dezembro.</p>
+        </div>
+
+        <label class="dim-label">Capa térmica</label>
+        <div class="dim-seg" data-campo="capa"><button type="button" data-v="sim" class="on">Usa capa</button><button type="button" data-v="nao">Sem capa</button></div>
+
+        <label class="dim-label">Tipo de piscina</label>
+        <div class="dim-seg" data-campo="tipo"><button type="button" data-v="aberta" class="on">Aberta</button><button type="button" data-v="fechada">Fechada</button></div>
+
+        <label class="dim-label">Exposição ao vento</label>
+        <div class="dim-seg" data-campo="vento"><button type="button" data-v="fraco">Fraco</button><button type="button" data-v="moderado" class="on">Moderado</button><button type="button" data-v="forte">Forte</button></div>
+
+        <p class="dim-sub">Acessórios e áreas especiais <small>Selecione apenas o que existe no projeto.</small></p>
+        <label class="dim-check"><input type="checkbox" id="temCascata" /><span><strong>Cascata</strong><small>Adiciona carga pelo comprimento</small></span></label>
+        <div id="cascataBox" hidden><label class="dim-label" for="cascataCm">Comprimento da cascata</label><div class="dim-field"><input id="cascataCm" type="number" inputmode="decimal" step="10" /><span>cm</span></div></div>
+        <label class="dim-check"><input type="checkbox" id="temInfinita" /><span><strong>Borda infinita</strong><small>Considera área, volume e borda</small></span></label>
+        <div id="infinitaBox" hidden>
+          <p class="dim-sub">Área associada à borda infinita</p>
+          <div class="dim-grid3">
+            <div><label class="dim-label" for="inComp">Comprimento</label><div class="dim-field"><input id="inComp" type="number" inputmode="decimal" step="0.1" /><span>m</span></div></div>
+            <div><label class="dim-label" for="inLarg">Largura</label><div class="dim-field"><input id="inLarg" type="number" inputmode="decimal" step="0.1" /><span>m</span></div></div>
+            <div><label class="dim-label" for="inProf">Profundidade</label><div class="dim-field"><input id="inProf" type="number" inputmode="decimal" step="0.05" value="0.3" /><span>m</span></div></div>
+          </div>
+          <label class="dim-label" for="inBorda">Metros lineares de borda</label><div class="dim-field"><input id="inBorda" type="number" inputmode="decimal" step="0.5" /><span>m</span></div>
+        </div>
+
+        <details class="dim-details">
+          <summary>Energia e pré-seleção hidráulica</summary>
+          <div class="dim-grid2">
+            <div><label class="dim-label" for="hRec">Horas de recirculação</label><select id="hRec"><option>6</option><option selected>8</option><option>10</option><option>12</option></select></div>
+            <div><label class="dim-label" for="mca">Altura manométrica</label><select id="mca"><option>6</option><option selected>8</option><option>10</option><option>12</option></select></div>
+          </div>
+        </details>
+
+        <p class="dim-err" id="err2" hidden></p>
+        <div class="dim-actions"><button type="button" class="dim-btn ghost" data-back>Voltar</button><button type="submit" class="dim-btn">Continuar <span>→</span></button></div>
+      </form>
+
+      <!-- ETAPA 3 -->
+      <form class="dim-step" data-step="3" id="step3" hidden novalidate>
+        <div class="dim-q"><span class="dim-num">03</span><div><h3>Para quem é este projeto?</h3><p>O resultado será preparado para a validação comercial e técnica.</p></div></div>
+
+        <label class="dim-label">Seu perfil profissional</label>
+        <div class="dim-profiles" data-campo="perfil">
+          <button type="button" data-v="Revenda" class="on"><b>R</b>Revenda</button>
+          <button type="button" data-v="Construtor"><b>C</b>Construtor</button>
+          <button type="button" data-v="Arquiteto / especificador"><b>A</b>Arquiteto / especificador</button>
+          <button type="button" data-v="Instalador"><b>I</b>Instalador</button>
+        </div>
+
+        <div class="dim-grid2">
+          <div><label class="dim-label" for="nome">Nome</label><div class="dim-field"><input id="nome" type="text" autocomplete="name" placeholder="Seu nome" /></div></div>
+          <div><label class="dim-label" for="empresa">Empresa <small>opcional</small></label><div class="dim-field"><input id="empresa" type="text" autocomplete="organization" placeholder="Nome da empresa" /></div></div>
+        </div>
+        <div class="dim-grid2">
+          <div><label class="dim-label" for="uf">UF do projeto</label><select id="uf"><option value="">Selecione</option></select></div>
+          <div><label class="dim-label" for="cidade">Cidade do projeto</label><div class="dim-field"><input id="cidade" type="text" placeholder="Cidade" /></div></div>
+        </div>
+        <label class="dim-label" for="zap">WhatsApp</label>
+        <div class="dim-field"><input id="zap" type="tel" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000" /></div>
+        <label class="dim-check plain"><input type="checkbox" id="consent" /><span>Autorizo <%= marca.nome %> a usar estes dados para responder à solicitação de dimensionamento.</span></label>
+
+        <p class="dim-err" id="err3" hidden></p>
+        <div class="dim-actions"><button type="button" class="dim-btn ghost" data-back>Voltar</button><button type="submit" class="dim-btn">Ver resultado <span>→</span></button></div>
+        <p class="dim-fine">Seus dados seguem no resumo enviado por WhatsApp. Esta versão não grava informações em banco de dados.</p>
+      </form>
+
+      <!-- RESULTADO -->
+      <div class="dim-step" data-step="4" id="step4" hidden></div>
+    </section>
+  </main>
+
+  <footer class="dim-foot"><div class="dim-wrap"><strong><%= marca.nome %></strong><span>Dimensionamento consultivo para profissionais de piscinas.</span></div></footer>
+
+  <script>window.DIM_CONFIG = <%- configJson %>;</script>
+  <script src="/js/dimensionamento-calc.js"></script>
+  <script src="/js/dimensionamento.js"></script>
+</body>
+</html>

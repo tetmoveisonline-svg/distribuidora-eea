@@ -84,3 +84,22 @@ Veja `.env.example`. Destaques:
 - As etiquetas expiram 72h após o aceite (bloqueio no download). O comprovante é permanente.
 - Ainda não há cadastro de clientes/itens pela interface (Parte seguinte). Use o seed `--demo`
   ou insira manualmente para testar o fluxo do cliente.
+
+## Dimensionador de bomba de calor (página pública)
+
+Calculadora em `/dimensionamento`, sem login, para profissionais de piscina: 3 etapas (volume,
+condições de uso, contato), relatório técnico com equipamento indicado, consumo mês a mês por UF,
+pré-seleção de motobomba, impressão em PDF e envio do resumo por WhatsApp.
+
+- Regras de negócio (marca, fatores, catálogo de modelos, motobombas, clima por UF):
+  `src/dimensionamento-config.js`. Edite o catálogo ali para usar seus próprios produtos.
+- Motor de cálculo puro (navegador e Node): `public/js/dimensionamento-calc.js`.
+- Interface: `views/dimensionamento.ejs`, `public/js/dimensionamento.js`, `public/css/dimensionamento.css`.
+- Variáveis de ambiente: `DIM_WHATSAPP` (número que recebe o resumo, só dígitos com DDI, ex.
+  5511999999999; sem ele o botão de WhatsApp não aparece), `DIM_MARCA` (nome exibido; padrão
+  `EMPRESA_NOME`) e `DIM_FABRICANTE` (selo no topo; padrão Syllent).
+
+Fórmula: carga (kcal) = ΔT × volume (L) × fator capa × fator tipo × fator vento + acessórios
+(2.000 kcal por m² de prainha/borda infinita e por metro de cascata/borda). A seleção percorre o
+catálogo de 1 a 13 máquinas e aceita a primeira combinação com aquecimento diário < 8 h/dia e
+primeiro aquecimento < 48 h. Nada é gravado em banco; o lead vai só no texto do WhatsApp.
