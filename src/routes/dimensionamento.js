@@ -1,19 +1,16 @@
 'use strict';
 
-// Dimensionador de bomba de calor para piscina: pagina publica, sem login.
-// O calculo roda no navegador; o servidor so entrega a configuracao (fatores, catalogo, clima).
+// Dimensionador de bomba de calor para piscina (GN Representacoes / Syllent): pagina publica, sem login.
+// Mesma tela do programa de desktop (projetos/dimensionador-piscina/src/renderer); o PDF sai pela
+// impressao do navegador. Os arquivos ficam em public/dimensionador e sao copiados de la.
 
+const path = require('path');
 const express = require('express');
-const config = require('../dimensionamento-config');
 
 const router = express.Router();
 
 router.get('/dimensionamento', (req, res) => {
-  res.render('dimensionamento', {
-    titulo: 'Dimensionador de bomba de calor · ' + config.marca.nome,
-    marca: config.marca,
-    configJson: JSON.stringify(config).replace(/</g, '\\u003c'),
-  });
+  res.sendFile(path.join(__dirname, '..', '..', 'public', 'dimensionador', 'index.html'));
 });
 
 module.exports = router;

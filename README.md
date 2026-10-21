@@ -87,19 +87,12 @@ Veja `.env.example`. Destaques:
 
 ## Dimensionador de bomba de calor (página pública)
 
-Calculadora em `/dimensionamento`, sem login, para profissionais de piscina: 3 etapas (volume,
-condições de uso, contato), relatório técnico com equipamento indicado, consumo mês a mês por UF,
-pré-seleção de motobomba, impressão em PDF e envio do resumo por WhatsApp.
+Calculadora em `/dimensionamento`, sem login, da GN Representações (catálogo Syllent). É a mesma
+tela do programa de desktop em `projetos/dimensionador-piscina`: cliente, piscina, condições,
+lista de equipamentos que atendem e prévia do PDF. O botão "Salvar PDF" usa a impressão do
+navegador (no Mac, "Salvar como PDF" na janela de impressão).
 
-- Regras de negócio (marca, fatores, catálogo de modelos, motobombas, clima por UF):
-  `src/dimensionamento-config.js`. Edite o catálogo ali para usar seus próprios produtos.
-- Motor de cálculo puro (navegador e Node): `public/js/dimensionamento-calc.js`.
-- Interface: `views/dimensionamento.ejs`, `public/js/dimensionamento.js`, `public/css/dimensionamento.css`.
-- Variáveis de ambiente: `DIM_WHATSAPP` (número que recebe o resumo, só dígitos com DDI, ex.
-  5511999999999; sem ele o botão de WhatsApp não aparece), `DIM_MARCA` (nome exibido; padrão
-  `EMPRESA_NOME`) e `DIM_FABRICANTE` (selo no topo; padrão Syllent).
-
-Fórmula: carga (kcal) = ΔT × volume (L) × fator capa × fator tipo × fator vento + acessórios
-(2.000 kcal por m² de prainha/borda infinita e por metro de cascata/borda). A seleção percorre o
-catálogo de 1 a 13 máquinas e aceita a primeira combinação com aquecimento diário < 8 h/dia e
-primeiro aquecimento < 48 h. Nada é gravado em banco; o lead vai só no texto do WhatsApp.
+- Arquivos em `public/dimensionador/` (`index.html`, `app.js`, `app.css`, `calc.js`, `config.js`,
+  logos em `assets/`). Regras de negócio, fatores e catálogo ficam em `config.js`.
+- A fonte é o projeto de desktop: ao alterar a tela ou o cálculo lá, copie `src/renderer/*` para
+  cá trocando `../../assets/` por `assets/` (o `app.js` e o `index.html` referenciam as logos).
