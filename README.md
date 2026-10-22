@@ -84,15 +84,3 @@ Veja `.env.example`. Destaques:
 - As etiquetas expiram 72h após o aceite (bloqueio no download). O comprovante é permanente.
 - Ainda não há cadastro de clientes/itens pela interface (Parte seguinte). Use o seed `--demo`
   ou insira manualmente para testar o fluxo do cliente.
-
-## Dimensionador de bomba de calor (página pública)
-
-Calculadora em `/dimensionamento`, sem login, da GN Representações (catálogo Syllent). É a mesma
-tela do programa de desktop em `projetos/dimensionador-piscina`: cliente, piscina, condições,
-lista de equipamentos que atendem e prévia do PDF. O botão "Salvar PDF" usa a impressão do
-navegador (no Mac, "Salvar como PDF" na janela de impressão).
-
-- Arquivos em `public/dimensionador/` (`index.html`, `app.js`, `app.css`, `calc.js`, `config.js`,
-  logos em `assets/`). Regras de negócio, fatores e catálogo ficam em `config.js`.
-- A fonte é o projeto de desktop: ao alterar a tela ou o cálculo lá, copie `src/renderer/*` para
-  cá trocando `../../assets/` por `assets/` (o `app.js` e o `index.html` referenciam as logos).
