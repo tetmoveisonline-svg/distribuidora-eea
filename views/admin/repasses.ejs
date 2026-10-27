@@ -51,6 +51,17 @@
           <div class="field"><label>Taxa por etiqueta (R$)</label><input name="taxa" placeholder="0,50" /></div>
         <% } else { %>
           <div class="field"><label>Comissão padrão (%)</label><input name="comissao" placeholder="5" /></div>
+          <div class="field"><label>Tipo</label>
+            <select name="tipo" id="cadTipo" onchange="var b=document.getElementById('cadPaiBox'); if(b) b.style.display = this.value==='preposto' ? '' : 'none';">
+              <option value="rep">Representante</option>
+              <option value="preposto">Preposto (trabalha sob um representante)</option>
+            </select>
+          </div>
+          <div class="field" id="cadPaiBox" style="display:none"><label>Preposto de</label>
+            <select name="pai_id">
+              <% pessoas.filter(function (x) { return !x.representante_pai_id; }).forEach(function (x) { %><option value="<%= x.id %>"><%= x.nome %></option><% }); %>
+            </select>
+          </div>
         <% } %>
         <button class="btn block" type="submit">Salvar</button>
       </form>
@@ -62,7 +73,7 @@
         <tbody>
           <% pessoas.forEach(function (p) { %>
             <tr>
-              <td><%= p.nome %></td>
+              <td><%= p.nome %><% if (!isFunc && p.representante_pai_id) { %> <span class="badge gold" style="font-size:10px;padding:1px 6px">preposto de <%= p.pai_nome || '—' %></span><% } %></td>
               <td class="dim"><%= p.login %></td>
               <td>
                 <% if (isFunc) { %>
@@ -121,7 +132,7 @@
   <table class="fin-table">
     <thead>
       <tr>
-        <th>Pedido</th><th>Cliente</th><th>Aceite</th>
+        <th>Pedido</th><th>Cliente</th><% if (!isFunc) { %><th>Origem</th><% } %><th>Aceite</th>
         <th class="num"><%= isFunc ? 'Etiquetas × taxa' : 'Valor cobrado × %' %></th>
         <th class="num"><%= isFunc ? 'Taxa' : 'Comissão' %></th>
         <th>Cliente pagou?</th><th>Repasse</th>
@@ -132,6 +143,7 @@
         <tr>
           <td><a class="link-row" href="/admin/pedido/<%= l.id %>"><b><%= l.numero %></b></a></td>
           <td><%= l.cliente_nome %></td>
+          <% if (!isFunc) { %><td><% if (l.papel_repasse === 'resp') { %><span class="badge gold"><%= l.origem %></span><% } else { %><span class="badge neutral">Direto</span><% } %></td><% } %>
           <td class="dim"><%= l.aceite_br %></td>
           <td class="num dim"><%= l.base_txt %><% if (isFunc && l.status !== 'despachado') { %><div style="font-size:11px">(previsto; conta as despachadas ao encerrar)</div><% } %></td>
           <td class="num"><b><%= formatBRL(l.valor) %></b></td>

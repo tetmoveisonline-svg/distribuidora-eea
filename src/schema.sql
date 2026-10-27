@@ -33,6 +33,9 @@ ALTER TABLE usuarios ADD CONSTRAINT usuarios_papel_check
 --   funcionario:   taxa_etiqueta_centavos (valor fixo por etiqueta, em centavos)
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS comissao_bps INTEGER;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS taxa_etiqueta_centavos INTEGER;
+-- Preposto: representante que trabalha sob outro representante (o "pai").
+-- Quando representante_pai_id esta preenchido, este representante e um preposto daquele.
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS representante_pai_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
 
 -- Catalogo de produtos.
 CREATE TABLE IF NOT EXISTS produtos (
@@ -267,6 +270,25 @@ ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_em TIMESTAMPTZ;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_forma TEXT;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS func_pago_centavos INTEGER;
 CREATE INDEX IF NOT EXISTS idx_pedidos_funcionario ON pedidos(funcionario_id);
+
+-- ===================== PREPOSTO: COMISSAO DIVIDIDA =====================
+-- Quem agregou o cliente (representante OU preposto) e os percentuais, definidos no cliente.
+--   comissao_total_bps      = % total do cliente (ex.: 500 = 5%)
+--   comissao_preposto_bps   = fatia do preposto (ex.: 400 = 4%); o representante-pai recebe (total - preposto).
+--   Agregado direto por representante: comissao_preposto_bps fica NULL.
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS representante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS comissao_total_bps INTEGER;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS comissao_preposto_bps INTEGER;
+
+-- Segundo ganhador do pedido: o representante-pai do preposto (recebe total - preposto).
+-- Mesma mecanica de pagamento do representante (pago/pendente/liberado) nos Repasses.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS responsavel_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_resp_bps INTEGER;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS comissao_resp_centavos INTEGER;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS resp_pago_em TIMESTAMPTZ;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS resp_pago_forma TEXT;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS resp_pago_centavos INTEGER;
+CREATE INDEX IF NOT EXISTS idx_pedidos_responsavel ON pedidos(responsavel_id);
 
 -- ===================== ESTOQUE: RESERVA =====================
 -- Aceite reserva (reservado += qtd), despacho consome (saldo -= 1 e reservado -= 1),

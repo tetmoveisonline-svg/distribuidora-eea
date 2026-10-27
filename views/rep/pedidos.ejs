@@ -14,16 +14,17 @@
     <div class="empty">Você ainda não tem pedidos atribuídos.</div>
   <% } else { %>
     <table>
-      <thead><tr><th>Pedido</th><th>Cliente</th><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><th class="num">Taxa func.</th><th>Status</th></tr></thead>
+      <thead><tr><th>Pedido</th><th>Cliente</th><th>Origem</th><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><th class="num">Taxa func.</th><th>Status</th></tr></thead>
       <tbody>
         <% pedidos.forEach(function (p) { %>
           <tr>
             <td><%= p.numero %></td>
             <td><%= p.cliente_nome %></td>
+            <td><% if (p.eh_resp) { %><span class="badge gold"><%= p.origem %></span><% } else { %><span class="badge neutral">Direto</span><% } %></td>
             <td><%= formatDateTime(p.aceite_em) %></td>
             <td class="num"><%= formatBRL(p.total_centavos) %></td>
-            <td class="num"><%= p.comissao_bps ? formatPercent(p.comissao_bps) : '—' %></td>
-            <td class="num"><b><%= formatBRL(p.comissao_centavos || 0) %></b></td>
+            <td class="num"><%= p.minha_bps ? formatPercent(p.minha_bps) : '—' %></td>
+            <td class="num"><b><%= formatBRL(p.minha_comissao || 0) %></b></td>
             <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
             <td>
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>

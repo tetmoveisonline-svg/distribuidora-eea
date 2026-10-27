@@ -162,6 +162,38 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     );
     const pedidoId = ped.rows[0].id;
 
+    // Comissao automatica a partir do cadastro do cliente (quem agregou + %).
+    //   Preposto: representante_id = preposto (fatia dele) e responsavel_id = representante-pai (resto do total).
+    //   Representante direto: representante_id = ele, com o % total; sem responsavel.
+    const cc = await client.query(
+      `SELECT c.comissao_total_bps, c.comissao_preposto_bps,
+              u.id AS u_id, u.comissao_bps AS u_bps, u.representante_pai_id
+       FROM clientes c LEFT JOIN usuarios u ON u.id = c.representante_id AND u.papel = 'representante'
+       WHERE c.id = $1`, [clienteId]
+    );
+    const comRow = cc.rows[0];
+    if (comRow && comRow.u_id) {
+      const totalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
+      if (totalBps > 0) {
+        if (comRow.representante_pai_id) {
+          let prepBps = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
+          if (prepBps > totalBps) prepBps = totalBps;
+          const paiBps = totalBps - prepBps;
+          await client.query(
+            `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
+                    responsavel_id = $5, comissao_resp_bps = $6, comissao_resp_centavos = $7 WHERE id = $1`,
+            [pedidoId, comRow.u_id, prepBps, Math.round(totalCentavos * prepBps / 10000),
+             comRow.representante_pai_id, paiBps, Math.round(totalCentavos * paiBps / 10000)]
+          );
+        } else {
+          await client.query(
+            `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4 WHERE id = $1`,
+            [pedidoId, comRow.u_id, totalBps, Math.round(totalCentavos * totalBps / 10000)]
+          );
+        }
+      }
+    }
+
     let indiceGlobal = 0;
     for (const l of linhas) {
       // Regra: quantidade menor que o PDF -> valem sempre as PRIMEIRAS paginas. O arquivo guardado

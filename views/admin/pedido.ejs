@@ -63,7 +63,20 @@
       </div>
       <button class="btn" type="submit" style="margin-top:6px">Salvar comissão</button>
     </form>
-    <div class="hint-box" style="margin-top:14px">Deixe a % em branco para usar a comissão padrão do representante. A comissão é base × %.</div>
+    <% if (pedido.responsavel_id) { %>
+      <div class="split-box" style="margin-top:14px;border:1px solid var(--border-strong);border-radius:12px;padding:12px 14px;background:var(--panel)">
+        <div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Divisão com preposto</div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+          <span><b><%= pedido.rep_nome || 'Preposto' %></b> <span class="dim">· preposto · <%= formatPercent(pedido.comissao_bps || 0) %></span></span>
+          <b><%= formatBRL(pedido.comissao_centavos || 0) %></b>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0">
+          <span><b><%= pedido.resp_nome || 'Responsável' %></b> <span class="dim">· responsável · <%= formatPercent(pedido.comissao_resp_bps || 0) %></span></span>
+          <b><%= formatBRL(pedido.comissao_resp_centavos || 0) %></b>
+        </div>
+      </div>
+    <% } %>
+    <div class="hint-box" style="margin-top:14px">A comissão vem automática do cadastro do cliente (quem agregou). Para ajustar só este pedido, troque aqui — isso vira um único representante e desfaz a divisão. Para mudar a regra do cliente, edite em Clientes.</div>
   </div>
 
   <!-- funcionário + andamento -->

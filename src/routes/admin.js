@@ -173,9 +173,10 @@ router.get('/pedidos', async (req, res, next) => {
 router.get('/pedido/:id', async (req, res, next) => {
   try {
     const pr = await db.query(
-      `SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email, u.nome AS rep_nome
+      `SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email, u.nome AS rep_nome, ur.nome AS resp_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
-       LEFT JOIN usuarios u ON u.id = p.representante_id WHERE p.id = $1`, [req.params.id]
+       LEFT JOIN usuarios u ON u.id = p.representante_id
+       LEFT JOIN usuarios ur ON ur.id = p.responsavel_id WHERE p.id = $1`, [req.params.id]
     );
     if (pr.rowCount === 0) return naoEncontrado(res, req);
     const pedido = pr.rows[0];
@@ -261,14 +262,15 @@ router.post('/pedido/:id/comissao', async (req, res, next) => {
     const total = pr.rows[0].total_centavos;
     const repId = pInt(req.body.representante_id);
     if (!repId) {
-      await db.query('UPDATE pedidos SET representante_id = NULL, comissao_bps = NULL, comissao_centavos = 0 WHERE id = $1', [req.params.id]);
+      await db.query('UPDATE pedidos SET representante_id = NULL, comissao_bps = NULL, comissao_centavos = 0, responsavel_id = NULL, comissao_resp_bps = NULL, comissao_resp_centavos = NULL WHERE id = $1', [req.params.id]);
       return res.redirect('/admin/pedido/' + req.params.id);
     }
     const rep = await db.query("SELECT comissao_bps FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]);
     if (rep.rowCount === 0) return res.redirect('/admin/pedido/' + req.params.id);
     let bps = parsePercentToBps(req.body.percent);
     if (bps === null) bps = rep.rows[0].comissao_bps || 0;
-    await db.query('UPDATE pedidos SET representante_id = $1, comissao_bps = $2, comissao_centavos = $3 WHERE id = $4', [repId, bps, comissaoCentavos(total, bps), req.params.id]);
+    // Override manual = um unico representante; limpa a divisao (preposto) deste pedido.
+    await db.query('UPDATE pedidos SET representante_id = $1, comissao_bps = $2, comissao_centavos = $3, responsavel_id = NULL, comissao_resp_bps = NULL, comissao_resp_centavos = NULL WHERE id = $4', [repId, bps, comissaoCentavos(total, bps), req.params.id]);
     res.redirect('/admin/pedido/' + req.params.id);
   } catch (e) { next(e); }
 });
@@ -392,10 +394,21 @@ router.get('/clientes', async (req, res, next) => {
   try {
     const r = await db.query(
       `SELECT c.id, c.nome, c.ativo, c.prazo_dias, c.limite_centavos, c.bloquear_vencido, c.telefone, u.login,
+              c.representante_id, c.comissao_total_bps, c.comissao_preposto_bps,
+              rep.nome AS rep_nome, rep.representante_pai_id AS rep_eh_preposto, pai.nome AS rep_pai_nome,
               (SELECT COALESCE(sum(f.valor_centavos), 0) FROM financeiro f WHERE f.cliente_id = c.id AND f.status = 'aberto')::int AS em_aberto,
               (SELECT count(*) FROM pedidos p WHERE p.cliente_id = c.id)::int AS pedidos,
               (SELECT count(*) FROM itens i WHERE i.cliente_id = c.id AND i.ativo AND i.negociado) AS produtos
-       FROM clientes c LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente' ORDER BY c.nome`
+       FROM clientes c
+       LEFT JOIN usuarios u ON u.cliente_id = c.id AND u.papel = 'cliente'
+       LEFT JOIN usuarios rep ON rep.id = c.representante_id
+       LEFT JOIN usuarios pai ON pai.id = rep.representante_pai_id
+       ORDER BY c.nome`
+    );
+    const repsLista = await db.query(
+      `SELECT u.id, u.nome, u.comissao_bps, u.representante_pai_id, pai.nome AS pai_nome
+       FROM usuarios u LEFT JOIN usuarios pai ON pai.id = u.representante_pai_id
+       WHERE u.papel = 'representante' AND u.ativo = TRUE ORDER BY u.representante_pai_id NULLS FIRST, u.nome`
     );
     // acesso recem-criado (uma vez so)
     let acesso = null;
@@ -420,7 +433,7 @@ router.get('/clientes', async (req, res, next) => {
       ];
       acesso = { nome: a.nome, login: a.login, telefone: a.telefone, mensagem: linhas.join('\n'), site };
     }
-    res.render('admin/clientes', { clientes: r.rows, acesso, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL });
+    res.render('admin/clientes', { clientes: r.rows, reps: repsLista.rows, acesso, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent });
   } catch (e) { next(e); }
 });
 router.post('/clientes', async (req, res, next) => {
@@ -470,6 +483,32 @@ router.post('/clientes/:id/toggle', async (req, res, next) => {
     res.redirect('/admin/clientes');
   } catch (e) { next(e); }
 });
+// Comissao do cliente: quem agregou (representante ou preposto) + % total (+ fatia do preposto).
+// Aplica automaticamente nos PROXIMOS pedidos do cliente.
+router.post('/clientes/:id/comissao', exigeAdminFull, async (req, res, next) => {
+  try {
+    const id = pInt(req.params.id);
+    const repId = pInt(req.body.representante_id);
+    if (!repId) {
+      await db.query('UPDATE clientes SET representante_id = NULL, comissao_total_bps = NULL, comissao_preposto_bps = NULL WHERE id = $1', [id]);
+      return res.redirect('/admin/clientes?ok=' + encodeURIComponent('Comissão do cliente removida.'));
+    }
+    const u = await db.query("SELECT comissao_bps, representante_pai_id FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]);
+    if (u.rowCount === 0) throw new Error('Representante/preposto inválido.');
+    let totalBps = parsePercentToBps(req.body.total);
+    if (totalBps === null) totalBps = u.rows[0].comissao_bps || 0;
+    if (totalBps < 0 || totalBps >= 10000) throw new Error('Comissão total inválida.');
+    let prepBps = null;
+    if (u.rows[0].representante_pai_id) {
+      prepBps = parsePercentToBps(req.body.preposto);
+      if (prepBps === null) prepBps = u.rows[0].comissao_bps || 0;
+      if (prepBps < 0) prepBps = 0;
+      if (prepBps > totalBps) prepBps = totalBps;
+    }
+    await db.query('UPDATE clientes SET representante_id = $2, comissao_total_bps = $3, comissao_preposto_bps = $4 WHERE id = $1', [id, repId, totalBps, prepBps]);
+    res.redirect('/admin/clientes?ok=' + encodeURIComponent('Comissão do cliente atualizada.'));
+  } catch (e) { res.redirect('/admin/clientes?erro=' + encodeURIComponent(e.message || 'Falha ao salvar a comissão.')); }
+});
 
 // ===================== REPRESENTANTES =====================
 router.get('/representantes', (req, res, next) => telaRepasses('representante', req, res, next));
@@ -479,13 +518,13 @@ router.post('/repasses/:tipo/:pedidoId/pagar', async (req, res, next) => {
   try {
     const data = /^\d{4}-\d{2}-\d{2}$/.test(req.body.pago_em || '') ? req.body.pago_em : hojeISO();
     const forma = repasses.FORMAS.includes(req.body.forma) ? req.body.forma : 'Outro';
-    const p = await repasses.marcarPago(tipo, pInt(req.params.pedidoId), data, forma);
+    const p = await repasses.marcarPago(tipo, pInt(req.params.pedidoId), pInt(req.body.ret_usuario), data, forma);
     res.redirect(voltarRepasses(tipo, req, { ok: 'Repasse do pedido ' + p.numero + ' (' + formatBRL(p.valor) + ') marcado como pago.' }));
   } catch (e) { res.redirect(voltarRepasses(tipo, req, { erro: e.message || 'Falha ao marcar.' })); }
 });
 router.post('/repasses/:tipo/:pedidoId/reabrir', async (req, res, next) => {
   const tipo = req.params.tipo === 'funcionario' ? 'funcionario' : 'representante';
-  try { await repasses.reabrir(tipo, pInt(req.params.pedidoId)); res.redirect(voltarRepasses(tipo, req, { ok: 'Repasse reaberto.' })); }
+  try { await repasses.reabrir(tipo, pInt(req.params.pedidoId), pInt(req.body.ret_usuario)); res.redirect(voltarRepasses(tipo, req, { ok: 'Repasse reaberto.' })); }
   catch (e) { next(e); }
 });
 router.post('/repasses/:tipo/pagar-liberados', async (req, res, next) => {
@@ -503,7 +542,15 @@ router.post('/representantes', async (req, res, next) => {
     const bps = parsePercentToBps(req.body.comissao);
     if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
     if (bps === null) throw new Error('Informe a comissão padrão (%).');
-    const ins = await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps) VALUES ($1,$2,$3,$4,$5) RETURNING id', [nome, login, await bcrypt.hash(senha, 10), 'representante', bps]);
+    // Preposto: representante que trabalha sob outro (o pai).
+    let paiId = null;
+    if (req.body.tipo === 'preposto') {
+      paiId = pInt(req.body.pai_id);
+      if (!paiId) throw new Error('Escolha o representante do qual este é preposto.');
+      const pai = await db.query("SELECT id FROM usuarios WHERE id = $1 AND papel = 'representante' AND representante_pai_id IS NULL", [paiId]);
+      if (pai.rowCount === 0) throw new Error('Representante-pai inválido (um preposto não pode ser pai de outro).');
+    }
+    const ins = await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps, representante_pai_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [nome, login, await bcrypt.hash(senha, 10), 'representante', bps, paiId]);
     res.redirect('/admin/representantes?rep=' + ins.rows[0].id + '&ok=' + encodeURIComponent('Representante cadastrado.'));
   } catch (e) { res.redirect('/admin/representantes?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
 });
