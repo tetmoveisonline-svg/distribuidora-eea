@@ -1,0 +1,143 @@
+<%- include('../partials/app-open', { titulo: 'Preços por cliente', ativo: 'precos' }) %>
+
+<h2 class="title">Preços por cliente</h2>
+<p class="sub">Todo cliente vê todos os produtos ativos pelo <b>preço sugerido</b> (definido em Produtos). Aqui ficam só as <b>negociações</b>: um preço diferente para um cliente específico, que substitui o sugerido.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<div class="card pad" style="margin-bottom:16px">
+  <form method="get" action="/admin/precos">
+    <div class="field" style="max-width:340px;margin:0">
+      <label>Cliente</label>
+      <select name="cliente" onchange="this.form.submit()">
+        <% if (clientes.length === 0) { %><option>— nenhum cliente ativo —</option><% } %>
+        <% clientes.forEach(function (c) { %>
+          <option value="<%= c.id %>" <%= clienteId === c.id ? 'selected' : '' %>><%= c.nome %></option>
+        <% }); %>
+      </select>
+    </div>
+  </form>
+</div>
+
+<% if (clienteId) { %>
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Nova negociação</div>
+    <form method="post" action="/admin/precos">
+      <input type="hidden" name="cliente_id" value="<%= clienteId %>" />
+      <div class="field"><label>Produto</label>
+        <select name="produto_id" id="prodSel">
+          <% if (produtos.length === 0) { %><option value="">— cadastre um produto antes —</option><% } %>
+          <% produtos.forEach(function (p) { %><option value="<%= p.id %>" data-sugerido="<%= (isFull && p.sugerido !== null) ? (p.sugerido / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>"><%= p.nome %><%= (isFull && p.sugerido !== null) ? ' · sugerido ' + formatBRL(p.sugerido) : '' %></option><% }); %>
+        </select>
+      </div>
+      <div class="field"><label>Preço negociado (R$)</label><input name="preco" id="precoIn" placeholder="4,50" />
+        <div class="dim" id="precoHint" style="font-size:11.5px;margin-top:5px"></div>
+      </div>
+      <button class="btn block" type="submit">Salvar negociação</button>
+    </form>
+    <div class="hint-box" style="margin-top:14px">Sem negociação, o cliente paga o sugerido do produto, que acompanha custo e lucro automaticamente. Negociar fixa um preço só para este cliente (vale para todas as cores). "Remover" devolve o produto ao sugerido. Promoções por tempo limitado ficam no botão "Promoção" da lista.</div>
+  </div>
+
+  <div class="card pad">
+    <div class="section-title">Negociações de <%= clienteNome %></div>
+    <% if (itens.length === 0) { %><div class="empty">Nenhuma negociação: este cliente vê todos os produtos pelo preço sugerido.</div><% } else { %>
+    <div class="price-list">
+      <% itens.forEach(function (i) { %>
+        <div class="price-row" id="pr-<%= i.id %>">
+          <div class="price-main">
+            <div class="price-name"><%= i.nome %>
+              <% if (isFull && i.lucroInfo) { var li = i.lucroInfo; var cor = li.lucro >= li.lucroAlvo ? 'var(--ok)' : (li.lucro > 0 ? 'var(--warn)' : 'var(--danger)'); %>
+                <div class="price-obs">obs: lucro <b style="color:<%= cor %>"><%= formatBRL(li.lucro) %></b> por unidade
+                  <% if (li.diffSugerido === 0) { %>· igual ao sugerido
+                  <% } else if (li.diffSugerido !== null && li.diffSugerido < 0) { %>· <%= formatBRL(-li.diffSugerido) %> abaixo do sugerido (<%= formatBRL(li.sugerido) %>)
+                  <% } else if (li.diffSugerido !== null) { %>· <%= formatBRL(li.diffSugerido) %> acima do sugerido (<%= formatBRL(li.sugerido) %>)<% } %>
+                  <% if (li.lucroPromo !== null) { %><br>com a promoção: <b style="color:<%= li.lucroPromo >= li.lucroAlvo ? 'var(--ok)' : (li.lucroPromo > 0 ? 'var(--warn)' : 'var(--danger)') %>"><%= formatBRL(li.lucroPromo) %></b> por unidade<% } %>
+                </div>
+              <% } %>
+            </div>
+            <div class="price-value">
+              <% if (i.efetivo.promo) { %>
+                <span class="now"><%= formatBRL(i.efetivo.preco_centavos) %></span>
+                <span class="was"><%= formatBRL(i.preco_centavos) %></span>
+              <% } else { %>
+                <span class="now"><%= formatBRL(i.preco_centavos) %></span>
+              <% } %>
+            </div>
+            <div class="price-state">
+              <% if (i.promo_tipo) { %>
+                <% if (i.efetivo.promo) { %><span class="badge ok">Promoção ativa</span>
+                <% } else if (i.promoEstado === 'agendada') { %><span class="badge warn">Promoção agendada</span>
+                <% } else { %><span class="badge neutral">Promoção encerrada</span><% } %>
+                <div class="dim price-sub">
+                  <%= i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor) + ' de desconto' : 'por ' + formatBRL(i.promo_valor) %>
+                  · <%= i.promo_inicio ? brDate(i.promo_inicio) + ' a ' : 'até ' %><%= brDate(i.promo_fim) %>
+                </div>
+              <% } else { %>
+                <span class="dim price-sub">sem promoção</span>
+              <% } %>
+            </div>
+            <div class="price-actions">
+              <button type="button" class="btn ghost sm promo-toggle" data-target="promo-<%= i.id %>"><%= i.promo_tipo ? 'Editar promoção' : 'Promoção' %></button>
+              <form method="post" action="/admin/precos/<%= i.id %>/remove" style="margin:0" onsubmit="return confirm('Remover a negociação de <%= i.nome.replace(/'/g, '') %>? O produto volta ao preço sugerido para este cliente.')"><button class="btn ghost sm" type="submit">Remover</button></form>
+            </div>
+          </div>
+
+          <div class="promo-panel" id="promo-<%= i.id %>" style="display:none">
+            <form method="post" action="/admin/precos/<%= i.id %>/promo" class="promo-grid">
+              <div class="field"><label>Tipo</label>
+                <select name="tipo">
+                  <option value="percentual" <%= i.promo_tipo === 'percentual' ? 'selected' : '' %>>% de desconto</option>
+                  <option value="valor" <%= i.promo_tipo === 'valor' ? 'selected' : '' %>>R$ · preço promocional</option>
+                </select>
+              </div>
+              <div class="field"><label>Valor</label><input name="valor" placeholder="10" value="<%= i.promo_valor_txt %>" /></div>
+              <div class="field"><label>Início <span class="dim">(opcional)</span></label><input type="date" name="inicio" value="<%= i.promo_inicio || '' %>" /></div>
+              <div class="field"><label>Até</label><input type="date" name="fim" value="<%= i.promo_fim || '' %>" required /></div>
+              <div class="promo-btns">
+                <button class="btn sm" type="submit"><%= i.promo_tipo ? 'Salvar' : 'Aplicar' %></button>
+                <% if (i.promo_tipo) { %><button class="btn ghost sm" type="submit" formaction="/admin/precos/<%= i.id %>/promo/remover" formnovalidate>Tirar promoção</button><% } %>
+                <button class="btn ghost sm promo-toggle" type="button" data-target="promo-<%= i.id %>">Fechar</button>
+              </div>
+            </form>
+            <div class="dim promo-help">Em <b>%</b> o desconto é sobre o preço negociado; em <b>R$</b> o valor informado passa a ser o preço do item. Vale do início (ou de agora, se vazio) até a data final, inclusive. O cliente vê o preço promocional ao subir a etiqueta e o pedido grava o valor cobrado no aceite.</div>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+    <% } %>
+  </div>
+</div>
+<% } else { %>
+  <div class="card pad"><div class="empty">Cadastre um cliente ativo para definir preços.</div></div>
+<% } %>
+
+<script>
+  // Preco negociado vem preenchido com o sugerido do produto escolhido.
+  (function () {
+    var sel = document.getElementById('prodSel'), inp = document.getElementById('precoIn'), hint = document.getElementById('precoHint');
+    if (!sel || !inp) return;
+    var tocado = false;
+    function sug() { var o = sel.options[sel.selectedIndex]; return o ? (o.getAttribute('data-sugerido') || '') : ''; }
+    function aplicar() {
+      var s = sug();
+      if (!tocado || !inp.value) inp.value = s;
+      hint.textContent = s ? 'Sugerido: R$ ' + s + '. Altere se a negociação for diferente.' : (<%= isFull ? 'true' : 'false' %> ? 'Produto sem custo cadastrado; informe o preço.' : 'Informe o preço negociado.');
+    }
+    inp.addEventListener('input', function () { tocado = !!inp.value; });
+    sel.addEventListener('change', function () { tocado = false; aplicar(); });
+    aplicar();
+  })();
+  document.querySelectorAll('.promo-toggle').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = document.getElementById(b.getAttribute('data-target'));
+      if (!p) return;
+      var aberto = p.style.display !== 'none';
+      document.querySelectorAll('.promo-panel').forEach(function (x) { x.style.display = 'none'; });
+      if (!aberto) { p.style.display = 'block'; var f = p.querySelector('input[name="valor"]'); if (f) f.focus(); }
+    });
+  });
+</script>
+
+<%- include('../partials/app-close') %>

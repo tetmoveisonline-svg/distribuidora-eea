@@ -1,0 +1,168 @@
+<%- include('../partials/app-open', { titulo: 'Estoque', ativo: (typeof ativo !== 'undefined' ? ativo : 'estoque') }) %>
+
+<h2 class="title">Estoque</h2>
+<% if (typeof sugerido !== 'undefined' && sugerido) { %>
+<p class="sub">Preço sugerido e o estoque disponível de todos os produtos. Este é o mesmo estoque que o cliente enxerga. Atualiza sozinho a cada 30 segundos.</p>
+<% } else { %>
+<p class="sub">Seu preço e o estoque disponível de todos os produtos. Ao aceitar um envio, as etiquetas ficam reservadas para você; o despacho consome a reserva. Atualiza sozinho a cada 30 segundos.</p>
+<% } %>
+
+<div class="card pad">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="rep-tabs" style="margin:0" role="tablist" aria-label="Filtro de estoque">
+      <button type="button" class="tab on" data-filtro="todos" role="tab">Todos <span class="dim" id="nTodos"></span></button>
+      <button type="button" class="tab" data-filtro="com" role="tab">Com estoque <span class="dim" id="nCom"></span></button>
+      <button type="button" class="tab" data-filtro="sem" role="tab">Sem estoque <span class="dim" id="nSem"></span></button>
+    </div>
+    <span class="dim" style="font-size:12px">Atualizado às <span id="estAtual"><%= formatDateTime(new Date()).slice(11) %></span> · <button type="button" class="btn ghost sm" id="estRefresh">Atualizar agora</button></span>
+  </div>
+  <div id="estBox">
+    <%- include('../partials/estoque-tabela', { produtos: produtos }) %>
+  </div>
+</div>
+
+<% if (typeof sugerido !== 'undefined' && sugerido) { %>
+<div class="hint-box">Cada cartão é um produto; cada chip é uma cor com o SKU e o <b>disponível</b>: <span style="color:var(--ok)">verde</span> tem estoque, <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos), <span style="color:var(--danger)">vermelho</span> esgotado. O preço exibido é o <b>sugerido</b> — é o mesmo que o cliente vê.</div>
+<% } else { %>
+<div class="hint-box">Cada cartão é um produto; cada chip é uma cor com o SKU e o <b>disponível</b>: <span style="color:var(--ok)">verde</span> tem estoque, <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos), <span style="color:var(--danger)">vermelho</span> esgotado. "N seus" é o que seus pedidos aceitos ainda vão consumir no despacho. Ao subir etiquetas, o sistema avisa se a quantidade passa do disponível, mas o pedido segue; a distribuidora confirma a reposição.</div>
+<% } %>
+
+<!-- Galeria de imagens do produto -->
+<div class="overlay gal" id="galeria">
+  <div class="card pad modal gal-box">
+    <div class="gal-top"><b id="galTit"></b><span class="dim" id="galN"></span><button type="button" class="btn ghost sm" id="galFechar">Fechar</button></div>
+    <div class="gal-stage">
+      <button type="button" class="gal-nav" id="galPrev" aria-label="anterior">‹</button>
+      <img id="galImg" src="" alt="imagem do produto" />
+      <button type="button" class="gal-nav" id="galNext" aria-label="próxima">›</button>
+    </div>
+    <div class="gal-bottom">
+      <div class="gal-thumbs" id="galThumbs"></div>
+      <a class="btn sm" id="galDown" href="#" download>Baixar imagem</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var box = document.getElementById('estBox');
+  var at = document.getElementById('estAtual');
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+  function tag(n) { var cls = n <= 0 ? ' zero' : (n <= 5 ? ' baixo' : ''); return '<span class="saldo-tag' + cls + '">' + n + '</span>'; }
+  function preco(p) {
+    if (p.promo) return '<b style="color:var(--ok)">' + esc(p.preco_txt) + '</b> <span class="badge ok" style="margin-left:4px">' + esc(p.promo_rotulo) + '</span><div class="dim" style="font-size:11px;text-decoration:line-through">' + esc(p.preco_original_txt) + '</div>';
+    return '<b>' + esc(p.preco_txt) + '</b>';
+  }
+  var dados = <%- JSON.stringify(produtos) %>;
+  var EST_API = '<%= typeof apiUrl !== "undefined" ? apiUrl : "/api/estoque" %>';
+  var filtro = 'todos';
+  try { var f0 = localStorage.getItem('estoqueFiltro'); if (f0 === 'com' || f0 === 'sem' || f0 === 'todos') filtro = f0; } catch (e) {}
+  // Filtro por cor: "com" = disponivel > 0; "sem" = disponivel <= 0. Produto de cor unica usa o proprio disponivel.
+  function aplicarFiltro(produtos, f) {
+    if (f === 'todos') return produtos;
+    var out = [];
+    produtos.forEach(function (p) {
+      if (!p.cores.length) { if ((f === 'com') === (p.disponivel > 0)) out.push(p); return; }
+      var cores = p.cores.filter(function (c) { return (f === 'com') === (c.disponivel > 0); });
+      if (cores.length) out.push(Object.assign({}, p, { cores: cores }));
+    });
+    return out;
+  }
+  function contar(produtos, f) {
+    var n = 0;
+    produtos.forEach(function (p) {
+      if (!p.cores.length) { if (f === 'todos' || (f === 'com') === (p.disponivel > 0)) n++; return; }
+      p.cores.forEach(function (c) { if (f === 'todos' || (f === 'com') === (c.disponivel > 0)) n++; });
+    });
+    return n;
+  }
+  function renderTudo() {
+    document.getElementById('nTodos').textContent = contar(dados, 'todos');
+    document.getElementById('nCom').textContent = contar(dados, 'com');
+    document.getElementById('nSem').textContent = contar(dados, 'sem');
+    document.querySelectorAll('[data-filtro]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-filtro') === filtro); b.setAttribute('aria-selected', b.getAttribute('data-filtro') === filtro ? 'true' : 'false'); });
+    render(aplicarFiltro(dados, filtro));
+  }
+  document.querySelectorAll('[data-filtro]').forEach(function (b) {
+    b.addEventListener('click', function () { filtro = b.getAttribute('data-filtro'); try { localStorage.setItem('estoqueFiltro', filtro); } catch (e) {} renderTudo(); });
+  });
+  function render(produtos) {
+    if (!produtos.length) { box.innerHTML = '<div class="empty">' + (filtro === 'com' ? 'Nenhuma cor com estoque disponível agora.' : (filtro === 'sem' ? 'Nenhuma cor sem estoque.' : 'Nenhum produto disponível no momento.')) + '</div>'; return; }
+    // Cartoes por produto com as cores como chips (mesmo desenho do partial renderizado no servidor)
+    function cls(n) { return n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : 'ok'); }
+    function chip(nome, sku, disp, meu, pedidos) {
+      return '<span class="ec-chip ' + cls(disp) + '"><span class="ec-cor">' + esc(nome) + '</span>' + (sku ? '<span class="ec-sku">' + esc(sku) + '</span>' : '') +
+        '<b class="ec-n">' + disp + '</b>' + (meu > 0 ? '<span class="ec-meu" title="' + esc(pedidos) + '">· ' + meu + ' seus</span>' : '') + '</span>';
+    }
+    function precoCard(p) {
+      if (p.promo) return '<span class="ec-preco promo">' + esc(p.preco_txt) + '</span><span class="ec-was">' + esc(p.preco_original_txt) + '</span><span class="badge ok">' + esc(p.promo_rotulo) + '</span>';
+      return '<span class="ec-preco">' + esc(p.preco_txt) + '</span>';
+    }
+    var h = '<div class="ec-grid">';
+    produtos.forEach(function (p) {
+      h += '<div class="ec-card"><div class="ec-head"><div class="ec-nome">' + esc(p.nome) + '</div><div class="ec-right">' + precoCard(p) + '</div></div>';
+      if (p.obs) h += '<div class="ec-obs mono">' + esc(p.obs) + '</div>';
+      if (p.imagens && p.imagens.length) {
+        var ids = p.imagens.map(function (i) { return i.id; }).join(',');
+        h += '<div class="ec-acoes"><button type="button" class="ec-fotos" data-galeria="' + p.id + '" data-nome="' + esc(p.nome) + '" data-imgs="' + ids + '">' +
+          '<img src="/produtos/' + p.id + '/imagens/' + p.imagens[0].id + '" alt="" loading="lazy" /> Ver ' + (p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens') + '</button>' +
+          '<button type="button" class="ec-baixar" data-galeria="' + p.id + '" data-imgs="' + ids + '" title="baixar todas as imagens">⬇ Baixar</button></div>';
+      }
+      h += '<div class="ec-chips">';
+      if (!p.cores.length) h += chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos);
+      else p.cores.forEach(function (c) { h += chip(c.nome, c.sku || '', c.disponivel, c.meu_reservado, c.meus_pedidos); });
+      h += '</div></div>';
+    });
+    box.innerHTML = h + '</div>';
+  }
+  function atualizar() {
+    fetch(EST_API).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) return;
+      dados = d.produtos; renderTudo();
+      at.textContent = String(d.atualizado_em).slice(11);
+    }).catch(function () {});
+  }
+  document.getElementById('estRefresh').addEventListener('click', atualizar);
+  setInterval(atualizar, 30000);
+  renderTudo();
+
+  // Galeria: abre ao clicar em "Ver imagens"; setas, miniaturas e botao de baixar.
+  var gal = document.getElementById('galeria'), gImg = document.getElementById('galImg'), gTit = document.getElementById('galTit'), gN = document.getElementById('galN'), gThumbs = document.getElementById('galThumbs'), gDown = document.getElementById('galDown');
+  var gPid = 0, gIds = [], gI = 0;
+  function galMostrar(i) {
+    gI = (i + gIds.length) % gIds.length;
+    var src = '/produtos/' + gPid + '/imagens/' + gIds[gI];
+    gImg.src = src; gDown.href = src + '?baixar=1';
+    gN.textContent = (gI + 1) + ' / ' + gIds.length;
+    gThumbs.querySelectorAll('img').forEach(function (t, k) { t.classList.toggle('on', k === gI); });
+  }
+  function galAbrir(btn) {
+    gPid = btn.getAttribute('data-galeria'); gIds = btn.getAttribute('data-imgs').split(',');
+    gTit.textContent = btn.getAttribute('data-nome');
+    gThumbs.innerHTML = gIds.map(function (id) { return '<img src="/produtos/' + gPid + '/imagens/' + id + '" alt="" />'; }).join('');
+    gThumbs.querySelectorAll('img').forEach(function (t, k) { t.addEventListener('click', function () { galMostrar(k); }); });
+    gal.querySelectorAll('.gal-nav').forEach(function (b) { b.style.display = gIds.length > 1 ? '' : 'none'; });
+    galMostrar(0); gal.classList.add('on');
+  }
+  box.addEventListener('click', function (e) {
+    var b = e.target.closest('.ec-fotos'); if (b) return galAbrir(b);
+    var d = e.target.closest('.ec-baixar'); if (d) baixarTodas(d.getAttribute('data-galeria'), d.getAttribute('data-imgs').split(','));
+  });
+  // Baixa uma por vez (o navegador pode pedir permissao para varios downloads na primeira vez).
+  function baixarTodas(pid, ids) {
+    ids.forEach(function (id, k) {
+      setTimeout(function () { var a = document.createElement('a'); a.href = '/produtos/' + pid + '/imagens/' + id + '?baixar=1'; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); }, k * 400);
+    });
+  }
+  document.getElementById('galPrev').addEventListener('click', function () { galMostrar(gI - 1); });
+  document.getElementById('galNext').addEventListener('click', function () { galMostrar(gI + 1); });
+  document.getElementById('galFechar').addEventListener('click', function () { gal.classList.remove('on'); });
+  gal.addEventListener('click', function (e) { if (e.target === gal) gal.classList.remove('on'); });
+  document.addEventListener('keydown', function (e) {
+    if (!gal.classList.contains('on')) return;
+    if (e.key === 'Escape') gal.classList.remove('on'); else if (e.key === 'ArrowLeft') galMostrar(gI - 1); else if (e.key === 'ArrowRight') galMostrar(gI + 1);
+  });
+})();
+</script>
+
+<%- include('../partials/app-close') %>

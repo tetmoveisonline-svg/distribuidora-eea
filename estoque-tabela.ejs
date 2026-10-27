@@ -1,0 +1,43 @@
+<%
+  // Cartoes por produto: nome, peso/medidas, preco (com promocao) e as cores como chips com saldo.
+  function precoCell(p) {
+    if (p.promo) return '<span class="ec-preco promo">' + p.preco_txt + '</span><span class="ec-was">' + p.preco_original_txt + '</span><span class="badge ok">' + p.promo_rotulo + '</span>';
+    return '<span class="ec-preco">' + p.preco_txt + '</span>';
+  }
+  function cls(n) { return n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : 'ok'); }
+  function chip(nome, sku, disp, meu, pedidos) {
+    return '<span class="ec-chip ' + cls(disp) + '"><span class="ec-cor">' + nome + '</span>' + (sku ? '<span class="ec-sku">' + sku + '</span>' : '') +
+      '<b class="ec-n">' + disp + '</b>' + (meu > 0 ? '<span class="ec-meu" title="' + pedidos + '">· ' + meu + ' seus</span>' : '') + '</span>';
+  }
+%>
+<% if (produtos.length === 0) { %>
+  <div class="empty">Nenhum produto disponível no momento.</div>
+<% } else { %>
+<div class="ec-grid">
+  <% produtos.forEach(function (p) { %>
+    <div class="ec-card">
+      <div class="ec-head">
+        <div class="ec-nome"><%= p.nome %></div>
+        <div class="ec-right"><%- precoCell(p) %></div>
+      </div>
+      <% if (p.obs) { %><div class="ec-obs mono"><%= p.obs %></div><% } %>
+      <% if (p.imagens && p.imagens.length) { %>
+      <% var ids = p.imagens.map(function (i) { return i.id; }).join(','); %>
+      <div class="ec-acoes">
+        <button type="button" class="ec-fotos" data-galeria="<%= p.id %>" data-nome="<%= p.nome %>" data-imgs="<%= ids %>">
+          <img src="/produtos/<%= p.id %>/imagens/<%= p.imagens[0].id %>" alt="" loading="lazy" /> Ver <%= p.imagens.length === 1 ? 'imagem' : p.imagens.length + ' imagens' %>
+        </button>
+        <button type="button" class="ec-baixar" data-galeria="<%= p.id %>" data-imgs="<%= ids %>" title="baixar todas as imagens">⬇ Baixar</button>
+      </div>
+      <% } %>
+      <div class="ec-chips">
+        <% if (p.cores.length === 0) { %>
+          <%- chip('cor única', '', p.disponivel, p.meu_reservado, p.meus_pedidos) %>
+        <% } else { p.cores.forEach(function (c) { %>
+          <%- chip(c.nome, c.sku || '', c.disponivel, c.meu_reservado, c.meus_pedidos) %>
+        <% }); } %>
+      </div>
+    </div>
+  <% }); %>
+</div>
+<% } %>

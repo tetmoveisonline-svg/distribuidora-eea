@@ -1,0 +1,77 @@
+<%
+  // Parametros esperados:
+  //   pid   -> id do pedido (para id unico do bloco)
+  //   etqs  -> array de etiquetas { indice, codigo_externo, item_nome, status, despachado_em }
+  //   desp  -> quantas ja foram despachadas
+  //   tot   -> total de etiquetas
+  //   admin -> true mostra a coluna "Código lido"
+  //   formatDateTime -> helper de data/hora
+  var _pct = (tot > 0) ? Math.round((desp / tot) * 100) : 0;
+  var _pend = Math.max(0, tot - desp);
+  // Vocabulario: o admin fala em "despacho"; o cliente ve "coleta".
+  var _sep = admin ? 'Separada' : 'Separando';
+  var _fim = admin ? 'Despachada' : 'Coletado';
+  var _fimPl = admin ? 'despachadas' : 'coletadas';
+  var _bipe = admin ? 'Bipe do despacho' : 'Bipe da coleta';
+  var _sepN = etqs.filter(function (e) { return e.status === 'conferido'; }).length;
+  var _neN = etqs.filter(function (e) { return e.status === 'nao_enviada'; }).length;
+  _pend = Math.max(0, _pend - _neN);
+%>
+<div class="disc" id="disc-<%= pid %>">
+  <div class="disc-head">
+    <div class="left"><span class="chev">&#9656;</span> Etiquetas e horário do bipe</div>
+    <% if (tot > 0 && desp >= tot) { %>
+      <span class="badge ok"><%= admin ? 'Despacho' : 'Coleta' %> completa: <%= desp %> de <%= tot %></span>
+    <% } else if (desp > 0) { %>
+      <span class="badge warn"><%= admin ? 'Despacho' : 'Coleta' %> parcial: <%= desp %> de <%= tot %></span>
+    <% } else if (_sepN > 0) { %>
+      <span class="badge warn">Separando: <%= _sepN %> de <%= tot %></span>
+    <% } else { %>
+      <span class="badge neutral">Nenhuma <%= admin ? 'despachada' : 'coletada' %> ainda</span>
+    <% } %>
+  </div>
+  <div class="disc-body">
+    <div class="partial">
+      <div class="pbar"><div class="pfill" style="width:<%= _pct %>%"></div></div>
+      <span class="pcount"><b style="color:var(--text)"><%= desp %></b> <%= _fimPl %> · <%= _sepN %> separando · <%= Math.max(0, _pend - _sepN) %> aguardando<% if (_neN > 0) { %> · <%= _neN %> não enviada(s)<% } %></span>
+    </div>
+    <% if (tot === 0) { %>
+      <div class="empty">Este pedido ainda não tem etiquetas geradas.</div>
+    <% } else { %>
+      <div style="overflow-x:auto">
+        <table class="etq-table">
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <% if (admin) { %><th>Código lido</th><% } %>
+              <th>Produto</th>
+              <th>Situação</th>
+              <th><%= _bipe %></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% etqs.forEach(function (e) { %>
+              <tr>
+                <td class="num"><%= e.indice %></td>
+                <% if (admin) { %><td class="mono"><%= e.codigo_externo ? e.codigo_externo : '—' %></td><% } %>
+                <td><%= e.item_nome ? e.item_nome : '—' %></td>
+                <td>
+                  <% if (e.status === 'despachado') { %>
+                    <span class="dot-ok">&#10003; <%= _fim %></span>
+                  <% } else if (e.status === 'conferido') { %>
+                    <span class="dot-sep">&#9679; <%= _sep %></span>
+                  <% } else if (e.status === 'nao_enviada') { %>
+                    <span class="dim" title="ficou de fora no encerramento do pedido; não é cobrada">&#9679; Não enviada</span>
+                  <% } else { %>
+                    <span class="dot-wait">&#9679; Aguardando</span>
+                  <% } %>
+                </td>
+                <td class="hora"><%= (e.status === 'despachado' && e.despachado_em) ? formatDateTime(e.despachado_em) : '—' %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>

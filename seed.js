@@ -32,35 +32,26 @@ async function seedDemo() {
     return;
   }
 
-  // Produtos no catalogo (preco padrao + cores/estoque).
-  const prods = [
-    { nome: 'Penteadeira Dulce', desc: 'Penteadeira com espelho e gavetas', preco: 25000, cores: [['Branco', 12], ['Preto', 5]] },
-    { nome: 'Comoda Lara', desc: 'Comoda 4 gavetas', preco: 18000, cores: [['Branco', 6], ['Cinza', 3]] },
-  ];
-  const prodInfo = {};
-  for (const p of prods) {
-    const pr = await db.query('INSERT INTO produtos (nome, descricao, preco_padrao_centavos) VALUES ($1,$2,$3) RETURNING id', [p.nome, p.desc, p.preco]);
-    prodInfo[p.nome] = { id: pr.rows[0].id, preco: p.preco };
-    for (const [cor, est] of p.cores) {
-      await db.query('INSERT INTO produto_cores (produto_id, nome, estoque) VALUES ($1,$2,$3)', [pr.rows[0].id, cor, est]);
-    }
+  // Produtos no catalogo.
+  const prods = [['PAC ate 300g', 'Encomenda PAC ate 300g'], ['SEDEX ate 300g', 'Encomenda SEDEX ate 300g'], ['PAC 301g a 1kg', 'Encomenda PAC ate 1kg']];
+  const prodIds = {};
+  for (const [n, d] of prods) {
+    const pr = await db.query('INSERT INTO produtos (nome, descricao) VALUES ($1,$2) RETURNING id', [n, d]);
+    prodIds[n] = pr.rows[0].id;
   }
 
-  // Cliente + login, com desconto padrao de 10% em cada item.
-  const c = await db.query(
-    'INSERT INTO clientes (nome, email, desconto_tipo, desconto_escopo, desconto_valor) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-    ['Loja do Cliente Ltda', 'cliente@email.com', 'pct', 'item', 1000]
-  );
+  // Cliente + login.
+  const c = await db.query('INSERT INTO clientes (nome, email) VALUES ($1,$2) RETURNING id', ['Loja do Cliente Ltda', 'cliente@email.com']);
   const clienteId = c.rows[0].id;
   await db.query(
     'INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)',
     ['Loja do Cliente Ltda', 'cliente', await bcrypt.hash('cliente123', 10), 'cliente', clienteId]
   );
 
-  // Produtos liberados para o cliente (itens), com o preco padrao.
-  for (const nome of Object.keys(prodInfo)) {
-    await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos) VALUES ($1,$2,$3,$4)',
-      [clienteId, prodInfo[nome].id, nome, prodInfo[nome].preco]);
+  // Precos por cliente (itens ligados aos produtos).
+  const precos = [['PAC ate 300g', 450], ['SEDEX ate 300g', 980], ['PAC 301g a 1kg', 620]];
+  for (const [n, p] of precos) {
+    await db.query('INSERT INTO itens (cliente_id, produto_id, nome, preco_centavos) VALUES ($1,$2,$3,$4)', [clienteId, prodIds[n], n, p]);
   }
 
   // Representante e funcionario demo.

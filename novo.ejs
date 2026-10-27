@@ -4,7 +4,29 @@
 <p class="sub">Suba os PDFs das etiquetas (formato térmico, 1 etiqueta por página). O sistema conta as páginas e já preenche a quantidade.</p>
 
 <% if (itens.length === 0) { %>
-  <div class="alert err">Você ainda não tem produtos liberados. Peça ao administrador para liberar produtos para você.</div>
+  <div class="alert err">Nenhum produto com preço disponível no momento. Fale com a distribuidora.</div>
+<% } %>
+
+<% if (credito && credito.controlado) { %>
+  <div class="card pad credit-bar">
+    <div>
+      <div class="kl">Crédito disponível</div>
+      <div class="kv"><%= formatBRL(credito.disponivel) %> <span class="dim" style="font-size:12.5px;font-weight:400">de <%= formatBRL(credito.limite) %></span></div>
+    </div>
+    <div class="credit-track">
+      <div class="pbar"><div class="pfill" id="creditFill" style="width:<%= credito.limite > 0 ? Math.min(100, Math.round(credito.aberto / credito.limite * 100)) : 100 %>%;background:<%= credito.vencido > 0 ? 'var(--danger)' : 'var(--warn)' %>"></div></div>
+      <div class="dim" style="font-size:12px;margin-top:5px">
+        <%= formatBRL(credito.aberto) %> em aberto<% if (credito.creditoConta > 0) { %> · <span style="color:var(--ok)"><%= formatBRL(credito.creditoConta) %> de crédito a seu favor</span><% } %>
+        <% if (credito.vencido > 0) { %> · <span style="color:var(--danger)"><%= formatBRL(credito.vencido) %> vencido (<%= credito.maisVencido.numero %>, <%= credito.maisVencido.vencimento %>)</span>
+        <% } else if (credito.proximo) { %> · vence <%= credito.proximo.vencimento %> (<%= credito.proximo.numero %>)<% } %>
+      </div>
+    </div>
+    <a class="doc-link" href="/financeiro">Ver financeiro</a>
+  </div>
+<% } %>
+<% if (credito && credito.bloqueado) { %>
+  <div class="alert err">Há pedido vencido em aberto (<%= credito.maisVencido.numero %>, <%= formatBRL(credito.maisVencido.valor) %>, venceu em <%= credito.maisVencido.vencimento %>). Novos envios ficam liberados após o pagamento.<% if (contato) { %> Contato: <%= contato %>.<% } %>
+    <% if (whatsapp) { %><div style="margin-top:8px"><a class="btn sm whats" id="bloqWhats" href="#" target="_blank" rel="noopener">Falar no WhatsApp</a></div><% } %></div>
 <% } %>
 
 <div class="card pad">
@@ -15,9 +37,34 @@
   <input type="file" id="fileInput" accept="application/pdf" multiple style="display:none" />
 
   <div id="uploadMsg" class="alert err" style="display:none;margin-top:14px"></div>
+  <div id="lendoMsg" class="hint-box" style="display:none;margin-top:14px"></div>
 
   <div id="files" style="margin-top:18px"></div>
   <div id="empty" class="empty">Nenhum arquivo ainda. Selecione os PDFs das etiquetas para começar.</div>
+
+  <div id="creditWarn" class="credit-warn" style="display:none">
+    <div class="cw-head">
+      <div class="cw-title">Este envio ultrapassa seu limite de crédito</div>
+      <div class="cw-text" id="cwText"></div>
+    </div>
+    <div class="cw-opts">
+      <div class="cw-opt">
+        <div class="cw-opt-title">Enviar menos etiquetas agora</div>
+        <div class="cw-opt-text" id="cwSugestao"></div>
+        <button type="button" class="btn sm" id="cwAjustar" style="display:none">Ajustar quantidade</button>
+      </div>
+      <div class="cw-opt">
+        <div class="cw-opt-title">Liberar mais saldo</div>
+        <div class="cw-opt-text" id="cwSaldo"></div>
+        <div class="actions-inline">
+          <% if (whatsapp) { %><a class="btn sm whats" id="cwWhats" href="#" target="_blank" rel="noopener">Pedir antecipação no WhatsApp</a>
+          <% } else if (contato) { %><span class="doc-link"><%= contato %></span><% } %>
+          <a class="doc-link" href="/financeiro">Ver financeiro</a>
+        </div>
+        <% if (whatsapp) { %><div class="dim" style="font-size:11.5px;margin-top:8px">Abre o WhatsApp da distribuidora com a mensagem já preenchida. Você só confere e envia.</div><% } %>
+      </div>
+    </div>
+  </div>
 
   <div class="totalbar">
     <div class="muted"><span id="fileCount">0</span> arquivos &middot; <b style="color:var(--text)"><span id="labelCount">0</span> etiquetas</b> no total</div>
@@ -26,18 +73,19 @@
       <button class="btn" id="revisarBtn" disabled>Revisar pedido</button>
     </div>
   </div>
+  <div class="dim" id="revisarHint" style="display:none;font-size:12px;text-align:right;margin-top:6px">"Revisar pedido" libera quando o total couber no crédito disponível.</div>
 </div>
 
-<div class="hint-box">A quantidade vem do número de páginas do PDF e pode ser ajustada no &minus; / +. O valor de cada arquivo é quantidade &times; preço negociado do item, e o rodapé soma tudo.</div>
+<div class="hint-box">A quantidade vem do número de páginas do PDF e pode ser ajustada no &minus; / +. Se você reduzir, valem sempre as <b>primeiras</b> etiquetas do arquivo (páginas 1 a N); as demais ficam de fora deste pedido e podem ir num próximo envio. O valor de cada arquivo é quantidade &times; preço negociado do item, e o rodapé soma tudo.</div>
 
 <!-- Modal revisar/aceitar -->
 <div class="overlay" id="overlay">
   <div class="card pad modal">
     <h2 class="title">Revisar pedido</h2>
-    <p class="sub">Confira as etiquetas, os itens e os valores. Ao aceitar, geramos o comprovante em PDF com data e hora.</p>
+    <p class="sub">Confira as etiquetas, os itens e os valores. Ao aceitar, geramos o comprovante em PDF com data e hora. Em arquivos com quantidade menor que o PDF, entram as primeiras páginas.</p>
 
     <table>
-      <thead><tr><th>Arquivo</th><th>Produto</th><th>Cor</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>Arquivo</th><th>Item</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th class="num">Total</th></tr></thead>
       <tbody id="reviewBody"></tbody>
     </table>
     <div class="totalbar">
@@ -66,7 +114,11 @@
 
 <script>
   window.ITENS = <%- JSON.stringify(itens) %>;
+  window.CREDITO = <%- JSON.stringify(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, abertos: credito.abertos, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
+  window.WHATSAPP = <%- JSON.stringify(whatsapp || '') %>;
+  window.CLIENTE = <%- JSON.stringify({ nome: clienteNome, login: clienteLogin }) %>;
 </script>
+<script type="module" src="/js/leitor-etiquetas.js"></script>
 <script src="/js/novo.js"></script>
 
 <%- include('../partials/app-close') %>

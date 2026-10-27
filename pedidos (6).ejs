@@ -1,0 +1,41 @@
+<%- include('../partials/app-open', { titulo: 'Pedidos e taxas', ativo: 'func' }) %>
+
+<h2 class="title">Pedidos e minhas taxas</h2>
+<p class="sub">Todos os pedidos, com etiqueta, produto, cliente e o que você ganhou (por etiqueta). Sua taxa: <%= formatBRL(taxaEtiqueta) %> por etiqueta.</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="kl">Pedidos</div><div class="kv"><%= totais.pedidos %></div></div>
+  <div class="kpi"><div class="kl">Etiquetas</div><div class="kv"><%= totais.etiquetas %></div></div>
+  <div class="kpi gold"><div class="kl">Taxa a receber</div><div class="kv"><%= formatBRL(totais.taxa) %></div></div>
+</div>
+
+<div class="card pad">
+  <% if (pedidos.length === 0) { %>
+    <div class="empty">Nenhum pedido ainda.</div>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Pedido</th><th>Cliente</th><th>Produtos</th><th class="num">Etiq.</th><th class="num">Taxa/etq</th><th class="num">Minha taxa</th><th>Status</th></tr></thead>
+      <tbody>
+        <% pedidos.forEach(function (p) { %>
+          <tr>
+            <td><%= p.numero %></td>
+            <td><%= p.cliente_nome %></td>
+            <td class="dim"><%= p.produtos || '—' %></td>
+            <td class="num"><%= p.total_etiquetas %></td>
+            <td class="num"><%= formatBRL(taxaEtiqueta) %></td>
+            <td class="num"><b><%= formatBRL(p.taxa_centavos) %></b></td>
+            <td>
+              <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
+              <% } else if (p.status === 'separacao' || p.status === 'preparando') { %><span class="badge neutral">Em separação</span>
+              <% } else { %><span class="badge warn">Aguardando</span><% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<div class="hint-box">Você vê etiqueta, produto, cliente e a sua taxa. A comissão do representante não aparece aqui.</div>
+
+<%- include('../partials/app-close') %>

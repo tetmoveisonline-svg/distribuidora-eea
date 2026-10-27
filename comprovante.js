@@ -63,25 +63,13 @@ function gerarComprovante(dados) {
       secTitulo(doc, C, 'ENVIOS');
       desenharTabela(doc, C, dados.linhas || []);
 
-      // ---------- Totais (com desconto) ----------
-      const subtotal = (dados.subtotalCentavos != null) ? dados.subtotalCentavos : dados.totalCentavos;
-      const descItens = dados.descontoItensCentavos || 0;
-      const descTotal = dados.descontoTotalCentavos || 0;
-      const rx = 320, rw = 227;
-      let yT = doc.y + 10;
-      function resumo(label, valor, bold) {
-        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 12 : 10).fillColor(C.texto);
-        doc.text(label, rx, yT, { width: rw });
-        doc.text(valor, rx, yT, { width: rw, align: 'right' });
-        yT += bold ? 20 : 16;
-      }
-      resumo('Subtotal (' + (dados.totalEtiquetas || 0) + ' etiquetas)', formatBRL(subtotal));
-      if (descItens > 0) resumo('Desconto nos itens', '- ' + formatBRL(descItens));
-      if (descTotal > 0) resumo('Desconto no total', '- ' + formatBRL(descTotal));
-      doc.moveTo(rx, yT).lineTo(547, yT).lineWidth(1).strokeColor(C.linha).stroke();
-      yT += 8;
-      resumo('Total', formatBRL(dados.totalCentavos), true);
-      doc.y = yT + 6;
+      // ---------- Total ----------
+      const yT = doc.y + 6;
+      doc.rect(48, yT, 499, 26).fill(C.faixa);
+      doc.fillColor(C.texto).font('Helvetica-Bold').fontSize(11)
+        .text('Total  -  ' + (dados.totalEtiquetas || 0) + ' etiquetas', 56, yT + 7, { continued: false });
+      doc.text(formatBRL(dados.totalCentavos), 48, yT + 7, { width: 491, align: 'right' });
+      doc.y = yT + 34;
 
       // ---------- Extras ----------
       doc.moveDown(0.4);
@@ -90,7 +78,7 @@ function gerarComprovante(dados) {
       if (dados.formaPagamento) extras.push('Forma de pagamento: ' + dados.formaPagamento);
       if (dados.prazoDespacho) extras.push('Prazo de despacho: ' + dados.prazoDespacho);
       extras.push('Observacoes: ' + (dados.observacoes && dados.observacoes.trim() ? dados.observacoes : '-'));
-      doc.text(extras.join('    |    '), 48, doc.y, { width: 499 });
+      doc.text(extras.join('    |    '), { width: 499 });
 
       // ---------- Bloco de aceite ----------
       doc.moveDown(1);
@@ -124,23 +112,27 @@ function secTitulo(doc, C, txt) {
 
 function desenharTabela(doc, C, linhas) {
   const x = 48;
-  const larguras = [179, 40, 80, 80, 90]; // produto(cor), qtd, unit, desconto, total
-  const aligns = ['left', 'right', 'right', 'right', 'right'];
-  const heads = ['Produto (cor)', 'Qtd', 'Valor unit.', 'Desconto', 'Total'];
+  const larguras = [200, 120, 40, 65, 74]; // arquivo, item, qtd, unit, total
+  const heads = ['Etiqueta / arquivo', 'Item', 'Qtd', 'Valor unit.', 'Total'];
   let y = doc.y + 2;
 
+  // cabecalho
   doc.font('Helvetica').fontSize(8).fillColor('#8a93a0');
-  desenharLinha(doc, x, y, larguras, heads, aligns);
+  desenharLinha(doc, x, y, larguras, heads, ['left', 'left', 'right', 'right', 'right']);
   y += 16;
   doc.moveTo(x, y).lineTo(547, y).lineWidth(0.7).strokeColor(C.linha).stroke();
   y += 4;
 
   doc.font('Helvetica').fontSize(9.5).fillColor(C.texto);
   linhas.forEach((l) => {
-    const nome = (l.item_nome || '-') + (l.cor_nome ? '  (' + l.cor_nome + ')' : '');
-    const desc = l.desconto_centavos > 0 ? '- ' + formatBRL(l.desconto_centavos) : '—';
-    const cols = [nome, String(l.quantidade), formatBRL(l.preco_centavos), desc, formatBRL(l.total_centavos)];
-    const alturaLinha = desenharLinha(doc, x, y, larguras, cols, aligns);
+    const cols = [
+      l.arquivo_nome || '-',
+      l.item_nome || '-',
+      String(l.quantidade),
+      formatBRL(l.preco_centavos),
+      formatBRL(l.total_centavos),
+    ];
+    const alturaLinha = desenharLinha(doc, x, y, larguras, cols, ['left', 'left', 'right', 'right', 'right']);
     y += alturaLinha + 6;
     doc.moveTo(x, y - 3).lineTo(547, y - 3).lineWidth(0.5).strokeColor('#eef1f5').stroke();
   });

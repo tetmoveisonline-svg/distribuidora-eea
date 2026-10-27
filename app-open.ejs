@@ -1,7 +1,11 @@
 <%- include('head', { titulo: titulo }) %>
 <div class="topbar">
-  <div class="brand"><span class="dot"></span> <%= empresa.nome %></div>
+  <button type="button" class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-controls="sideNav" aria-expanded="false"><span></span><span></span><span></span></button>
+  <div class="brand"><span class="logo-pill"><img src="/img/logo.png" alt="E&amp;A Móveis" /></span> <span class="brand-nome"><%= empresa.nome %></span></div>
   <div class="top-right">
+    <% if (user.papel === 'admin' || user.papel === 'operador') { %>
+      <a class="online-pill" href="/admin/online" id="onlinePill" title="usuários no site nos últimos 5 minutos"><span class="od"></span> <span id="onlineN">…</span> online</a>
+    <% } %>
     <%- include('theme-select') %>
     <div class="user-menu">
       <span class="uname"><%= user.nome %></span>
@@ -10,27 +14,52 @@
   </div>
 </div>
 <div class="shell">
-  <aside class="side">
+  <div class="side-backdrop" id="sideBackdrop"></div>
+  <aside class="side" id="sideNav">
     <% if (user.papel === 'cliente') { %>
       <div class="grp">Cliente</div>
+      <a class="nav-item <%= ativo === 'inicio' ? 'on' : '' %>" href="/inicio"><span class="ico">&#8962;</span> Início</a>
       <a class="nav-item <%= ativo === 'novo' ? 'on' : '' %>" href="/novo"><span class="ico">&#8593;</span> Novo envio</a>
       <a class="nav-item <%= ativo === 'envios' ? 'on' : '' %>" href="/meus-envios"><span class="ico">&#9776;</span> Meus envios</a>
+      <a class="nav-item <%= ativo === 'financeiro' ? 'on' : '' %>" href="/financeiro"><span class="ico">&#36;</span> Financeiro</a>
+      <a class="nav-item <%= ativo === 'estoque' ? 'on' : '' %>" href="/estoque"><span class="ico">&#9638;</span> Estoque</a>
+      <% if (radio && radio.url) { %>
+      <div class="radio" id="radio">
+        <div class="radio-top">
+          <button type="button" class="radio-btn" id="radioBtn" aria-label="Tocar rádio" title="Tocar / pausar">&#9654;</button>
+          <div class="radio-info">
+            <div class="radio-nome"><%= radio.nome %></div>
+            <div class="radio-st" id="radioSt">Parada · toque para ouvir</div>
+          </div>
+        </div>
+        <div class="radio-vol"><span class="ico">&#128266;</span><input type="range" id="radioVol" min="0" max="100" value="70" aria-label="Volume da rádio" /></div>
+        <audio id="radioAudio" preload="none" src="<%= radio.url %>"></audio>
+      </div>
+      <% } %>
     <% } else if (user.papel === 'representante') { %>
       <div class="grp">Representante</div>
       <a class="nav-item <%= ativo === 'rep' ? 'on' : '' %>" href="/rep/pedidos"><span class="ico">&#9776;</span> Meus pedidos</a>
+      <a class="nav-item <%= ativo === 'rep-estoque' ? 'on' : '' %>" href="/rep/estoque"><span class="ico">&#9638;</span> Estoque</a>
+      <a class="nav-item <%= ativo === 'rep-clientes' ? 'on' : '' %>" href="/rep/clientes"><span class="ico">&#9787;</span> Meus clientes</a>
     <% } else if (user.papel === 'funcionario') { %>
       <div class="grp">Funcionário</div>
       <a class="nav-item <%= ativo === 'func' ? 'on' : '' %>" href="/func/pedidos"><span class="ico">&#9776;</span> Pedidos e taxas</a>
     <% } else { %>
       <div class="grp">Operação</div>
       <a class="nav-item <%= ativo === 'pedidos' ? 'on' : '' %>" href="/admin/pedidos"><span class="ico">&#9776;</span> Pedidos recebidos</a>
-      <span class="nav-item disabled"><span class="ico">&#8942;</span> Bipagem <span class="soon">em breve</span></span>
+      <a class="nav-item <%= ativo === 'online' ? 'on' : '' %>" href="/admin/online"><span class="ico">&#9679;</span> Quem está online</a>
+      <a class="nav-item <%= ativo === 'bipagem' ? 'on' : '' %>" href="/admin/bipagem"><span class="ico">&#8942;</span> Bipagem</a>
+      <a class="nav-item <%= ativo === 'adm-financeiro' ? 'on' : '' %>" href="/admin/financeiro"><span class="ico">&#36;</span> Financeiro</a>
       <div class="grp">Cadastros</div>
       <a class="nav-item <%= ativo === 'clientes' ? 'on' : '' %>" href="/admin/clientes"><span class="ico">&#9787;</span> Clientes</a>
+      <% if (isFull) { %>
       <a class="nav-item <%= ativo === 'reps' ? 'on' : '' %>" href="/admin/representantes"><span class="ico">&#9733;</span> Representantes</a>
       <a class="nav-item <%= ativo === 'funcs' ? 'on' : '' %>" href="/admin/funcionarios"><span class="ico">&#9814;</span> Funcionários</a>
+      <% } %>
       <a class="nav-item <%= ativo === 'produtos' ? 'on' : '' %>" href="/admin/produtos"><span class="ico">&#9635;</span> Produtos</a>
-      <a class="nav-item <%= ativo === 'liberados' ? 'on' : '' %>" href="/admin/liberados"><span class="ico">&#9873;</span> Produtos por cliente</a>
+      <a class="nav-item <%= ativo === 'estoque' ? 'on' : '' %>" href="/admin/estoque"><span class="ico">&#9638;</span> Estoque</a>
+      <a class="nav-item <%= ativo === 'precos' ? 'on' : '' %>" href="/admin/precos"><span class="ico">&#9873;</span> Preços por cliente</a>
+      <% if (isFull) { %><a class="nav-item <%= ativo === 'admins' ? 'on' : '' %>" href="/admin/administradores"><span class="ico">&#9919;</span> Administradores</a><% } %>
     <% } %>
   </aside>
   <main class="main">

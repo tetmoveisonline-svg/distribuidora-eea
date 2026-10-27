@@ -67,45 +67,21 @@ function comissaoCentavos(totalCentavos, bps) {
 }
 
 // Etapas do andamento do pedido (para a timeline).
+// Fluxo: Aceito -> Recebido -> Em separação -> Despachado.
+// 'preparando' e preparando_em sao tratados como legado (pedidos antigos) e mapeados para "Em separação".
 function andamento(pedido) {
   const st = pedido.status;
+  const despachado = st === 'despachado';
+  const emSeparacao = st === 'separacao' || st === 'preparando';
+  const sepData = pedido.separacao_em || pedido.preparando_em || null;
   return [
     { chave: 'aceito', label: 'Aceito', data: pedido.aceite_em, done: true },
     { chave: 'recebido', label: 'Recebido', data: pedido.criado_em, done: true },
-    { chave: 'preparando', label: 'Em preparação', data: pedido.preparando_em,
-      done: st === 'despachado', current: st === 'preparando' },
+    { chave: 'separacao', label: 'Em separação', data: sepData,
+      done: emSeparacao || despachado, current: emSeparacao && !despachado },
     { chave: 'despachado', label: 'Despachado', data: pedido.despachado_em,
-      done: st === 'despachado', current: false },
+      done: despachado, current: false },
   ];
-}
-
-// Desconto de um item (linha). bruto em centavos; qtd; tipo 'pct'|'val'; valor (bps ou centavos/unid).
-function descontoItem(brutoCentavos, quantidade, tipo, valor) {
-  if (!tipo || !valor) return 0;
-  let d = 0;
-  if (tipo === 'pct') d = Math.round((brutoCentavos * Number(valor)) / 10000);
-  else if (tipo === 'val') d = Math.round(Number(valor)) * Number(quantidade); // valor por unidade
-  if (d < 0) d = 0;
-  if (d > brutoCentavos) d = brutoCentavos;
-  return d;
-}
-
-// Desconto no total (sobre o subtotal ja com descontos de item). tipo 'pct'|'val'; valor (bps ou centavos).
-function descontoTotal(subtotalCentavos, tipo, valor) {
-  if (!tipo || !valor) return 0;
-  let d = 0;
-  if (tipo === 'pct') d = Math.round((subtotalCentavos * Number(valor)) / 10000);
-  else if (tipo === 'val') d = Math.round(Number(valor)); // valor fixo no total
-  if (d < 0) d = 0;
-  if (d > subtotalCentavos) d = subtotalCentavos;
-  return d;
-}
-
-// Texto curto do desconto: {tipo,valor} -> "10%" ou "R$ 5,00"
-function formatDesconto(tipo, valor) {
-  if (!tipo || !valor) return '—';
-  if (tipo === 'pct') return formatPercent(valor);
-  return formatBRL(valor);
 }
 
 // Andamento pronto para exibir (datas ja formatadas).
@@ -118,7 +94,43 @@ function andamentoDisplay(pedido) {
   }));
 }
 
+// Data de hoje em Sao Paulo (YYYY-MM-DD).
+function hojeISO() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+// dd/mm/aaaa a partir de YYYY-MM-DD.
+function brDate(iso) {
+  if (!iso) return '';
+  const s = String(iso).slice(0, 10);
+  return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4);
+}
+
+// Preco efetivo de um item considerando a promocao (se estiver no periodo).
+// item: { preco_centavos, promo_tipo, promo_valor, promo_inicio, promo_fim }
+// Retorna { preco_centavos, preco_original, promo (bool), promo_rotulo, promo_fim_br }.
+function precoEfetivo(item, hoje) {
+  const base = Number(item.preco_centavos || 0);
+  const out = { preco_centavos: base, preco_original: base, promo: false, promo_rotulo: '', promo_fim_br: '' };
+  if (!item.promo_tipo || item.promo_valor === null || item.promo_valor === undefined) return out;
+  const h = hoje || hojeISO();
+  const ini = item.promo_inicio ? String(item.promo_inicio instanceof Date ? item.promo_inicio.toISOString() : item.promo_inicio).slice(0, 10) : null;
+  const fim = item.promo_fim ? String(item.promo_fim instanceof Date ? item.promo_fim.toISOString() : item.promo_fim).slice(0, 10) : null;
+  if (ini && h < ini) return out;
+  if (fim && h > fim) return out;
+  let preco = base;
+  if (item.promo_tipo === 'valor') preco = Math.max(0, Number(item.promo_valor));
+  else preco = Math.max(0, Math.round(base * (10000 - Number(item.promo_valor)) / 10000));
+  if (preco >= base) return out;
+  out.preco_centavos = preco; out.promo = true;
+  out.promo_fim_br = fim ? brDate(fim) : '';
+  out.promo_rotulo = (item.promo_tipo === 'percentual' ? formatPercent(item.promo_valor) + ' off' : 'promo') + (fim ? ' até ' + out.promo_fim_br : '');
+  return out;
+}
+
 module.exports = {
+  hojeISO,
+  brDate,
+  precoEfetivo,
   formatBRL,
   formatDateTime,
   parsePrecoToCentavos,
@@ -129,7 +141,52 @@ module.exports = {
   comissaoCentavos,
   andamento,
   andamentoDisplay,
-  descontoItem,
-  descontoTotal,
-  formatDesconto,
 };
+
+// SKU de uma cor: e o codigo completo cadastrado na propria cor (campo sku).
+// O primeiro parametro (SKU do produto) fica so por compatibilidade e nao e usado.
+function skuCor(_skuBase, cor) {
+  const s = cor && cor.sku ? String(cor.sku).trim().toUpperCase() : '';
+  return s || null;
+}
+module.exports.skuCor = skuCor;
+
+// ---------- custo, lucro e preco sugerido ----------
+// p: { custo_centavos, lucro_centavos, rep_bps }, funcCentavos: taxa do funcionario por etiqueta.
+// Preco sugerido = (custo + func + lucro) / (1 - rep%), arredondado para cima no centavo.
+function precoSugerido(p, funcCentavos) {
+  const custo = Number(p.custo_centavos || 0), lucro = Number(p.lucro_centavos || 0), func = Number(funcCentavos || 0);
+  const bps = Math.min(9999, Math.max(0, Number(p.rep_bps || 0)));
+  if (!custo && !lucro && !func) return null;
+  return Math.ceil((custo + func + lucro) / (1 - bps / 10000));
+}
+// Lucro por unidade vendendo a precoCentavos: preco - comissao do rep - custo - func.
+function lucroCom(precoCentavos, p, funcCentavos) {
+  const custo = Number(p.custo_centavos || 0), func = Number(funcCentavos || 0);
+  const bps = Math.min(9999, Math.max(0, Number(p.rep_bps || 0)));
+  const preco = Number(precoCentavos || 0);
+  return preco - Math.round(preco * bps / 10000) - custo - func;
+}
+module.exports.precoSugerido = precoSugerido;
+module.exports.lucroCom = lucroCom;
+
+// Mensagem de boas-vindas/acesso do cliente (mesma para admin e representante/preposto).
+// Simbolos do plano basico do Unicode (3 bytes): o WhatsApp para Windows quebra emojis de 4 bytes vindos por link.
+function montarMensagemAcesso(d) {
+  d = d || {};
+  const empresa = d.empresa || 'Distribuidora E&A Móveis';
+  const linhas = [
+    'Olá, ' + (d.nome || '') + '! Seu acesso ao sistema da ' + empresa + ' está pronto. ✨',
+    '',
+    '⭐ Site: ' + d.site,
+    '✅ Login: ' + d.login,
+    '✅ Senha: ' + d.senha,
+    '',
+    'Por lá você sobe as etiquetas, acompanha cada pedido, vê o estoque em tempo real e o seu financeiro.',
+    'Os prazos e o limite de crédito combinados com você aparecem na aba Financeiro.',
+  ];
+  if (d.manualUrl) linhas.push('', 'Manual do cliente (passo a passo): ' + d.manualUrl);
+  linhas.push('', '☀️ Não esqueça de ouvir a rádio no menu do sistema para alegrar o seu dia!', '', 'Qualquer dúvida, é só chamar aqui. Bons envios!');
+  return linhas.join('\n');
+}
+module.exports.montarMensagemAcesso = montarMensagemAcesso;

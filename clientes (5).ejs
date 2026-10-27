@@ -1,0 +1,174 @@
+<%- include('../partials/app-open', { titulo: 'Clientes', ativo: 'clientes' }) %>
+
+<h2 class="title">Clientes</h2>
+<p class="sub">Cada cliente tem login/senha próprios para subir as etiquetas.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
+
+<% if (acesso) { %>
+<div class="card pad acesso-box" style="margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <div class="section-title" style="margin:0">Mensagem de acesso para <%= acesso.nome %></div>
+    <span class="dim" style="font-size:12px">A senha aparece só agora; depois ela não pode ser recuperada, apenas redefinida.</span>
+  </div>
+  <textarea id="acessoMsg" class="acesso-msg" readonly rows="11"><%= acesso.mensagem %></textarea>
+  <div class="actions-inline" style="margin-top:10px">
+    <button type="button" class="btn sm" id="acessoCopiar">Copiar mensagem</button>
+    <% var wa = acesso.telefone ? ('https://wa.me/' + (acesso.telefone.length <= 11 ? '55' + acesso.telefone : acesso.telefone) + '?text=' + encodeURIComponent(acesso.mensagem)) : ('https://wa.me/?text=' + encodeURIComponent(acesso.mensagem)); %>
+    <a class="btn sm whats" href="<%= wa %>" target="_blank" rel="noopener">Enviar no WhatsApp<%= acesso.telefone ? '' : ' (escolher contato)' %></a>
+  </div>
+</div>
+<script>
+  (function () {
+    var b = document.getElementById('acessoCopiar'), t = document.getElementById('acessoMsg'); if (!b) return;
+    b.addEventListener('click', function () {
+      var done = function () { b.textContent = 'Copiado ✓'; setTimeout(function () { b.textContent = 'Copiar mensagem'; }, 2000); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(done).catch(function () { t.select(); document.execCommand('copy'); done(); });
+      else { t.select(); document.execCommand('copy'); done(); }
+    });
+  })();
+</script>
+<% } %>
+
+<div class="grid2">
+  <div class="card pad">
+    <div class="section-title">Novo cliente</div>
+    <form method="post" action="/admin/clientes">
+      <div class="field"><label>Nome / empresa</label><input name="nome" placeholder="Loja do Cliente Ltda" /></div>
+      <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
+      <div class="field"><label>WhatsApp (DDD + número)</label><input name="telefone" placeholder="17999990000" inputmode="numeric" /></div>
+      <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
+      <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
+      <div class="field"><label>Prazo de pagamento (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>
+      <div class="field"><label>Limite de crédito (R$) — vazio = sem limite</label><input name="limite" placeholder="5.000,00" /></div>
+      <button class="btn block" type="submit">Salvar cliente</button>
+    </form>
+  </div>
+  <div class="card pad">
+    <div class="section-title">Clientes cadastrados</div>
+    <% if (clientes.length === 0) { %><div class="empty">Nenhum cliente ainda.</div><% } else { %>
+    <table>
+      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Negociações</th><th>Comissão (quem agregou)</th><th>Prazo · limite · vencido</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <% clientes.forEach(function (c) { %>
+          <tr>
+            <td><%= c.nome %><% if (c.limite_centavos !== null) { %><div class="dim" style="font-size:11.5px"><%= formatBRL(c.em_aberto) %> em aberto de <%= formatBRL(c.limite_centavos) %></div><% } %></td>
+            <td class="dim"><%= c.login || '—' %></td>
+            <td class="num"><%= c.produtos %></td>
+            <td>
+              <div style="font-size:12.5px">
+                <% if (c.representante_id) { %>
+                  <% if (c.rep_eh_preposto) { %>
+                    <%= c.rep_nome %> <span class="dim">(prep.)</span> <%= formatPercent(c.comissao_preposto_bps || 0) %>
+                    <span class="dim">+ <%= c.rep_pai_nome || '—' %> <%= formatPercent((c.comissao_total_bps || 0) - (c.comissao_preposto_bps || 0)) %></span>
+                  <% } else { %>
+                    <%= c.rep_nome %> · <%= formatPercent(c.comissao_total_bps || 0) %>
+                  <% } %>
+                <% } else { %><span class="dim">—</span><% } %>
+                <button type="button" class="btn ghost sm com-toggle" data-id="<%= c.id %>" style="margin-left:6px">editar</button>
+              </div>
+            </td>
+            <td>
+              <form method="post" action="/admin/clientes/<%= c.id %>/prazo" class="prazo-form">
+                <input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" title="prazo em dias" /> d
+                <input name="limite" class="lim" value="<%= c.limite_centavos === null ? '' : (c.limite_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) %>" placeholder="sem limite" title="limite de crédito (R$)" />
+                <label title="com pedido vencido, bloquear envios novos"><input type="checkbox" name="bloquear_vencido" value="1" <%= c.bloquear_vencido ? 'checked' : '' %> /> bloq.</label>
+                <button class="btn ghost sm" type="submit">ok</button>
+              </form>
+            </td>
+            <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
+            <td>
+              <div class="actions-inline" style="flex-wrap:nowrap">
+                <form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form>
+                <button type="button" class="btn ghost sm danger btn-excluir-cli" data-id="<%= c.id %>" data-nome="<%= c.nome %>" data-pedidos="<%= c.pedidos %>" data-aberto="<%= formatBRL(c.em_aberto) %>">Excluir</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="com-row" id="com-<%= c.id %>" style="display:none">
+            <td colspan="7" style="background:var(--panel)">
+              <form method="post" action="/admin/clientes/<%= c.id %>/comissao">
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                  <div class="field" style="margin:0;min-width:260px"><label>Agregado por</label>
+                    <select name="representante_id" class="com-sel" data-cli="<%= c.id %>">
+                      <option value="">— sem comissão —</option>
+                      <% reps.forEach(function (r) { %>
+                        <option value="<%= r.id %>" data-prep="<%= r.representante_pai_id ? 1 : 0 %>" <%= c.representante_id === r.id ? 'selected' : '' %>><%= r.nome %><%= r.representante_pai_id ? ' (preposto de ' + (r.pai_nome || '') + ')' : '' %></option>
+                      <% }); %>
+                    </select>
+                  </div>
+                  <div class="field" style="margin:0;width:140px"><label>Comissão total %</label><input name="total" value="<%= c.comissao_total_bps ? (c.comissao_total_bps / 100) : '' %>" placeholder="ex.: 5" /></div>
+                  <div class="field com-prep" style="margin:0;width:140px" data-cli="<%= c.id %>"><label>% do preposto</label><input name="preposto" value="<%= c.comissao_preposto_bps != null ? (c.comissao_preposto_bps / 100) : '' %>" placeholder="ex.: 4" /></div>
+                  <button class="btn sm" type="submit">Salvar comissão</button>
+                </div>
+                <div class="dim" style="font-size:11.5px;margin-top:6px">Preposto: informe quanto fica com ele; o restante do total vai para o representante dele. Vale para os próximos pedidos deste cliente.</div>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <% } %>
+  </div>
+</div>
+
+<!-- Modal: excluir cliente com senha do admin -->
+<div class="overlay" id="excluirOverlay">
+  <div class="card pad modal" style="max-width:520px">
+    <h2 class="title">Excluir cliente</h2>
+    <p class="sub">Você vai excluir <b id="exNome"></b> com <b id="exPedidos"></b> pedido(s) e <b id="exAberto"></b> em aberto no financeiro. Login, preços, pedidos, etiquetas, comprovantes e lançamentos serão apagados. <b>Não tem volta.</b></p>
+    <div class="hint-box" style="margin:0 0 14px">Se a intenção é só impedir novos envios, use "Desativar": o histórico fica guardado.</div>
+    <form method="post" id="exForm" action="#">
+      <div class="field">
+        <label for="exSenha">Confirme com a sua senha de administrador</label>
+        <input id="exSenha" name="senha" type="password" autocomplete="current-password" required />
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn ghost" type="button" id="exCancelar">Cancelar</button>
+        <button class="btn danger" type="submit">Excluir definitivamente</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+  (function () {
+    var ov = document.getElementById('excluirOverlay');
+    var form = document.getElementById('exForm');
+    document.querySelectorAll('.btn-excluir-cli').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.getElementById('exNome').textContent = b.getAttribute('data-nome');
+        document.getElementById('exPedidos').textContent = b.getAttribute('data-pedidos');
+        document.getElementById('exAberto').textContent = b.getAttribute('data-aberto');
+        form.action = '/admin/clientes/' + b.getAttribute('data-id') + '/excluir';
+        document.getElementById('exSenha').value = '';
+        ov.classList.add('on');
+        setTimeout(function () { document.getElementById('exSenha').focus(); }, 30);
+      });
+    });
+    document.getElementById('exCancelar').addEventListener('click', function () { ov.classList.remove('on'); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('on'); });
+
+    // Comissao por cliente: abre/fecha o editor e mostra o campo "% do preposto" so quando for preposto.
+    function syncPrep(sel) {
+      var cli = sel.getAttribute('data-cli');
+      var opt = sel.options[sel.selectedIndex];
+      var ehPrep = opt && opt.getAttribute('data-prep') === '1';
+      var box = document.querySelector('.com-prep[data-cli="' + cli + '"]');
+      if (box) box.style.display = ehPrep ? '' : 'none';
+    }
+    document.querySelectorAll('.com-toggle').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var row = document.getElementById('com-' + b.getAttribute('data-id'));
+        if (!row) return;
+        row.style.display = row.style.display === 'none' ? '' : 'none';
+        if (row.style.display !== 'none') { var s = row.querySelector('.com-sel'); if (s) syncPrep(s); }
+      });
+    });
+    document.querySelectorAll('.com-sel').forEach(function (s) {
+      syncPrep(s);
+      s.addEventListener('change', function () { syncPrep(s); });
+    });
+  })();
+</script>
+
+<%- include('../partials/app-close') %>

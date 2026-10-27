@@ -1,0 +1,99 @@
+<%
+  // Parametros: lancamentos, admin (true mostra cliente e acoes), formatBRL, formas (admin), hoje (admin)
+  function badgeSit(l) {
+    if (l.situacao === 'pago') return '<span class="badge ok">Pago ' + (l.pago_em_br || '') + '</span>';
+    if (l.situacao === 'vencido') return '<span class="badge danger">Vencido · ' + l.dias_atraso + 'd</span>';
+    if (l.situacao === 'cancelado') return '<span class="badge neutral">Cancelado</span>';
+    return '<span class="badge warn">Em aberto</span>';
+  }
+%>
+<% if (lancamentos.length === 0) { %>
+  <div class="empty">Nenhum lançamento para esse filtro.</div>
+<% } else { %>
+<div style="overflow-x:auto">
+<table class="fin-table">
+  <thead>
+    <tr>
+      <th>Pedido</th>
+      <% if (admin) { %><th>Cliente</th><% } %>
+      <th>Itens</th>
+      <th>Vencimento</th>
+      <th class="num">Valor</th>
+      <th>Situação</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% lancamentos.forEach(function (l) { %>
+      <tr class="fin-row" data-fin="<%= l.id %>">
+        <td><b><%= l.numero %></b></td>
+        <% if (admin) { %><td><%= l.cliente_nome %></td><% } %>
+        <td class="dim"><%= l.itens_resumo %> · <%= l.total_etiquetas %> etiq.</td>
+        <td class="<%= l.situacao === 'vencido' ? 'fin-venc' : '' %>"><%= l.vencimento_br %></td>
+        <td class="num">
+          <%= formatBRL(l.valor_centavos) %>
+          <% if (l.ajustado) { %><div class="dim" style="font-size:11px;text-decoration:line-through"><%= formatBRL(l.valor_original) %></div><% } %>
+        </td>
+        <td><%- badgeSit(l) %><% if (l.nao_enviadas > 0) { %> <span class="badge neutral" title="etiquetas que ficaram de fora no encerramento"><%= l.nao_enviadas %> não enviada(s)</span><% } %></td>
+        <td class="num"><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= l.id %>">detalhe</button></td>
+      </tr>
+      <tr class="fin-detail" id="fin-detail-<%= l.id %>" style="display:none">
+        <td colspan="<%= admin ? 7 : 6 %>">
+          <div class="fin-detail-box">
+            <table class="fin-itens">
+              <thead><tr><th>Item (preço negociado)</th><th class="num">Qtd</th><th class="num">Unit.</th><th class="num">Total</th></tr></thead>
+              <tbody>
+                <% l.linhas.forEach(function (x) { %>
+                  <tr><td><%= x.item_nome %></td><td class="num"><%= x.quantidade %></td><td class="num"><%= formatBRL(x.preco_centavos) %></td><td class="num"><%= formatBRL(x.total_centavos) %></td></tr>
+                <% }); %>
+              </tbody>
+            </table>
+            <% if (l.ajustado) { %>
+              <table class="fin-itens fin-comp">
+                <tbody>
+                  <tr><td>Reservado no aceite · <%= l.etiquetas_total || '—' %> etiqueta(s)</td><td class="num dim"><%= formatBRL(l.valor_original) %></td></tr>
+                  <% if (l.credito_gerado > 0) { %>
+                    <tr><td>Despachadas · <%= l.etiquetas_cobradas %> etiqueta(s)</td><td class="num"><%= formatBRL(l.valor_cobrado) %></td></tr>
+                    <tr class="fin-cred"><td>Não enviadas · <%= l.nao_enviadas %> etiqueta(s) → crédito<%= l.status === 'pago' && l.encerrado_em_br ? ' em conta' : ' (limite liberado)' %><%= l.encerrado_em_br ? ' · encerrado em ' + l.encerrado_em_br : '' %></td><td class="num">− <%= formatBRL(l.credito_gerado) %></td></tr>
+                  <% } %>
+                  <% if (l.credito_usado > 0) { %>
+                    <tr class="fin-cred"><td>Crédito em conta usado neste pedido</td><td class="num">− <%= formatBRL(l.credito_usado) %></td></tr>
+                  <% } %>
+                  <tr class="fin-tot"><td>Valor a pagar</td><td class="num"><%= formatBRL(l.valor_centavos) %></td></tr>
+                </tbody>
+              </table>
+            <% } %>
+            <div class="fin-meta">
+              <% if (l.situacao === 'pago') { %>
+                <span>Pago em <b><%= l.pago_em_br %></b><% if (l.forma_pagamento) { %> via <b><%= l.forma_pagamento %></b><% } %><% if (l.observacao) { %> · <%= l.observacao %><% } %></span>
+              <% } else if (l.observacao) { %>
+                <span><%= l.observacao %></span>
+              <% } %>
+              <a class="doc-link" href="<%= admin ? '/admin/pedido/' + l.pedido_id + '/comprovante' : '/pedido/' + l.pedido_id + '/comprovante' %>">Comprovante do pedido</a>
+              <% if (admin) { %><a class="doc-link" href="/admin/pedido/<%= l.pedido_id %>">Abrir pedido</a><% } %>
+            </div>
+            <% if (admin) { %>
+              <% if (l.situacao === 'pago') { %>
+                <form method="post" action="/admin/financeiro/<%= l.id %>/reabrir" class="fin-form">
+                  <input type="hidden" name="ret_cliente" value="<%= filtro.cliente || '' %>" /><input type="hidden" name="ret_situacao" value="<%= filtro.situacao %>" /><input type="hidden" name="ret_mes" value="<%= filtro.mes %>" />
+                  <button class="btn ghost sm" type="submit">Desfazer pagamento</button>
+                </form>
+              <% } else if (l.situacao !== 'cancelado') { %>
+                <form method="post" action="/admin/financeiro/<%= l.id %>/pagar" class="fin-form">
+                  <input type="hidden" name="ret_cliente" value="<%= filtro.cliente || '' %>" /><input type="hidden" name="ret_situacao" value="<%= filtro.situacao %>" /><input type="hidden" name="ret_mes" value="<%= filtro.mes %>" />
+                  <div class="field" style="margin:0"><label>Data do pagamento</label><input type="date" name="pago_em" value="<%= hoje %>" required /></div>
+                  <div class="field" style="margin:0"><label>Forma</label>
+                    <select name="forma"><% formas.forEach(function (f) { %><option><%= f %></option><% }); %></select></div>
+                  <div class="field" style="margin:0;flex:1;min-width:160px"><label>Observação</label><input name="observacao" placeholder="opcional" maxlength="200" /></div>
+                  <button class="btn sm" type="submit">Marcar pago</button>
+                </form>
+              <% } %>
+            <% } %>
+          </div>
+        </td>
+      </tr>
+    <% }); %>
+  </tbody>
+</table>
+</div>
+<% } %>

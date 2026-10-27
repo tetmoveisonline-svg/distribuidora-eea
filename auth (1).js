@@ -8,10 +8,10 @@ const { currentUser } = require('../auth');
 const router = express.Router();
 
 function homePorPapel(papel) {
-  if (papel === 'admin') return '/admin/pedidos';
+  if (papel === 'admin' || papel === 'operador') return '/admin/pedidos';
   if (papel === 'representante') return '/rep/pedidos';
   if (papel === 'funcionario') return '/func/pedidos';
-  return '/novo';
+  return '/inicio';
 }
 router.homePorPapel = homePorPapel;
 

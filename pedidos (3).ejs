@@ -1,29 +1,33 @@
-<%- include('../partials/app-open', { titulo: 'Pedidos e taxas', ativo: 'func' }) %>
+<%- include('../partials/app-open', { titulo: 'Pedidos recebidos', ativo: 'pedidos' }) %>
 
-<h2 class="title">Pedidos e minhas taxas</h2>
-<p class="sub">Todos os pedidos, com etiqueta, produto, cliente e o que você ganhou (por etiqueta). Sua taxa: <%= formatBRL(taxaEtiqueta) %> por etiqueta.</p>
+<h2 class="title">Pedidos recebidos</h2>
+<p class="sub">Você (admin) vê tudo: valor, comissão do representante e taxa do funcionário. Clique num pedido para abrir o detalhe e atribuir a comissão.</p>
 
-<div class="kpis">
-  <div class="kpi"><div class="kl">Pedidos</div><div class="kv"><%= totais.pedidos %></div></div>
-  <div class="kpi"><div class="kl">Etiquetas</div><div class="kv"><%= totais.etiquetas %></div></div>
-  <div class="kpi gold"><div class="kl">Taxa a receber</div><div class="kv"><%= formatBRL(totais.taxa) %></div></div>
-</div>
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 
 <div class="card pad">
   <% if (pedidos.length === 0) { %>
-    <div class="empty">Nenhum pedido ainda.</div>
+    <div class="empty">Nenhum pedido recebido ainda.</div>
   <% } else { %>
     <table>
-      <thead><tr><th>Pedido</th><th>Cliente</th><th>Produtos</th><th class="num">Etiq.</th><th class="num">Taxa/etq</th><th class="num">Minha taxa</th><th>Status</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Pedido</th><th>Cliente</th><th class="num">Etiq.</th><th class="num">Valor</th>
+          <% if (isFull) { %><th>Representante</th><th class="num">Comissão</th><th class="num">Taxa func.</th><% } %><th>Status</th>
+        </tr>
+      </thead>
       <tbody>
         <% pedidos.forEach(function (p) { %>
           <tr>
-            <td><%= p.numero %></td>
+            <td><a class="link-row" href="/admin/pedido/<%= p.id %>"><b><%= p.numero %></b></a></td>
             <td><%= p.cliente_nome %></td>
-            <td class="dim"><%= p.produtos || '—' %></td>
             <td class="num"><%= p.total_etiquetas %></td>
-            <td class="num"><%= formatBRL(taxaEtiqueta) %></td>
-            <td class="num"><b><%= formatBRL(p.taxa_centavos) %></b></td>
+            <td class="num"><%= formatBRL(p.total_centavos) %></td>
+            <% if (isFull) { %>
+            <td><%= p.rep_nome ? p.rep_nome : '—' %></td>
+            <td class="num"><% if (p.comissao_centavos) { %><span class="badge gold"><%= formatBRL(p.comissao_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
+            <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
+            <% } %>
             <td>
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
               <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
@@ -36,6 +40,10 @@
   <% } %>
 </div>
 
-<div class="hint-box">Você vê etiqueta, produto, cliente e a sua taxa. A comissão do representante não aparece aqui.</div>
+<div class="hint-box">
+  <% if (!isFull) { %>Sua conta é operacional: comissões e taxas ficam ocultas. <% } %>A coluna "Taxa func." aparece quando há um único funcionário ativo cadastrado
+  <% if (!funcRef) { %>(no momento ela fica como — porque há zero ou mais de um funcionário; o valor de cada funcionário aparece na área dele).<% } %>
+  Clique no número do pedido para atribuir o representante e a comissão, avançar o andamento e baixar os documentos.
+</div>
 
 <%- include('../partials/app-close') %>

@@ -36,9 +36,31 @@ app.use(session({
 // Expoe o usuario logado para todas as views.
 app.use((req, res, next) => {
   res.locals.user = currentUser(req);
+  res.locals.isFull = !!(res.locals.user && res.locals.user.papel === 'admin'); // admin completo (ve custos, lucros e comissoes)
+  // Radio na area do cliente (comeca pausada; o cliente da play). Vazio em RADIO_URL desliga.
+  res.locals.radio = {
+    nome: process.env.RADIO_NOME || '89 FM · A Rádio Rock',
+    url: process.env.RADIO_URL !== undefined ? process.env.RADIO_URL : 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_89FM_ADP.aac?dist=site-89fm',
+    site: process.env.RADIO_SITE || 'https://www.radiorock.com.br/',
+  };
   res.locals.empresa = {
     nome: process.env.EMPRESA_NOME || 'Central de Postagem',
   };
+  next();
+});
+
+// Presenca: grava o ultimo acesso do usuario logado (no maximo 1x por minuto por usuario).
+const vistoCache = new Map();
+app.use((req, res, next) => {
+  const u = currentUser(req);
+  if (u && req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/css') && !req.path.startsWith('/js') && !req.path.startsWith('/img') && !req.path.endsWith('.json')) {
+    const agora = Date.now();
+    const ultimo = vistoCache.get(u.id) || 0;
+    if (agora - ultimo > 60000) {
+      vistoCache.set(u.id, agora);
+      db.query('UPDATE usuarios SET visto_em = now(), ultima_pagina = $2 WHERE id = $1', [u.id, req.path.slice(0, 80)]).catch(() => {});
+    }
+  }
   next();
 });
 
@@ -46,6 +68,7 @@ app.use((req, res, next) => {
 const authRoutes = require('./routes/auth');
 app.use('/', authRoutes);
 app.use('/', require('./routes/cliente'));
+app.use('/admin/bipagem', require('./routes/bipagem'));
 app.use('/admin', require('./routes/admin'));
 app.use('/rep', require('./routes/rep'));
 app.use('/func', require('./routes/func'));

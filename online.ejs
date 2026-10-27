@@ -1,0 +1,57 @@
+<%- include('../partials/app-open', { titulo: 'Quem está online', ativo: 'online' }) %>
+
+<h2 class="title">Quem está online</h2>
+<p class="sub">Usuários vistos no site nos últimos 5 minutos, o que estão acessando e quem já entrou hoje. Atualiza sozinho a cada 20 segundos.</p>
+
+<div class="kpis four" id="onKpis">
+  <div class="kpi ok"><div class="kl">Online agora</div><div class="kv" id="kOn"><%= dados.online %></div><div class="ks" id="kOnSub"><%= dados.porPapel.filter(function (p) { return p.n; }).map(function (p) { return p.n + ' ' + p.papel; }).join(' · ') || 'ninguém no momento' %></div></div>
+  <div class="kpi"><div class="kl">Entraram hoje</div><div class="kv" id="kHoje"><%= dados.hoje %></div><div class="ks">usuários distintos</div></div>
+  <div class="kpi"><div class="kl">Clientes online</div><div class="kv" id="kCli"><%= dados.porPapel[0].n %></div><div class="ks">lojas usando o sistema</div></div>
+  <div class="kpi"><div class="kl">Equipe online</div><div class="kv" id="kEq"><%= dados.porPapel[1].n + dados.porPapel[2].n + dados.porPapel[3].n + dados.porPapel[4].n %></div><div class="ks">admin, representantes e funcionários</div></div>
+</div>
+
+<div class="card pad">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div class="section-title" style="margin:0">Últimos acessos</div>
+    <span class="dim" style="font-size:12px">Atualizado às <span id="onAt"></span></span>
+  </div>
+  <div id="onBox">
+    <%- include('../partials/online-tabela', { lista: dados.lista }) %>
+  </div>
+</div>
+
+<div class="hint-box">"Online" é quem carregou alguma página nos últimos 5 minutos; quem só deixou a aba aberta sem navegar sai da contagem até acessar de novo. A página mostrada é a última que a pessoa abriu.</div>
+
+<script>
+(function () {
+  var box = document.getElementById('onBox');
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+  function papel(p) { return { cliente: 'Cliente', admin: 'Admin', operador: 'Admin operacional', representante: 'Representante', funcionario: 'Funcionário' }[p] || p; }
+  function render(d) {
+    document.getElementById('kOn').textContent = d.online;
+    document.getElementById('kHoje').textContent = d.hoje;
+    document.getElementById('kCli').textContent = d.porPapel[0].n;
+    document.getElementById('kEq').textContent = d.porPapel[1].n + d.porPapel[2].n + d.porPapel[3].n + d.porPapel[4].n;
+    document.getElementById('kOnSub').textContent = d.porPapel.filter(function (p) { return p.n; }).map(function (p) { return p.n + ' ' + p.papel; }).join(' · ') || 'ninguém no momento';
+    var pill = document.getElementById('onlineN'); if (pill) pill.textContent = d.online;
+    if (!d.lista.length) { box.innerHTML = '<div class="empty">Ninguém acessou ainda.</div>'; return; }
+    var h = '<table><thead><tr><th></th><th>Usuário</th><th>Tipo</th><th>Última página</th><th>Visto</th></tr></thead><tbody>';
+    d.lista.forEach(function (u) {
+      h += '<tr class="' + (u.online ? 'on-row' : '') + '"><td><span class="od ' + (u.online ? 'on' : (u.hoje ? 'hoje' : '')) + '"></span></td>' +
+        '<td>' + esc(u.nome) + (u.cliente && u.cliente !== u.nome ? ' <span class="dim">· ' + esc(u.cliente) + '</span>' : '') + ' <span class="dim" style="font-size:11px">' + esc(u.login) + '</span></td>' +
+        '<td>' + esc(papel(u.papel)) + '</td><td>' + esc(u.pagina) + '</td><td class="dim">' + (u.online ? '<b style="color:var(--ok)">' + esc(u.ha) + '</b>' : esc(u.ha) + ' atrás · ' + esc(u.visto)) + '</td></tr>';
+    });
+    box.innerHTML = h + '</tbody></table>';
+  }
+  function atualizar() {
+    fetch('/admin/online.json').then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) return; render(d);
+      document.getElementById('onAt').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }).catch(function () {});
+  }
+  document.getElementById('onAt').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  setInterval(atualizar, 20000);
+})();
+</script>
+
+<%- include('../partials/app-close') %>
