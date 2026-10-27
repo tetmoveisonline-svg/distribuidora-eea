@@ -169,3 +169,24 @@ function lucroCom(precoCentavos, p, funcCentavos) {
 }
 module.exports.precoSugerido = precoSugerido;
 module.exports.lucroCom = lucroCom;
+
+// Mensagem de boas-vindas/acesso do cliente (mesma para admin e representante/preposto).
+// Simbolos do plano basico do Unicode (3 bytes): o WhatsApp para Windows quebra emojis de 4 bytes vindos por link.
+function montarMensagemAcesso(d) {
+  d = d || {};
+  const empresa = d.empresa || 'Distribuidora E&A Móveis';
+  const linhas = [
+    'Olá, ' + (d.nome || '') + '! Seu acesso ao sistema da ' + empresa + ' está pronto. ✨',
+    '',
+    '⭐ Site: ' + d.site,
+    '✅ Login: ' + d.login,
+    '✅ Senha: ' + d.senha,
+    '',
+    'Por lá você sobe as etiquetas, acompanha cada pedido, vê o estoque em tempo real e o seu financeiro.',
+    'Os prazos e o limite de crédito combinados com você aparecem na aba Financeiro.',
+  ];
+  if (d.manualUrl) linhas.push('', 'Manual do cliente (passo a passo): ' + d.manualUrl);
+  linhas.push('', '☀️ Não esqueça de ouvir a rádio no menu do sistema para alegrar o seu dia!', '', 'Qualquer dúvida, é só chamar aqui. Bons envios!');
+  return linhas.join('\n');
+}
+module.exports.montarMensagemAcesso = montarMensagemAcesso;

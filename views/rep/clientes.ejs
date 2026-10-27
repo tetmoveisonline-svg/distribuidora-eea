@@ -10,7 +10,7 @@
   <div class="card pad" style="margin-bottom:16px;border-left:3px solid var(--accent)">
     <div class="section-title">Acesso de <%= acesso.nome %> (mostrado uma vez)</div>
     <p class="dim" style="font-size:12.5px;margin:0 0 10px">Login: <b style="color:var(--text);font-family:var(--mono)"><%= acesso.login %></b> · Site: <%= acesso.site %></p>
-    <textarea readonly rows="7" style="width:100%;background:var(--field-bg);border:1px solid var(--field-border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:13px;font-family:inherit"><%= acesso.mensagem %></textarea>
+    <textarea readonly rows="11" style="width:100%;background:var(--field-bg);border:1px solid var(--field-border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:13px;font-family:inherit"><%= acesso.mensagem %></textarea>
     <% if (acesso.telefone) { %>
       <div style="margin-top:10px"><a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/55<%= acesso.telefone %>?text=<%= encodeURIComponent(acesso.mensagem) %>">Enviar no WhatsApp</a></div>
     <% } %>

@@ -107,6 +107,20 @@ async function saldosParaCliente(clienteId) {
       cores: x.cores.map((c) => { const mc = mineMap.get(x.produto_id + ':' + c.id); return { id: c.id, nome: c.nome, sku: c.sku, saldo: c.fisico, reservado: c.reservado, disponivel: c.saldo, meu_reservado: mc ? mc.reservado : 0, meus_pedidos: mc ? mc.pedidos : '' }; }) };
   });
 }
+// Catalogo com PRECO SUGERIDO (sem vinculo a nenhum cliente), para o representante/preposto
+// ver o estoque do mesmo jeito que o cliente ve, mas com os precos sugeridos e sem reservas pessoais.
+async function saldosSugerido() {
+  const { formatBRL } = require('./util');
+  const cat = await require('./precos').catalogoDoCliente(db, null);
+  return cat.map((x) => ({
+    id: x.produto_id, nome: x.nome, descricao: x.descricao, obs: x.obs || '',
+    saldo: x.fisico, reservado: x.reservado, disponivel: x.saldo,
+    meu_reservado: 0, meus_pedidos: '', origem: x.origem,
+    preco_centavos: x.preco_centavos, preco_original: x.preco_original, promo: x.promo, promo_rotulo: x.promo_rotulo,
+    preco_txt: formatBRL(x.preco_centavos), preco_original_txt: formatBRL(x.preco_original),
+    cores: x.cores.map((c) => ({ id: c.id, nome: c.nome, sku: c.sku, saldo: c.fisico, reservado: c.reservado, disponivel: c.saldo, meu_reservado: 0, meus_pedidos: '' })),
+  }));
+}
 async function saldosTodos() {
   const p = await db.query('SELECT id, nome, descricao, saldo, reservado, (saldo - reservado) AS disponivel, ativo FROM produtos ORDER BY nome');
   return anexarCores(p.rows);
@@ -136,4 +150,4 @@ async function historico(f) {
   return r.rows;
 }
 
-module.exports = { MOTIVOS, movimentar, reservarPedido, baixarEtiqueta, liberarReservaPedido, saldosParaCliente, saldosTodos, historico };
+module.exports = { MOTIVOS, movimentar, reservarPedido, baixarEtiqueta, liberarReservaPedido, saldosParaCliente, saldosSugerido, saldosTodos, historico };

@@ -49,7 +49,7 @@ function voltarRepasses(tipo, req, extra) {
 const {
   formatBRL, formatDateTime, formatPercent, comissaoCentavos, andamentoDisplay,
   horasRestantes, etiquetasExpiradas, parsePrecoToCentavos, parsePercentToBps, precoEfetivo, brDate, hojeISO, skuCor,
-  precoSugerido, lucroCom,
+  precoSugerido, lucroCom, montarMensagemAcesso,
 } = require('../util');
 
 // Calculo de preco sugerido e taxas: modulo compartilhado com a area do cliente.
@@ -416,22 +416,9 @@ router.get('/clientes', async (req, res, next) => {
       const a = req.session.acessoCliente; delete req.session.acessoCliente;
       const site = 'https://' + (req.get('host') || 'distribuidoraeea.up.railway.app');
       const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
-      const linhas = [
-        // Simbolos do plano basico do Unicode (3 bytes): o WhatsApp para Windows quebra emojis de 4 bytes vindos por link.
-        'Olá, ' + a.nome + '! Seu acesso ao sistema da ' + nomeEmpresa + ' está pronto. ✨',
-        '',
-        '⭐ Site: ' + site,
-        '✅ Login: ' + a.login,
-        '✅ Senha: ' + a.senha,
-        '',
-        'Por lá você sobe as etiquetas, acompanha cada pedido, vê o estoque em tempo real e o seu financeiro.',
-        'Os prazos e o limite de crédito combinados com você aparecem na aba Financeiro.',
-        '',
-        '☀️ Não esqueça de ouvir a rádio no menu do sistema para alegrar o seu dia!',
-        '',
-        'Qualquer dúvida, é só chamar aqui. Bons envios!',
-      ];
-      acesso = { nome: a.nome, login: a.login, telefone: a.telefone, mensagem: linhas.join('\n'), site };
+      const manualUrl = process.env.MANUAL_CLIENTE_URL || null;
+      const mensagem = montarMensagemAcesso({ nome: a.nome, login: a.login, senha: a.senha, site, empresa: nomeEmpresa, manualUrl });
+      acesso = { nome: a.nome, login: a.login, telefone: a.telefone, mensagem, site };
     }
     res.render('admin/clientes', { clientes: r.rows, reps: repsLista.rows, acesso, ativo: 'clientes', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent });
   } catch (e) { next(e); }

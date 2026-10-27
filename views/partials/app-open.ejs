@@ -39,6 +39,7 @@
     <% } else if (user.papel === 'representante') { %>
       <div class="grp">Representante</div>
       <a class="nav-item <%= ativo === 'rep' ? 'on' : '' %>" href="/rep/pedidos"><span class="ico">&#9776;</span> Meus pedidos</a>
+      <a class="nav-item <%= ativo === 'rep-estoque' ? 'on' : '' %>" href="/rep/estoque"><span class="ico">&#9638;</span> Estoque</a>
       <a class="nav-item <%= ativo === 'rep-clientes' ? 'on' : '' %>" href="/rep/clientes"><span class="ico">&#9787;</span> Meus clientes</a>
     <% } else if (user.papel === 'funcionario') { %>
       <div class="grp">Funcionário</div>

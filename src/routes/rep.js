@@ -4,7 +4,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { exigeRepresentante } = require('../auth');
-const { formatBRL, formatDateTime, formatPercent } = require('../util');
+const estoque = require('../estoque');
+const imagens = require('../imagens');
+const { formatBRL, formatDateTime, formatPercent, andamentoDisplay, montarMensagemAcesso } = require('../util');
 
 const router = express.Router();
 router.use(exigeRepresentante);
@@ -22,12 +24,14 @@ async function taxaFuncRef() {
 router.get('/pedidos', async (req, res, next) => {
   try {
     const uid = req.session.user.id;
+    const pad = await meuPadrao(uid);
     // O representante ve os pedidos onde ele e o representante direto (ou preposto) E tambem
     // aqueles em que ele e o responsavel-pai de um preposto (recebe a fatia dele nesses).
     const r = await db.query(
       `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
               p.representante_id, p.responsavel_id, p.comissao_bps, p.comissao_centavos,
-              p.comissao_resp_bps, p.comissao_resp_centavos, p.aceite_em,
+              p.comissao_resp_bps, p.comissao_resp_centavos,
+              p.aceite_em, p.criado_em, p.separacao_em, p.preparando_em, p.despachado_em,
               c.nome AS cliente_nome, prep.nome AS preposto_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN usuarios prep ON prep.id = p.representante_id
@@ -46,15 +50,52 @@ router.get('/pedidos', async (req, res, next) => {
         ...p, minha_bps: minhaBps, minha_comissao: minhaComissao,
         origem: ehResp ? ('Via preposto ' + (p.preposto_nome || '')) : 'Direto', eh_resp: ehResp,
         taxa_func_centavos: taxaRef !== null ? taxaRef * p.total_etiquetas : null,
+        passos: andamentoDisplay(p),
       };
     });
+
+    // Detalhe por etiqueta (situacao + horario do bipe) de todos os pedidos, numa unica consulta.
+    const ids = pedidos.map((p) => p.id);
+    const etqMap = new Map();
+    if (ids.length > 0) {
+      const er = await db.query(
+        `SELECT e.pedido_id, e.indice, e.status, e.despachado_em, l.item_nome
+         FROM etiquetas e LEFT JOIN linhas l ON l.id = e.linha_id
+         WHERE e.pedido_id = ANY($1::int[]) ORDER BY e.pedido_id, e.indice`, [ids]
+      );
+      for (const row of er.rows) {
+        if (!etqMap.has(row.pedido_id)) etqMap.set(row.pedido_id, []);
+        etqMap.get(row.pedido_id).push(row);
+      }
+    }
+    pedidos.forEach((p) => {
+      const arr = etqMap.get(p.id) || [];
+      p.etiquetas = arr;
+      p.etqDespachadas = arr.filter((e) => e.status === 'despachado').length;
+      p.etqTotal = arr.length;
+    });
+
     res.render('rep/pedidos', {
-      pedidos, ativo: 'rep',
+      pedidos, ativo: 'rep', ehPreposto: pad.ehPreposto,
       totais: { pedidos: pedidos.length, base, comissao },
       temTaxaFunc: taxaRef !== null,
       formatBRL, formatDateTime, formatPercent,
     });
   } catch (e) { next(e); }
+});
+
+// ===================== ESTOQUE (preco sugerido, como o cliente ve) =====================
+router.get('/estoque', async (req, res, next) => {
+  try {
+    const produtos = await imagens.anexar(await estoque.saldosSugerido());
+    res.render('cliente/estoque', { produtos, ativo: 'rep-estoque', apiUrl: '/rep/api/estoque', sugerido: true, formatDateTime });
+  } catch (e) { next(e); }
+});
+router.get('/api/estoque', async (req, res) => {
+  try {
+    const produtos = await imagens.anexar(await estoque.saldosSugerido());
+    res.json({ ok: true, produtos, atualizado_em: formatDateTime(new Date()) });
+  } catch (e) { console.error('Erro estoque rep:', e); res.status(500).json({ erro: 'Falha ao carregar o estoque.' }); }
 });
 
 // ===================== MEUS CLIENTES (cadastro pelo representante/preposto) =====================
@@ -117,11 +158,8 @@ router.post('/clientes', async (req, res, next) => {
     await client.query('COMMIT');
     const site = 'https://' + (req.get('host') || 'distribuidoraeea.up.railway.app');
     const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
-    const mensagem = [
-      'Olá, ' + nome + '! Seu acesso ao sistema da ' + nomeEmpresa + ' está pronto.',
-      '', 'Site: ' + site, 'Login: ' + login, 'Senha: ' + senha,
-      '', 'Por lá você sobe as etiquetas e acompanha seus pedidos. Qualquer dúvida, é só chamar!',
-    ].join('\n');
+    const manualUrl = process.env.MANUAL_CLIENTE_URL || null;
+    const mensagem = montarMensagemAcesso({ nome, login, senha, site, empresa: nomeEmpresa, manualUrl });
     req.session.acessoClienteRep = { nome, login, telefone, mensagem, site };
     res.redirect('/rep/clientes?ok=' + encodeURIComponent('Cliente "' + nome + '" cadastrado. A mensagem com o acesso está pronta abaixo.'));
   } catch (e) {

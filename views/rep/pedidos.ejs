@@ -1,7 +1,11 @@
 <%- include('../partials/app-open', { titulo: 'Meus pedidos', ativo: 'rep' }) %>
 
 <h2 class="title">Meus pedidos e comissões</h2>
+<% if (ehPreposto) { %>
+<p class="sub">Só aparecem os pedidos em que você foi atribuído. Você vê a sua comissão e acompanha o andamento de cada pedido.</p>
+<% } else { %>
 <p class="sub">Só aparecem os pedidos em que você foi atribuído. Você vê a sua comissão e também a taxa do funcionário.</p>
+<% } %>
 
 <div class="kpis">
   <div class="kpi"><div class="kl">Pedidos</div><div class="kv"><%= totais.pedidos %></div></div>
@@ -9,12 +13,13 @@
   <div class="kpi gold"><div class="kl">Comissão a receber</div><div class="kv"><%= formatBRL(totais.comissao) %></div></div>
 </div>
 
+<% var ncols = ehPreposto ? 9 : 10; %>
 <div class="card pad">
   <% if (pedidos.length === 0) { %>
     <div class="empty">Você ainda não tem pedidos atribuídos.</div>
   <% } else { %>
     <table>
-      <thead><tr><th>Pedido</th><th>Cliente</th><th>Origem</th><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><th class="num">Taxa func.</th><th>Status</th></tr></thead>
+      <thead><tr><th>Pedido</th><th>Cliente</th><th>Origem</th><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><% if (!ehPreposto) { %><th class="num">Taxa func.</th><% } %><th>Status</th><th class="num">Andamento</th></tr></thead>
       <tbody>
         <% pedidos.forEach(function (p) { %>
           <tr>
@@ -25,11 +30,20 @@
             <td class="num"><%= formatBRL(p.total_centavos) %></td>
             <td class="num"><%= p.minha_bps ? formatPercent(p.minha_bps) : '—' %></td>
             <td class="num"><b><%= formatBRL(p.minha_comissao || 0) %></b></td>
-            <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
+            <% if (!ehPreposto) { %><td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td><% } %>
             <td>
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
               <% } else if (p.status === 'separacao' || p.status === 'preparando') { %><span class="badge neutral">Em separação</span>
               <% } else { %><span class="badge warn">Aguardando</span><% } %>
+            </td>
+            <td class="num"><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= p.id %>">detalhe</button></td>
+          </tr>
+          <tr class="fin-detail" id="fin-detail-<%= p.id %>" style="display:none">
+            <td colspan="<%= ncols %>">
+              <div class="fin-detail-box">
+                <%- include('../partials/timeline', { passos: p.passos }) %>
+                <%- include('../partials/etiquetas-detalhe', { pid: p.id, etqs: p.etiquetas, desp: p.etqDespachadas, tot: p.etqTotal, admin: false, formatDateTime: formatDateTime }) %>
+              </div>
             </td>
           </tr>
         <% }); %>
@@ -38,6 +52,6 @@
   <% } %>
 </div>
 
-<% if (!temTaxaFunc) { %><div class="hint-box">A coluna "Taxa func." mostra o ganho do funcionário quando há um único funcionário ativo cadastrado.</div><% } %>
+<% if (!ehPreposto && !temTaxaFunc) { %><div class="hint-box">A coluna "Taxa func." mostra o ganho do funcionário quando há um único funcionário ativo cadastrado.</div><% } %>
 
 <%- include('../partials/app-close') %>

@@ -1,7 +1,11 @@
-<%- include('../partials/app-open', { titulo: 'Estoque', ativo: 'estoque' }) %>
+<%- include('../partials/app-open', { titulo: 'Estoque', ativo: (typeof ativo !== 'undefined' ? ativo : 'estoque') }) %>
 
 <h2 class="title">Estoque</h2>
+<% if (typeof sugerido !== 'undefined' && sugerido) { %>
+<p class="sub">Preço sugerido e o estoque disponível de todos os produtos. Este é o mesmo estoque que o cliente enxerga. Atualiza sozinho a cada 30 segundos.</p>
+<% } else { %>
 <p class="sub">Seu preço e o estoque disponível de todos os produtos. Ao aceitar um envio, as etiquetas ficam reservadas para você; o despacho consome a reserva. Atualiza sozinho a cada 30 segundos.</p>
+<% } %>
 
 <div class="card pad">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -17,7 +21,11 @@
   </div>
 </div>
 
+<% if (typeof sugerido !== 'undefined' && sugerido) { %>
+<div class="hint-box">Cada cartão é um produto; cada chip é uma cor com o SKU e o <b>disponível</b>: <span style="color:var(--ok)">verde</span> tem estoque, <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos), <span style="color:var(--danger)">vermelho</span> esgotado. O preço exibido é o <b>sugerido</b> — é o mesmo que o cliente vê.</div>
+<% } else { %>
 <div class="hint-box">Cada cartão é um produto; cada chip é uma cor com o SKU e o <b>disponível</b>: <span style="color:var(--ok)">verde</span> tem estoque, <span style="color:var(--warn)">amarelo</span> está baixo (5 ou menos), <span style="color:var(--danger)">vermelho</span> esgotado. "N seus" é o que seus pedidos aceitos ainda vão consumir no despacho. Ao subir etiquetas, o sistema avisa se a quantidade passa do disponível, mas o pedido segue; a distribuidora confirma a reposição.</div>
+<% } %>
 
 <!-- Galeria de imagens do produto -->
 <div class="overlay gal" id="galeria">
@@ -46,6 +54,7 @@
     return '<b>' + esc(p.preco_txt) + '</b>';
   }
   var dados = <%- JSON.stringify(produtos) %>;
+  var EST_API = '<%= typeof apiUrl !== "undefined" ? apiUrl : "/api/estoque" %>';
   var filtro = 'todos';
   try { var f0 = localStorage.getItem('estoqueFiltro'); if (f0 === 'com' || f0 === 'sem' || f0 === 'todos') filtro = f0; } catch (e) {}
   // Filtro por cor: "com" = disponivel > 0; "sem" = disponivel <= 0. Produto de cor unica usa o proprio disponivel.
@@ -107,7 +116,7 @@
     box.innerHTML = h + '</div>';
   }
   function atualizar() {
-    fetch('/api/estoque').then(function (r) { return r.json(); }).then(function (d) {
+    fetch(EST_API).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return;
       dados = d.produtos; renderTudo();
       at.textContent = String(d.atualizado_em).slice(11);
