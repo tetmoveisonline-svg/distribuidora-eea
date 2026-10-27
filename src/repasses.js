@@ -43,7 +43,7 @@ async function pessoas(tipo) {
     return r.rows;
   }
   const r = await db.query(
-    `SELECT u.id, u.nome, u.login, u.ativo, u.comissao_bps, u.taxa_etiqueta_centavos,
+    `SELECT u.id, u.nome, u.login, u.ativo, u.comissao_bps, u.comissao_total_bps, u.taxa_etiqueta_centavos,
             u.representante_pai_id, pai.nome AS pai_nome,
             (SELECT count(*) FROM pedidos p WHERE p.representante_id = u.id OR p.responsavel_id = u.id)::int AS pedidos
      FROM usuarios u LEFT JOIN usuarios pai ON pai.id = u.representante_pai_id

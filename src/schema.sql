@@ -36,6 +36,9 @@ ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS taxa_etiqueta_centavos INTEGER;
 -- Preposto: representante que trabalha sob outro representante (o "pai").
 -- Quando representante_pai_id esta preenchido, este representante e um preposto daquele.
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS representante_pai_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
+-- Padrao de comissao TOTAL do cliente quando este preposto cadastra um cliente (ex.: 500 = 5%).
+-- A fatia do preposto e comissao_bps; o representante-pai recebe (total - fatia). So faz sentido para preposto.
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS comissao_total_bps INTEGER;
 
 -- Catalogo de produtos.
 CREATE TABLE IF NOT EXISTS produtos (

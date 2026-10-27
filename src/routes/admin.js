@@ -542,15 +542,18 @@ router.post('/representantes', async (req, res, next) => {
     const bps = parsePercentToBps(req.body.comissao);
     if (!nome || !login || !senha) throw new Error('Preencha nome, login e senha.');
     if (bps === null) throw new Error('Informe a comissão padrão (%).');
-    // Preposto: representante que trabalha sob outro (o pai).
-    let paiId = null;
+    // Preposto: representante que trabalha sob outro (o pai). Guarda tambem o total padrao do cliente.
+    let paiId = null, totalBps = null;
     if (req.body.tipo === 'preposto') {
       paiId = pInt(req.body.pai_id);
       if (!paiId) throw new Error('Escolha o representante do qual este é preposto.');
       const pai = await db.query("SELECT id FROM usuarios WHERE id = $1 AND papel = 'representante' AND representante_pai_id IS NULL", [paiId]);
       if (pai.rowCount === 0) throw new Error('Representante-pai inválido (um preposto não pode ser pai de outro).');
+      totalBps = parsePercentToBps(req.body.comissao_total);
+      if (totalBps === null) totalBps = bps;              // sem total informado: usa a propria fatia
+      if (totalBps < bps) throw new Error('A comissão total do cliente não pode ser menor que a fatia do preposto.');
     }
-    const ins = await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps, representante_pai_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [nome, login, await bcrypt.hash(senha, 10), 'representante', bps, paiId]);
+    const ins = await db.query('INSERT INTO usuarios (nome, login, senha_hash, papel, comissao_bps, representante_pai_id, comissao_total_bps) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [nome, login, await bcrypt.hash(senha, 10), 'representante', bps, paiId, totalBps]);
     res.redirect('/admin/representantes?rep=' + ins.rows[0].id + '&ok=' + encodeURIComponent('Representante cadastrado.'));
   } catch (e) { res.redirect('/admin/representantes?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
 });
@@ -560,10 +563,19 @@ router.post('/representantes/:id/toggle', async (req, res, next) => {
 // Comissao padrao / taxa (edicao inline no painel de cadastro)
 router.post('/representantes/:id/comissao', async (req, res, next) => {
   try {
+    const id = pInt(req.params.id);
     const bps = parsePercentToBps(req.body.comissao);
     if (bps === null || bps >= 10000) throw new Error('Comissão inválida.');
-    await db.query("UPDATE usuarios SET comissao_bps = $2 WHERE id = $1 AND papel = 'representante'", [pInt(req.params.id), bps]);
-    res.redirect('/admin/representantes?cadastro=1&rep=' + req.params.id + '&ok=' + encodeURIComponent('Comissão padrão atualizada (vale para novos pedidos).'));
+    // Para preposto, tambem atualiza o total padrao do cliente (se enviado).
+    const totalRaw = parsePercentToBps(req.body.comissao_total);
+    if (totalRaw !== null) {
+      if (totalRaw >= 10000) throw new Error('Comissão total inválida.');
+      if (totalRaw < bps) throw new Error('A comissão total não pode ser menor que a fatia do preposto.');
+      await db.query("UPDATE usuarios SET comissao_bps = $2, comissao_total_bps = $3 WHERE id = $1 AND papel = 'representante'", [id, bps, totalRaw]);
+    } else {
+      await db.query("UPDATE usuarios SET comissao_bps = $2 WHERE id = $1 AND papel = 'representante'", [id, bps]);
+    }
+    res.redirect('/admin/representantes?cadastro=1&rep=' + id + '&ok=' + encodeURIComponent('Comissão padrão atualizada (vale para novos pedidos).'));
   } catch (e) { res.redirect('/admin/representantes?cadastro=1&erro=' + encodeURIComponent(msgErro(e))); }
 });
 router.post('/funcionarios/:id/taxa', async (req, res, next) => {

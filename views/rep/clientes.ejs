@@ -1,0 +1,56 @@
+<%- include('../partials/app-open', { titulo: 'Meus clientes', ativo: 'rep-clientes' }) %>
+
+<h2 class="title">Meus clientes</h2>
+<p class="sub">Cadastre os clientes que você trouxe. A comissão é aplicada automaticamente: a sua é <b><%= formatPercent(padrao.minhaBps || 0) %></b> nos pedidos deles. Prazo e limite de crédito ficam com a distribuidora.</p>
+
+<% if (ok) { %><div class="alert ok" style="margin-bottom:14px"><%= ok %></div><% } %>
+<% if (erro) { %><div class="alert err" style="margin-bottom:14px"><%= erro %></div><% } %>
+
+<% if (acesso) { %>
+  <div class="card pad" style="margin-bottom:16px;border-left:3px solid var(--accent)">
+    <div class="section-title">Acesso de <%= acesso.nome %> (mostrado uma vez)</div>
+    <p class="dim" style="font-size:12.5px;margin:0 0 10px">Login: <b style="color:var(--text);font-family:var(--mono)"><%= acesso.login %></b> · Site: <%= acesso.site %></p>
+    <textarea readonly rows="7" style="width:100%;background:var(--field-bg);border:1px solid var(--field-border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:13px;font-family:inherit"><%= acesso.mensagem %></textarea>
+    <% if (acesso.telefone) { %>
+      <div style="margin-top:10px"><a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/55<%= acesso.telefone %>?text=<%= encodeURIComponent(acesso.mensagem) %>">Enviar no WhatsApp</a></div>
+    <% } %>
+  </div>
+<% } %>
+
+<div class="card pad" style="margin-bottom:16px">
+  <div class="section-title">Novo cliente</div>
+  <form method="post" action="/rep/clientes">
+    <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label>Nome da loja/cliente</label><input name="nome" placeholder="Loja Bela Casa" required /></div>
+      <div class="field"><label>Telefone (WhatsApp)</label><input name="telefone" placeholder="(17) 99999-0000" /></div>
+      <div class="field"><label>Login do cliente</label><input name="login" placeholder="belacasa" required /></div>
+      <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" required /></div>
+    </div>
+    <div class="hint-box" style="margin:4px 0 14px">Sua comissão nos pedidos deste cliente: <b style="color:var(--text)"><%= formatPercent(padrao.minhaBps || 0) %></b>. Prazo de pagamento e limite de crédito são definidos pela distribuidora.</div>
+    <button class="btn" type="submit">Cadastrar cliente</button>
+  </form>
+</div>
+
+<div class="card pad">
+  <div class="section-title">Clientes cadastrados por mim</div>
+  <% if (clientes.length === 0) { %>
+    <div class="empty">Você ainda não cadastrou nenhum cliente.</div>
+  <% } else { %>
+    <table>
+      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Pedidos</th><th class="num">Minha comissão</th><th>Status</th></tr></thead>
+      <tbody>
+        <% clientes.forEach(function (c) { %>
+          <tr>
+            <td><%= c.nome %></td>
+            <td class="dim"><%= c.login || '—' %></td>
+            <td class="num"><%= c.pedidos %></td>
+            <td class="num"><%= formatPercent(c.minha_bps || 0) %></td>
+            <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<%- include('../partials/app-close') %>
