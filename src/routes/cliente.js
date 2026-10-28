@@ -227,7 +227,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     const cli = await client.query('SELECT nome, email FROM clientes WHERE id = $1', [clienteId]);
     const pdfBuffer = await gerarComprovante({
       numero, criadoEm: ped.rows[0].criado_em, aceiteEm: ped.rows[0].aceite_em, aceiteIp: ip,
-      empresa: { nome: process.env.EMPRESA_NOME || 'Sua Empresa / Nome', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
+      empresa: { nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
       cliente: cli.rows[0] || {},
       linhas: linhas.map((l) => ({ arquivo_nome: l.arquivoNome, item_nome: l.itemNome + (l.sku ? ' [' + l.sku + ']' : ''), quantidade: l.quantidade, preco_centavos: l.precoCentavos, total_centavos: l.totalCentavos })),
       totalEtiquetas, totalCentavos,

@@ -174,7 +174,7 @@ module.exports.lucroCom = lucroCom;
 // Simbolos do plano basico do Unicode (3 bytes): o WhatsApp para Windows quebra emojis de 4 bytes vindos por link.
 function montarMensagemAcesso(d) {
   d = d || {};
-  const empresa = d.empresa || 'Distribuidora E&A Móveis';
+  const empresa = d.empresa || 'A4 Móveis Distribuidora';
   const linhas = [
     'Olá, ' + (d.nome || '') + '! Seu acesso ao sistema da ' + empresa + ' está pronto. ✨',
     '',

@@ -44,7 +44,7 @@ app.use((req, res, next) => {
     site: process.env.RADIO_SITE || 'https://www.radiorock.com.br/',
   };
   res.locals.empresa = {
-    nome: process.env.EMPRESA_NOME || 'Central de Postagem',
+    nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora',
   };
   next();
 });

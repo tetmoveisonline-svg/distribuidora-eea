@@ -415,7 +415,7 @@ router.get('/clientes', async (req, res, next) => {
     if (req.session.acessoCliente) {
       const a = req.session.acessoCliente; delete req.session.acessoCliente;
       const site = 'https://' + (req.get('host') || 'distribuidoraeea.up.railway.app');
-      const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
+      const nomeEmpresa = process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora';
       const manualUrl = process.env.MANUAL_CLIENTE_URL || null;
       const mensagem = montarMensagemAcesso({ nome: a.nome, login: a.login, senha: a.senha, site, empresa: nomeEmpresa, manualUrl });
       acesso = { nome: a.nome, login: a.login, telefone: a.telefone, mensagem, site };

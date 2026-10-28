@@ -1,7 +1,7 @@
 <%- include('head', { titulo: titulo }) %>
 <div class="topbar">
   <button type="button" class="menu-btn" id="menuBtn" aria-label="Abrir menu" aria-controls="sideNav" aria-expanded="false"><span></span><span></span><span></span></button>
-  <div class="brand"><span class="logo-pill"><img src="/img/logo.png" alt="E&amp;A Móveis" /></span> <span class="brand-nome"><%= empresa.nome %></span></div>
+  <div class="brand"><span class="logo-pill"><img src="/img/logo.png" alt="A4 Móveis Distribuidora" /></span> <span class="brand-nome"><%= empresa.nome %></span></div>
   <div class="top-right">
     <% if (user.papel === 'admin' || user.papel === 'operador') { %>
       <a class="online-pill" href="/admin/online" id="onlinePill" title="usuários no site nos últimos 5 minutos"><span class="od"></span> <span id="onlineN">…</span> online</a>

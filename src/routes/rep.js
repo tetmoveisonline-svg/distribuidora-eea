@@ -157,7 +157,7 @@ router.post('/clientes', async (req, res, next) => {
       [nome, login, await bcrypt.hash(senha, 10), 'cliente', c.rows[0].id]);
     await client.query('COMMIT');
     const site = 'https://' + (req.get('host') || 'distribuidoraeea.up.railway.app');
-    const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
+    const nomeEmpresa = process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora';
     const manualUrl = process.env.MANUAL_CLIENTE_URL || null;
     const mensagem = montarMensagemAcesso({ nome, login, senha, site, empresa: nomeEmpresa, manualUrl });
     req.session.acessoClienteRep = { nome, login, telefone, mensagem, site };
