@@ -4,7 +4,7 @@
 // "Precos por cliente" guarda apenas negociacoes (itens.negociado = TRUE), que substituem o padrao.
 
 const db = require('./db');
-const { precoSugerido, precoEfetivo, skuCor, hojeISO } = require('./util');
+const { precoSugerido, lucroCom, precoEfetivo, skuCor, hojeISO } = require('./util');
 
 // Representantes e funcionarios ativos (taxas lidas do cadastro na hora).
 async function refCustos() {
@@ -18,8 +18,15 @@ function comCustos(p, ref) {
   const func = ref.funcs.find((f) => f.id === p.func_usuario_id) || null;
   const repBps = rep ? rep.bps : 0;
   const funcCentavos = func ? func.taxa : 0;
-  const sugerido = precoSugerido({ custo_centavos: p.custo_centavos, lucro_centavos: p.lucro_centavos, rep_bps: repBps }, funcCentavos);
-  return { ...p, rep, func, rep_bps_efetivo: repBps, func_centavos: funcCentavos, sugerido, temCustos: p.custo_centavos !== null || p.lucro_centavos !== null };
+  const pct = p.lucro_tipo === 'percentual';
+  const sugerido = precoSugerido({ custo_centavos: p.custo_centavos, lucro_centavos: pct ? null : p.lucro_centavos, rep_bps: repBps, lucro_tipo: pct ? 'percentual' : 'valor', lucro_bps: p.lucro_bps }, funcCentavos);
+  // lucro alvo em R$ por unidade: o valor digitado, ou (no modo %) o que sobra do sugerido apos custo, funcionario e representante
+  let lucroAlvo = null;
+  if (pct) lucroAlvo = sugerido !== null ? lucroCom(sugerido, { custo_centavos: p.custo_centavos, rep_bps: repBps }, funcCentavos) : null;
+  else if (p.lucro_centavos !== null && p.lucro_centavos !== undefined) lucroAlvo = Number(p.lucro_centavos);
+  const temLucro = pct ? (p.lucro_bps !== null && p.lucro_bps !== undefined) : (p.lucro_centavos !== null && p.lucro_centavos !== undefined);
+  return { ...p, rep, func, rep_bps_efetivo: repBps, func_centavos: funcCentavos, sugerido, lucro_pct: pct, lucro_alvo: lucroAlvo,
+    temCustos: (p.custo_centavos !== null && p.custo_centavos !== undefined) || temLucro };
 }
 
 // Catalogo de um cliente: todos os produtos ativos, com preco negociado (se houver) ou sugerido,
@@ -28,7 +35,7 @@ function comCustos(p, ref) {
 async function catalogoDoCliente(q, clienteId) {
   const ref = await refCustos();
   const prods = await q.query(
-    `SELECT p.id AS produto_id, p.nome, p.descricao, p.peso_gramas, p.medidas, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+    `SELECT p.id AS produto_id, p.nome, p.descricao, p.peso_gramas, p.medidas, p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id,
             p.saldo, p.reservado,
             i.id AS item_id, i.negociado, i.preco_centavos, i.promo_tipo, i.promo_valor,
             to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim

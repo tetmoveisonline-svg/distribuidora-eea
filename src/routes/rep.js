@@ -6,7 +6,8 @@ const db = require('../db');
 const { exigeRepresentante } = require('../auth');
 const estoque = require('../estoque');
 const imagens = require('../imagens');
-const { formatBRL, formatDateTime, formatPercent, andamentoDisplay, montarMensagemAcesso } = require('../util');
+const repasses = require('../repasses');
+const { formatBRL, formatDateTime, formatPercent, andamentoDisplay, montarMensagemAcesso, hojeISO, brDate } = require('../util');
 
 const router = express.Router();
 router.use(exigeRepresentante);
@@ -29,39 +30,72 @@ router.get('/pedidos', async (req, res, next) => {
     // aqueles em que ele e o responsavel-pai de um preposto (recebe a fatia dele nesses).
     const r = await db.query(
       `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
-              p.representante_id, p.responsavel_id, p.comissao_bps, p.comissao_centavos,
-              p.comissao_resp_bps, p.comissao_resp_centavos,
+              p.representante_id, p.responsavel_id,
               p.aceite_em, p.criado_em, p.separacao_em, p.preparando_em, p.despachado_em,
-              c.nome AS cliente_nome, prep.nome AS preposto_nome
+              c.nome AS cliente_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
-       LEFT JOIN usuarios prep ON prep.id = p.representante_id
        WHERE p.representante_id = $1 OR p.responsavel_id = $1
        ORDER BY p.id DESC`, [uid]
     );
+    // Comissao e situacao vem do MESMO calculo do painel de repasses do admin (valor cobrado x %,
+    // pendente / liberado / pago), para os numeros do representante baterem com o que sera pago.
+    const rep = await repasses.listar('representante', uid);
+    const repMap = new Map(rep.map((x) => [x.id, x]));
+    const ids = r.rows.map((p) => p.id);
+    const finMap = new Map();
+    if (ids.length > 0) {
+      const fr = await db.query('SELECT pedido_id, pago_em FROM financeiro WHERE pedido_id = ANY($1::int[])', [ids]);
+      for (const x of fr.rows) finMap.set(x.pedido_id, x);
+    }
     const taxaRef = await taxaFuncRef();
-    let base = 0, comissao = 0;
-    const pedidos = r.rows.map((p) => {
-      const ehResp = Number(p.representante_id) !== Number(uid) && Number(p.responsavel_id) === Number(uid);
-      const minhaBps = ehResp ? (p.comissao_resp_bps || 0) : (p.comissao_bps || 0);
-      const minhaComissao = ehResp ? (p.comissao_resp_centavos || 0) : (p.comissao_centavos || 0);
-      base += p.total_centavos;
-      comissao += minhaComissao;
+    const todos = r.rows.filter((p) => repMap.has(p.id)).map((p) => {
+      const x = repMap.get(p.id);
+      const pagoValor = x.situacao === 'pago' && x.pago_centavos != null ? Number(x.pago_centavos) : x.valor;
+      const f = finMap.get(p.id);
+      let comSub = '';
+      if (x.situacao === 'pago') comSub = (x.pago_br || '') + (x.pago_forma ? ' · ' + x.pago_forma : '');
+      else if (x.situacao === 'liberado') comSub = f && f.pago_em ? 'cliente pagou em ' + formatDateTime(f.pago_em).slice(0, 5) : 'cliente pagou';
+      else if (x.fin_sit === 'cancelado') comSub = 'pedido cancelado';
+      else if (x.venc_iso) comSub = (x.fin_sit === 'vencido' ? 'venceu ' : 'vence ') + brDate(x.venc_iso);
       return {
-        ...p, minha_bps: minhaBps, minha_comissao: minhaComissao,
-        origem: ehResp ? ('Via preposto ' + (p.preposto_nome || '')) : 'Direto', eh_resp: ehResp,
+        ...p,
+        eh_resp: x.papel_repasse === 'resp', origem: x.origem,
+        minha_bps: x.comissao_bps, minha_comissao: pagoValor, valor_cobrado: x.valor_cobrado,
+        situacao: x.situacao, fin_sit: x.fin_sit, com_sub: comSub, aceite_ym: x.aceite_ym, pago_ym: x.pago_ym,
         taxa_func_centavos: taxaRef !== null ? taxaRef * p.total_etiquetas : null,
         passos: andamentoDisplay(p),
       };
     });
 
-    // Detalhe por etiqueta (situacao + horario do bipe) de todos os pedidos, numa unica consulta.
-    const ids = pedidos.map((p) => p.id);
+    // Cartoes: sobre todos os pedidos (como no painel do admin).
+    const mesAtual = hojeISO().slice(0, 7);
+    const kp = { pendente: 0, pendente_qtd: 0, liberado: 0, liberado_qtd: 0, pago_mes: 0, pago_mes_qtd: 0, total: 0, vendas: 0, qtd: todos.length };
+    for (const p of todos) {
+      kp.total += p.minha_comissao; kp.vendas += p.valor_cobrado;
+      if (p.situacao === 'pendente') { kp.pendente += p.minha_comissao; kp.pendente_qtd++; }
+      else if (p.situacao === 'liberado') { kp.liberado += p.minha_comissao; kp.liberado_qtd++; }
+      else if (p.pago_ym === mesAtual) { kp.pago_mes += p.minha_comissao; kp.pago_mes_qtd++; }
+    }
+    const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    kp.mes_nome = MESES[parseInt(mesAtual.slice(5, 7), 10) - 1];
+
+    // Filtros: mes (do aceite) e situacao.
+    const sit = ['todos', 'pendente', 'liberado', 'pago'].includes(req.query.sit) ? req.query.sit : 'todos';
+    const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : '';
+    const doMes = mes ? todos.filter((p) => p.aceite_ym === mes) : todos;
+    const contagem = { todos: doMes.length, pendente: 0, liberado: 0, pago: 0 };
+    doMes.forEach((p) => { contagem[p.situacao]++; });
+    const pedidos = sit === 'todos' ? doMes : doMes.filter((p) => p.situacao === sit);
+    const meses = repasses.mesesDe(rep);
+
+    // Detalhe por etiqueta (situacao + horario do bipe) dos pedidos exibidos, numa unica consulta.
+    const idsVis = pedidos.map((p) => p.id);
     const etqMap = new Map();
-    if (ids.length > 0) {
+    if (idsVis.length > 0) {
       const er = await db.query(
         `SELECT e.pedido_id, e.indice, e.status, e.despachado_em, l.item_nome
          FROM etiquetas e LEFT JOIN linhas l ON l.id = e.linha_id
-         WHERE e.pedido_id = ANY($1::int[]) ORDER BY e.pedido_id, e.indice`, [ids]
+         WHERE e.pedido_id = ANY($1::int[]) ORDER BY e.pedido_id, e.indice`, [idsVis]
       );
       for (const row of er.rows) {
         if (!etqMap.has(row.pedido_id)) etqMap.set(row.pedido_id, []);
@@ -77,7 +111,7 @@ router.get('/pedidos', async (req, res, next) => {
 
     res.render('rep/pedidos', {
       pedidos, ativo: 'rep', ehPreposto: pad.ehPreposto,
-      totais: { pedidos: pedidos.length, base, comissao },
+      kp, contagem, meses, filtro: { sit, mes },
       temTaxaFunc: taxaRef !== null,
       formatBRL, formatDateTime, formatPercent,
     });

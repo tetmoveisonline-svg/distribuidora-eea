@@ -1,36 +1,60 @@
 <%- include('../partials/app-open', { titulo: 'Meus pedidos', ativo: 'rep' }) %>
 
 <h2 class="title">Meus pedidos e comissões</h2>
-<% if (ehPreposto) { %>
-<p class="sub">Só aparecem os pedidos em que você foi atribuído. Você vê a sua comissão e acompanha o andamento de cada pedido.</p>
-<% } else { %>
-<p class="sub">Só aparecem os pedidos em que você foi atribuído. Você vê a sua comissão e também a taxa do funcionário.</p>
-<% } %>
+<p class="sub">Acompanhe cada pedido e a situação da sua comissão. A comissão é liberada quando o cliente paga o pedido e é calculada sobre o valor que ele realmente pagou.</p>
 
-<div class="kpis">
-  <div class="kpi"><div class="kl">Pedidos</div><div class="kv"><%= totais.pedidos %></div></div>
-  <div class="kpi"><div class="kl">Base (valor dos pedidos)</div><div class="kv"><%= formatBRL(totais.base) %></div></div>
-  <div class="kpi gold"><div class="kl">Comissão a receber</div><div class="kv"><%= formatBRL(totais.comissao) %></div></div>
+<div class="kpis four">
+  <div class="kpi"><div class="kl">Aguardando o cliente pagar</div><div class="kv"><%= formatBRL(kp.pendente) %></div><div class="ks"><%= kp.pendente_qtd %> <%= kp.pendente_qtd === 1 ? 'pedido' : 'pedidos' %></div></div>
+  <div class="kpi gold"><div class="kl">Liberado para receber</div><div class="kv"><%= formatBRL(kp.liberado) %></div><div class="ks"><%= kp.liberado_qtd %> <%= kp.liberado_qtd === 1 ? 'pedido' : 'pedidos' %><% if (kp.liberado_qtd > 0) { %> · o cliente já pagou<% } %></div></div>
+  <div class="kpi"><div class="kl">Recebido em <%= kp.mes_nome %></div><div class="kv" style="color:var(--ok)"><%= formatBRL(kp.pago_mes) %></div><div class="ks"><%= kp.pago_mes_qtd %> <%= kp.pago_mes_qtd === 1 ? 'pagamento' : 'pagamentos' %></div></div>
+  <div class="kpi"><div class="kl">Total de comissões</div><div class="kv"><%= formatBRL(kp.total) %></div><div class="ks"><%= kp.qtd %> <%= kp.qtd === 1 ? 'pedido' : 'pedidos' %> · <%= formatBRL(kp.vendas) %> em vendas</div></div>
 </div>
 
-<% var ncols = ehPreposto ? 9 : 10; %>
+<%
+  var ncols = ehPreposto ? 9 : 11;
+  function qs(s, m) { var a = []; if (s && s !== 'todos') a.push('sit=' + s); if (m) a.push('mes=' + m); return a.length ? '?' + a.join('&') : '?'; }
+  var abas = [['todos', 'Todos'], ['pendente', 'Aguardando cliente'], ['liberado', 'Liberadas'], ['pago', 'Pagas']];
+%>
 <div class="card pad">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+    <div class="rep-tabs" style="margin:0">
+      <% abas.forEach(function (a) { %>
+        <a class="tab <%= filtro.sit === a[0] ? 'on' : '' %>" href="/rep/pedidos<%= qs(a[0], filtro.mes) %>"><%= a[1] %> <span class="dim"><%= contagem[a[0]] %></span></a>
+      <% }); %>
+    </div>
+    <form method="get" action="/rep/pedidos" class="fin-filters" style="margin:0">
+      <% if (filtro.sit !== 'todos') { %><input type="hidden" name="sit" value="<%= filtro.sit %>" /><% } %>
+      <select name="mes" onchange="this.form.submit()" aria-label="Mês do pedido">
+        <option value="">Todos os meses</option>
+        <% meses.forEach(function (m) { %><option value="<%= m.ym %>" <%= filtro.mes === m.ym ? 'selected' : '' %>><%= m.rotulo %></option><% }); %>
+      </select>
+    </form>
+  </div>
+
   <% if (pedidos.length === 0) { %>
-    <div class="empty">Você ainda não tem pedidos atribuídos.</div>
+    <div class="empty"><%= (filtro.sit === 'todos' && !filtro.mes) ? 'Você ainda não tem pedidos atribuídos.' : 'Nenhum pedido neste filtro.' %></div>
   <% } else { %>
-    <table>
-      <thead><tr><th>Pedido</th><th>Cliente</th><th>Origem</th><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><% if (!ehPreposto) { %><th class="num">Taxa func.</th><% } %><th>Status</th><th class="num">Andamento</th></tr></thead>
+    <div style="overflow-x:auto">
+    <table class="rep-ped">
+      <thead><tr><th>Pedido</th><th>Cliente</th><% if (!ehPreposto) { %><th>Origem</th><% } %><th>Data</th><th class="num">Valor</th><th class="num">%</th><th class="num">Minha comissão</th><% if (!ehPreposto) { %><th class="num">Taxa func.</th><% } %><th>Comissão</th><th>Etapa</th><th class="num"></th></tr></thead>
       <tbody>
         <% pedidos.forEach(function (p) { %>
           <tr>
             <td><%= p.numero %></td>
             <td><%= p.cliente_nome %></td>
-            <td><% if (p.eh_resp) { %><span class="badge gold"><%= p.origem %></span><% } else { %><span class="badge neutral">Direto</span><% } %></td>
-            <td><%= formatDateTime(p.aceite_em) %></td>
-            <td class="num"><%= formatBRL(p.total_centavos) %></td>
+            <% if (!ehPreposto) { %><td><% if (p.eh_resp) { %><span class="badge gold"><%= p.origem %></span><% } else { %><span class="badge neutral">Direto</span><% } %></td><% } %>
+            <td><%= p.aceite_em ? formatDateTime(p.aceite_em).slice(0, 10) : '—' %></td>
+            <td class="num"><%= formatBRL(p.valor_cobrado) %></td>
             <td class="num"><%= p.minha_bps ? formatPercent(p.minha_bps) : '—' %></td>
             <td class="num"><b><%= formatBRL(p.minha_comissao || 0) %></b></td>
             <% if (!ehPreposto) { %><td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td><% } %>
+            <td>
+              <% if (p.situacao === 'pago') { %><span class="badge ok">Paga</span>
+              <% } else if (p.situacao === 'liberado') { %><span class="badge gold">Liberada</span>
+              <% } else if (p.fin_sit === 'cancelado') { %><span class="badge neutral">Cancelado</span>
+              <% } else { %><span class="badge neutral">Aguardando cliente</span><% } %>
+              <% if (p.com_sub) { %><div class="dim" style="font-size:11.5px;margin-top:3px<%= p.fin_sit === 'vencido' && p.situacao === 'pendente' ? ';color:var(--warn)' : '' %>"><%= p.com_sub %></div><% } %>
+            </td>
             <td>
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
               <% } else if (p.status === 'separacao' || p.status === 'preparando') { %><span class="badge neutral">Em separação</span>
@@ -49,9 +73,12 @@
         <% }); %>
       </tbody>
     </table>
+    </div>
   <% } %>
 </div>
 
-<% if (!ehPreposto && !temTaxaFunc) { %><div class="hint-box">A coluna "Taxa func." mostra o ganho do funcionário quando há um único funcionário ativo cadastrado.</div><% } %>
+<div class="hint-box">Se um pedido for encerrado com volumes que não foram enviados, o valor do pedido diminui e a sua comissão é recalculada automaticamente.<% if (!ehPreposto && !temTaxaFunc) { %> A coluna "Taxa func." mostra o ganho do funcionário quando há um único funcionário ativo cadastrado.<% } %></div>
+
+<style>.rep-ped td, .rep-ped th { white-space:nowrap; } .rep-ped .fin-detail td { white-space:normal; }</style>
 
 <%- include('../partials/app-close') %>

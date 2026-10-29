@@ -594,7 +594,7 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.peso_gramas, p.medidas, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.peso_gramas, p.medidas, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id,
               to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS criado_iso, to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS criado_br,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
@@ -718,16 +718,25 @@ router.post('/produtos/importar', async (req, res, next) => {
 router.post('/produtos/:id/custos', async (req, res, next) => {
   try {
     const custoTxt = (req.body.custo || '').toString().trim(), lucroTxt = (req.body.lucro || '').toString().trim();
+    const lucroTipo = req.body.lucro_tipo === 'percentual' ? 'percentual' : 'valor';
     const custo = custoTxt === '' ? null : parsePrecoToCentavos(custoTxt);
-    const lucro = lucroTxt === '' ? null : parsePrecoToCentavos(lucroTxt);
-    if ((custoTxt !== '' && custo === null) || (lucroTxt !== '' && lucro === null)) throw new Error('Custo e lucro devem ser valores em R$ (ex.: 40,00).');
+    if (custoTxt !== '' && custo === null) throw new Error('O custo deve ser um valor em R$ (ex.: 40,00).');
+    let lucro = null, lucroBps = null;
+    if (lucroTipo === 'percentual') {
+      lucroBps = lucroTxt === '' ? null : parsePercentToBps(lucroTxt);
+      if (lucroTxt !== '' && lucroBps === null) throw new Error('O lucro em % deve ser um número (ex.: 25).');
+    } else {
+      lucro = lucroTxt === '' ? null : parsePrecoToCentavos(lucroTxt);
+      if (lucroTxt !== '' && lucro === null) throw new Error('O lucro deve ser um valor em R$ (ex.: 20,00).');
+    }
     // quem recebe: validados contra o cadastro (papel certo e ativo)
     const repId = pInt(req.body.rep_id), funcId = pInt(req.body.func_id);
-    const okRep = repId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]) : { rowCount: 0 };
+    const okRep = repId ? await db.query("SELECT COALESCE(comissao_bps, 0)::int AS bps FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]) : { rowCount: 0, rows: [] };
     const okFunc = funcId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'funcionario'", [funcId]) : { rowCount: 0 };
+    if (lucroBps !== null && (okRep.rowCount ? okRep.rows[0].bps : 0) + lucroBps >= 10000) throw new Error('Lucro + representante precisam ficar abaixo de 100%.');
     const antes = await db.query('SELECT nome, custo_centavos FROM produtos WHERE id = $1', [pInt(req.params.id)]);
-    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5 WHERE id = $1',
-      [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null]);
+    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5, lucro_tipo = $6, lucro_bps = $7 WHERE id = $1',
+      [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null, lucroTipo, lucroBps]);
     // produto que ganhou custo pela primeira vez passa a ter preco sugerido: fica liberado para os clientes
     if (antes.rowCount && antes.rows[0].custo_centavos === null && custo !== null) {
       await novidades.registrar(db, { tipo: 'produto', produtoId: pInt(req.params.id), titulo: antes.rows[0].nome + ' liberado', detalhe: 'já disponível para envio' });
@@ -735,9 +744,10 @@ router.post('/produtos/:id/custos', async (req, res, next) => {
     if (isAjax(req)) {
       // devolve o quadro recalculado para a tela atualizar sem recarregar
       const ref = await refCustos();
-      const p = await db.query('SELECT custo_centavos, lucro_centavos, rep_usuario_id, func_usuario_id FROM produtos WHERE id = $1', [pInt(req.params.id)]);
+      const p = await db.query('SELECT custo_centavos, lucro_centavos, lucro_tipo, lucro_bps, rep_usuario_id, func_usuario_id FROM produtos WHERE id = $1', [pInt(req.params.id)]);
       const pc = comCustos(p.rows[0], ref);
-      return res.json({ ok: true, custo: pc.custo_centavos !== null ? formatBRL(pc.custo_centavos) : '—', lucro: pc.lucro_centavos !== null ? formatBRL(pc.lucro_centavos) : '—',
+      return res.json({ ok: true, custo: pc.custo_centavos !== null ? formatBRL(pc.custo_centavos) : '—', lucro: pc.lucro_alvo !== null ? formatBRL(pc.lucro_alvo) : '—',
+        lucroRot: pc.lucro_pct && pc.lucro_bps !== null ? '· ' + formatPercent(pc.lucro_bps) + ' da venda' : '',
         func: formatBRL(pc.func_centavos), funcNome: pc.func ? pc.func.nome : 'ninguém', repNome: pc.rep ? pc.rep.nome : 'ninguém', repPct: formatPercent(pc.rep_bps_efetivo),
         comissao: pc.sugerido !== null ? formatBRL(Math.round(pc.sugerido * pc.rep_bps_efetivo / 10000)) : '—', sugerido: pc.sugerido !== null ? formatBRL(pc.sugerido) : '—' });
     }
@@ -801,7 +811,7 @@ router.get('/precos', async (req, res, next) => {
   try {
     const clientes = await db.query('SELECT id, nome FROM clientes WHERE ativo = TRUE ORDER BY nome');
     const ref = await refCustos();
-    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, rep_usuario_id, func_usuario_id FROM produtos WHERE ativo = TRUE ORDER BY nome');
+    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, lucro_tipo, lucro_bps, rep_usuario_id, func_usuario_id FROM produtos WHERE ativo = TRUE ORDER BY nome');
     const produtos = { rows: prodRes.rows.map((p) => comCustos(p, ref)) };
     let clienteId = pInt(req.query.cliente);
     if (!clienteId && clientes.rowCount > 0) clienteId = clientes.rows[0].id;
@@ -810,7 +820,7 @@ router.get('/precos', async (req, res, next) => {
       itens = await db.query(
         `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id,
                 to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim,
-                p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id
+                p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id
          FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
          WHERE i.cliente_id = $1 AND i.ativo = TRUE AND i.negociado = TRUE ORDER BY i.nome`, [clienteId]
       );
@@ -829,7 +839,7 @@ router.get('/precos', async (req, res, next) => {
         sugerido: pc.sugerido,
         lucro: lucroCom(i.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos),
         lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos) : null,
-        lucroAlvo: Number(i.lucro_centavos || 0),
+        lucroAlvo: Number(pc.lucro_alvo || 0),
         diffSugerido: pc.sugerido !== null ? i.preco_centavos - pc.sugerido : null,
       } : null;
       return { ...i, efetivo: ef, promoEstado, lucroInfo, promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };

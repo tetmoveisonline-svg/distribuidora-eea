@@ -152,11 +152,18 @@ function skuCor(_skuBase, cor) {
 module.exports.skuCor = skuCor;
 
 // ---------- custo, lucro e preco sugerido ----------
-// p: { custo_centavos, lucro_centavos, rep_bps }, funcCentavos: taxa do funcionario por etiqueta.
-// Preco sugerido = (custo + func + lucro) / (1 - rep%), arredondado para cima no centavo.
+// p: { custo_centavos, lucro_centavos, rep_bps, lucro_tipo?, lucro_bps? }, funcCentavos: taxa do funcionario por etiqueta.
+// Lucro em R$ (padrao): preco sugerido = (custo + func + lucro) / (1 - rep%), arredondado para cima no centavo.
+// Lucro em % (margem sobre o preco de venda): preco = (custo + func) / (1 - rep% - lucro%).
 function precoSugerido(p, funcCentavos) {
   const custo = Number(p.custo_centavos || 0), lucro = Number(p.lucro_centavos || 0), func = Number(funcCentavos || 0);
   const bps = Math.min(9999, Math.max(0, Number(p.rep_bps || 0)));
+  if (p.lucro_tipo === 'percentual') {
+    const tot = bps + Math.max(0, Number(p.lucro_bps || 0));
+    if (!custo && !func) return null;
+    if (tot >= 10000) return null; // rep + lucro >= 100%: nao existe preco
+    return Math.ceil(((custo + func) * 10000) / (10000 - tot));
+  }
   if (!custo && !lucro && !func) return null;
   return Math.ceil((custo + func + lucro) / (1 - bps / 10000));
 }

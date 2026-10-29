@@ -74,12 +74,14 @@
                   <span>Custo do produto</span><span class="num"><%= p.custo_centavos !== null && p.custo_centavos !== undefined ? formatBRL(p.custo_centavos) : '—' %></span>
                   <span>Funcionário <span class="dim">· <%= p.func ? p.func.nome : 'ninguém' %></span></span><span class="num"><%= formatBRL(p.func_centavos) %></span>
                   <span>Representante <span class="dim">· <%= p.rep ? p.rep.nome : 'ninguém' %> · <%= formatPercent(p.rep_bps_efetivo) %> da venda</span></span><span class="num"><%= p.sugerido !== null ? formatBRL(Math.round(p.sugerido * p.rep_bps_efetivo / 10000)) : '—' %></span>
-                  <span>Lucro desejado</span><span class="num"><%= p.lucro_centavos !== null && p.lucro_centavos !== undefined ? formatBRL(p.lucro_centavos) : '—' %></span>
+                  <span>Lucro desejado <span class="dim lucro-rot"><%= p.lucro_pct && p.lucro_bps !== null && p.lucro_bps !== undefined ? '· ' + formatPercent(p.lucro_bps) + ' da venda' : '' %></span></span><span class="num"><%= p.lucro_alvo !== null && p.lucro_alvo !== undefined ? formatBRL(p.lucro_alvo) : '—' %></span>
                   <span class="tot">Preço sugerido</span><span class="num tot ok"><%= p.sugerido !== null ? formatBRL(p.sugerido) : '—' %></span>
                 </div>
                 <form method="post" action="/admin/produtos/<%= p.id %>/custos" class="custo-form">
                   <label>Custo R$<input name="custo" value="<%= p.custo_centavos !== null && p.custo_centavos !== undefined ? (p.custo_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>" placeholder="40,00" /></label>
-                  <label>Lucro R$<input name="lucro" value="<%= p.lucro_centavos !== null && p.lucro_centavos !== undefined ? (p.lucro_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' %>" placeholder="20,00" /></label>
+                  <label><span class="lt-top">Lucro <span class="lt-seg"><button type="button" class="lt-btn <%= p.lucro_pct ? '' : 'on' %>" data-lt="valor" title="lucro em reais por unidade">R$</button><button type="button" class="lt-btn <%= p.lucro_pct ? 'on' : '' %>" data-lt="percentual" title="lucro em % do preço de venda">%</button></span></span>
+                    <input type="hidden" name="lucro_tipo" value="<%= p.lucro_pct ? 'percentual' : 'valor' %>" />
+                    <input name="lucro" value="<%= p.lucro_pct ? (p.lucro_bps !== null && p.lucro_bps !== undefined ? formatPercent(p.lucro_bps).replace('%', '') : '') : (p.lucro_centavos !== null && p.lucro_centavos !== undefined ? (p.lucro_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') %>" placeholder="<%= p.lucro_pct ? '25' : '20,00' %>" /></label>
                   <label>Representante
                     <select name="rep_id">
                       <option value="">— nenhum (0%) —</option>
@@ -152,8 +154,14 @@
   </div>
 </div>
 
-<div class="hint-box"><% if (!isFull) { %>Sua conta é operacional: custo, lucro e preço sugerido ficam ocultos. <% } %><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> cada cor tem físico, reservado e disponível (físico − reservado). O aceite de um pedido reserva a quantidade; cada etiqueta despachada na bipagem consome 1 do físico e 1 da reserva; encerrar com sobras libera a reserva. "Entrada" soma ao físico, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Disponível negativo fica em vermelho para repor. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
+<div class="hint-box"><% if (!isFull) { %>Sua conta é operacional: custo, lucro e preço sugerido ficam ocultos. <% } %><b>Preço sugerido</b> = (custo + taxa do funcionário + lucro desejado) ÷ (1 − % do representante). Com o lucro em <b>%</b>, ele vira uma margem sobre o preço de venda: preço = (custo + taxa do funcionário) ÷ (1 − % do representante − % de lucro); lucro + representante precisam ficar abaixo de 100%. Escolha nos dropdowns quem recebe: a comissão do representante e a taxa por etiqueta do funcionário vêm do cadastro de cada um, e mudanças lá refletem aqui na hora. Em "Preços por cliente" o preço já vem preenchido com o sugerido. <b>Estoque:</b> cada cor tem físico, reservado e disponível (físico − reservado). O aceite de um pedido reserva a quantidade; cada etiqueta despachada na bipagem consome 1 do físico e 1 da reserva; encerrar com sobras libera a reserva. "Entrada" soma ao físico, "Saída manual" subtrai, "Ajuste" aceita positivo ou negativo. Disponível negativo fica em vermelho para repor. O histórico completo está em <a href="/admin/estoque">Estoque</a>. O SKU fica na cor: cada cor do produto tem o seu código. Produto com cores obriga o cliente a escolher a cor ao subir a etiqueta, e o pedido grava a cor e o SKU; produto sem cores segue como cor única. "Desativar" esconde o produto das novas negociações; "Excluir" remove o produto e os preços por cliente ligados a ele. Pedidos antigos continuam com o nome, a cor e o valor da época.</div>
 
+<style>
+  .lt-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .lt-seg { display:inline-flex; gap:3px; }
+  .custo-form .lt-btn { grid-column:auto; font-size:11px; line-height:1; padding:3px 8px; border-radius:6px; border:1px solid var(--field-border); background:transparent; color:var(--text-muted); cursor:pointer; font-family:inherit; }
+  .custo-form .lt-btn.on { border-color:var(--accent); background:var(--accent-soft); color:var(--text); }
+</style>
 <script>
 (function () {
   var tabela = document.querySelector('.prod-table'); if (!tabela) return;
@@ -256,12 +264,23 @@
           var g = form.closest('.custo-box').querySelector('.custo-grid'); var n = g.querySelectorAll('.num');
           if (n.length >= 5) { n[0].textContent = j.custo; n[1].textContent = j.func; n[2].textContent = j.comissao; n[3].textContent = j.lucro; n[4].textContent = j.sugerido; }
           var dims = g.querySelectorAll('.dim'); if (dims.length >= 2) { dims[0].textContent = '· ' + j.funcNome; dims[1].textContent = '· ' + j.repNome + ' · ' + j.repPct + ' da venda'; }
+          var lr = g.querySelector('.lucro-rot'); if (lr) lr.textContent = j.lucroRot || '';
           salvo(sub || form);
         } else { salvo(sub || form); }
       })
       .catch(function () { aviso('err', 'Falha de conexão ao salvar.'); });
   });
   aplicar();
+
+  // Lucro em R$ ou %: troca o modo do campo (o valor digitado vale no modo escolhido).
+  tabela.addEventListener('click', function (e) {
+    var b = e.target.closest('.lt-btn'); if (!b) return;
+    var lab = b.closest('label'); var tipo = b.getAttribute('data-lt');
+    var hid = lab.querySelector('input[name="lucro_tipo"]'); if (hid.value === tipo) return;
+    hid.value = tipo;
+    lab.querySelectorAll('.lt-btn').forEach(function (x) { x.classList.toggle('on', x === b); });
+    var inp = lab.querySelector('input[name="lucro"]'); inp.value = ''; inp.placeholder = tipo === 'percentual' ? '25' : '20,00'; inp.focus();
+  });
 
   // Imagens do produto: escolher arquivos envia na hora; o x remove. A lista volta no JSON e e redesenhada.
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
