@@ -66,7 +66,7 @@ async function catalogoDoCliente(q, clienteId) {
     out.push({
       // id do item: o da negociacao/vinculo existente, ou "p<produto>" (vinculo criado no aceite)
       id: x.item_id ? x.item_id : 'p' + x.produto_id,
-      produto_id: x.produto_id, nome: x.nome, descricao: x.descricao,
+      produto_id: x.produto_id, nome: x.nome, descricao: x.descricao, peso_gramas: x.peso_gramas, medidas: x.medidas,
       obs: [x.peso_gramas !== null && x.peso_gramas !== undefined ? (Number(x.peso_gramas) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' kg' : '', x.medidas || ''].filter(Boolean).join(' · '),
       preco_centavos: preco, preco_original: original, promo, promo_rotulo: promoRotulo, origem,
       cores, saldo: Number(x.saldo) - Number(x.reservado), fisico: Number(x.saldo), reservado: Number(x.reservado),

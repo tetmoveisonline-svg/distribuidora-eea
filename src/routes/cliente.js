@@ -20,6 +20,20 @@ async function itensComPreco(q, clienteId) {
 
 const router = express.Router();
 
+// Lista de precos em PDF com os mesmos precos da tela de Estoque de quem baixa.
+async function enviarListaPrecos(req, res, produtos, negociado) {
+  const { gerarListaPrecos, nomeArquivo } = require('../listaPrecos');
+  const para = (req.session.user && req.session.user.nome) || '';
+  const pdf = await gerarListaPrecos(produtos, {
+    para, negociado, empresa: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora',
+    contato: process.env.EMPRESA_CONTATO || null, site: (req.get('host') || 'distribuidoraeea.up.railway.app'),
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + nomeArquivo(para) + '"');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(pdf);
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024, files: 30 },
@@ -326,6 +340,9 @@ router.get('/estoque', exigeCliente, async (req, res, next) => {
     const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
     res.render('cliente/estoque', { produtos, formatDateTime });
   } catch (e) { next(e); }
+});
+router.get('/estoque/lista.pdf', exigeCliente, async (req, res, next) => {
+  try { await enviarListaPrecos(req, res, await estoque.saldosParaCliente(req.session.user.clienteId), true); } catch (e) { next(e); }
 });
 // Imagem do produto (qualquer usuario logado); ?baixar=1 forca o download.
 router.get('/produtos/:id/imagens/:img', exigeLogin, (req, res, next) => imagens.servir(req, res).catch(next));

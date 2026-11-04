@@ -10,6 +10,20 @@ const repasses = require('../repasses');
 const { formatBRL, formatDateTime, formatPercent, andamentoDisplay, montarMensagemAcesso, hojeISO, brDate } = require('../util');
 
 const router = express.Router();
+
+// Lista de precos em PDF com os mesmos precos da tela de Estoque de quem baixa.
+async function enviarListaPrecos(req, res, produtos, negociado) {
+  const { gerarListaPrecos, nomeArquivo } = require('../listaPrecos');
+  const para = (req.session.user && req.session.user.nome) || '';
+  const pdf = await gerarListaPrecos(produtos, {
+    para, negociado, empresa: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora',
+    contato: process.env.EMPRESA_CONTATO || null, site: (req.get('host') || 'distribuidoraeea.up.railway.app'),
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + nomeArquivo(para) + '"');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(pdf);
+}
 router.use(exigeRepresentante);
 
 function pInt(v) { const n = parseInt(v, 10); return isNaN(n) ? null : n; }
@@ -122,8 +136,11 @@ router.get('/pedidos', async (req, res, next) => {
 router.get('/estoque', async (req, res, next) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosSugerido());
-    res.render('cliente/estoque', { produtos, ativo: 'rep-estoque', apiUrl: '/rep/api/estoque', sugerido: true, formatDateTime });
+    res.render('cliente/estoque', { produtos, ativo: 'rep-estoque', apiUrl: '/rep/api/estoque', pdfUrl: '/rep/estoque/lista.pdf', sugerido: true, formatDateTime });
   } catch (e) { next(e); }
+});
+router.get('/estoque/lista.pdf', async (req, res, next) => {
+  try { await enviarListaPrecos(req, res, await estoque.saldosSugerido(), false); } catch (e) { next(e); }
 });
 router.get('/api/estoque', async (req, res) => {
   try {

@@ -14,7 +14,7 @@
       <button type="button" class="tab" data-filtro="com" role="tab">Com estoque <span class="dim" id="nCom"></span></button>
       <button type="button" class="tab" data-filtro="sem" role="tab">Sem estoque <span class="dim" id="nSem"></span></button>
     </div>
-    <span class="dim" style="font-size:12px">Atualizado às <span id="estAtual"><%= formatDateTime(new Date()).slice(11) %></span> · <button type="button" class="btn ghost sm" id="estRefresh">Atualizar agora</button></span>
+    <span class="dim" style="font-size:12px">Atualizado às <span id="estAtual"><%= formatDateTime(new Date()).slice(11) %></span> · <button type="button" class="btn ghost sm" id="estRefresh">Atualizar agora</button> <a class="btn sm" style="margin-left:6px" href="<%= typeof pdfUrl !== 'undefined' ? pdfUrl : '/estoque/lista.pdf' %>" title="baixar a lista de preços em PDF">⬇ Baixar lista de preços (PDF)</a></span>
   </div>
   <div id="estBox">
     <%- include('../partials/estoque-tabela', { produtos: produtos }) %>
