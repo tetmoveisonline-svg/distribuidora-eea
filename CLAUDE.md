@@ -13,12 +13,19 @@ Veja `README.md` para a visão geral e como rodar localmente.
 ## Entrega e publicação
 
 - Depois de **concluir e validar** alterações **explicitamente solicitadas pelo usuário**,
-  fazer **commit** e **publicar no GitHub** com **destino final a branch `main`**.
-- **Não** entregar apenas um ZIP/patch: o fluxo esperado termina com a mudança no GitHub.
-  Se o ambiente exigir uma branch gerenciada, enviar para a branch permitida e abrir um
-  **PR para `main`**, informando número, URL e SHA para integração.
+  fazer **commit** e **publicar no GitHub** com **destino final a branch `main`**
+  ("direto na main").
+- **Não** entregar apenas um ZIP/patch: o fluxo esperado termina com a mudança **na `main`**.
+- Quando o ambiente **exigir uma branch gerenciada**, enviar para a branch permitida e abrir um
+  **PR para `main`**; então, **depois das validações e dos checks exigidos**, **fazer também o
+  merge para `main`** pelo conector/API suportado (GitHub), **sem pedir uma nova aprovação**
+  para as alterações já solicitadas. **Não basta abrir o PR e deixá-lo pendente** quando há
+  permissão para integrar.
+- Se alguma **proteção de branch ou permissão impedir o merge**, **respeitar o bloqueio** e
+  **informar** (não tentar contornar, nem force-push). Nesse caso, entregar número, URL e SHA
+  do PR para integração manual.
 - Ao concluir, informar exatamente **o que foi enviado**, **quais testes/validações** rodaram
-  e **se a `main` foi atualizada** ou **se ainda falta o merge**.
+  e **se a `main` foi atualizada** ou **se ainda falta o merge** (e por quê).
 
 ## Restrições (não fazer)
 
