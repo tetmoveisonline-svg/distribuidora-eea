@@ -35,8 +35,31 @@
           <% if (l.ajustado) { %><div class="dim" style="font-size:11px;text-decoration:line-through"><%= formatBRL(l.valor_original) %></div><% } %>
         </td>
         <td><%- badgeSit(l) %><% if (l.nao_enviadas > 0) { %> <span class="badge neutral" title="etiquetas que ficaram de fora no encerramento"><%= l.nao_enviadas %> não enviada(s)</span><% } %></td>
-        <td class="num"><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= l.id %>">detalhe</button></td>
+        <td class="num" style="white-space:nowrap"><% if (!admin && l.pix) { %><button type="button" class="btn sm pix-toggle" data-pix="<%= l.id %>" style="margin-right:6px">Pagamento do Pedido</button><% } %><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= l.id %>">detalhe</button></td>
       </tr>
+      <% if (!admin && l.pix) { %>
+      <tr class="pix-row" id="pix-<%= l.id %>" style="display:none">
+        <td colspan="6">
+          <div class="fin-detail-box pix-box">
+            <div class="pix-qr"><%- l.pix.qr %></div>
+            <div class="pix-info">
+              <div class="pix-tit">Pague o pedido <%= l.numero %> com Pix</div>
+              <div class="dim pix-sub">Abra o app do banco, escolha Pix &gt; Ler QR Code. O valor já vem preenchido.</div>
+              <div class="pix-grid">
+                <span class="dim">Valor</span><b class="pix-valor"><%= formatBRL(l.valor_centavos) %></b><span></span>
+                <span class="dim">Chave CPF</span><span class="mono"><%= l.pix.chave %></span><button type="button" class="btn ghost sm pix-copy" data-copy="<%= l.pix.chaveCopia %>">Copiar chave</button>
+                <span class="dim">Copia e cola</span><span class="mono pix-cod"><%= l.pix.codigo %></span><button type="button" class="btn ghost sm pix-copy" data-copy="<%= l.pix.codigo %>">Copiar código</button>
+                <span class="dim">Favorecido</span><span><%= l.pix.favorecido %></span><span></span>
+              </div>
+              <div class="pix-acoes">
+                <a class="btn sm" href="<%= l.pix.whatsapp %>" target="_blank" rel="noopener">Já paguei, avisar no WhatsApp</a>
+                <span class="dim">Abre o WhatsApp do Gabriel com a mensagem pronta. Anexe o comprovante.</span>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+      <% } %>
       <tr class="fin-detail" id="fin-detail-<%= l.id %>" style="display:none">
         <td colspan="<%= admin ? 7 : 6 %>">
           <div class="fin-detail-box">
@@ -96,4 +119,54 @@
   </tbody>
 </table>
 </div>
+<% if (!admin) { %>
+<style>
+  .pix-row td, .pix-box { white-space:normal; }
+  .pix-box { display:flex; gap:22px; align-items:center; flex-wrap:wrap; }
+  .pix-qr svg { width:170px; height:170px; display:block; border-radius:10px; }
+  .pix-info { flex:1; min-width:260px; }
+  .pix-tit { font-weight:650; font-size:15px; margin-bottom:4px; }
+  .pix-sub { font-size:12.5px; margin-bottom:12px; }
+  .pix-grid { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px 14px; align-items:center; font-size:13px; }
+  .pix-valor { font-size:16px; }
+  .pix-cod { font-size:11px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pix-acoes { margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px; }
+  @media (max-width:640px) {
+    .pix-box { gap:14px; }
+    .pix-qr { margin:0 auto; }
+    .pix-grid { grid-template-columns:auto minmax(0,1fr); }
+    .pix-grid > span:empty { display:none; }
+    .pix-grid .pix-copy { grid-column:1 / -1; justify-self:start; }
+  }
+</style>
+<script>
+(function () {
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.pix-toggle') : null;
+    if (b) {
+      var r = document.getElementById('pix-' + b.getAttribute('data-pix'));
+      if (!r) return;
+      var abrir = r.style.display === 'none';
+      r.style.display = abrir ? 'table-row' : 'none';
+      if (abrir) {
+        // no celular a tabela rola de lado: o quadro fica preso a esquerda e do tamanho da area visivel
+        var box = r.querySelector('.pix-box');
+        var sc = [r.closest('table'), r.closest('div[style*="overflow-x"]')].filter(function (el) { return el && el.scrollWidth > el.clientWidth; })[0];
+        if (sc && box) { sc.scrollLeft = 0; box.style.position = 'sticky'; box.style.left = '0'; box.style.maxWidth = (sc.clientWidth - 24) + 'px'; }
+      }
+      return;
+    }
+    var c = e.target.closest ? e.target.closest('.pix-copy') : null;
+    if (!c) return;
+    var txt = c.getAttribute('data-copy'), rot = c.textContent;
+    function ok() { c.textContent = 'Copiado ✓'; setTimeout(function () { c.textContent = rot; }, 1600); }
+    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(txt).then(ok, fallback); } else { fallback(); }
+    function fallback() {
+      var t = document.createElement('textarea'); t.value = txt; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select(); try { document.execCommand('copy'); ok(); } catch (x) {} t.remove();
+    }
+  });
+})();
+</script>
+<% } %>
 <% } %>

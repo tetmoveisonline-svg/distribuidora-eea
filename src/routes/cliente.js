@@ -361,6 +361,13 @@ router.get('/financeiro', exigeCliente, async (req, res, next) => {
     const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : '';
     const todos = await financeiro.listar({ clienteId });
     const lista = financeiro.filtrarSituacao(mes ? await financeiro.listar({ clienteId, mes }) : todos, sit);
+    // "Pagamento do Pedido": Pix com o valor do lancamento (so o que ainda esta em aberto ou vencido)
+    const pix = require('../pix');
+    lista.forEach((l) => {
+      if (l.situacao !== 'pago' && l.situacao !== 'cancelado' && Number(l.valor_centavos) > 0) {
+        l.pix = pix.dadosPagamento(l.numero, Number(l.valor_centavos), formatBRL(l.valor_centavos));
+      }
+    });
     res.render('cliente/financeiro', {
       lancamentos: lista, resumo: financeiro.resumo(todos), creditoConta: await financeiro.creditoConta(clienteId),
       meses: await financeiro.mesesDisponiveis(clienteId), filtro: { situacao: sit, mes },
