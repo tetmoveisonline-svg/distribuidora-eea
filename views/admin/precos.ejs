@@ -73,6 +73,7 @@
                 <div class="dim price-sub">
                   <%= i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor) + ' de desconto' : 'por ' + formatBRL(i.promo_valor) %>
                   · <%= i.promo_inicio ? brDate(i.promo_inicio) + ' a ' : 'até ' %><%= brDate(i.promo_fim) %>
+                  <% if (i.promo_rep_bps !== null && i.promo_rep_bps !== undefined) { %> · rep <%= formatPercent(i.promo_rep_bps) %> na campanha<% } %>
                 </div>
               <% } else { %>
                 <span class="dim price-sub">sem promoção</span>
@@ -95,13 +96,14 @@
               <div class="field"><label>Valor</label><input name="valor" placeholder="10" value="<%= i.promo_valor_txt %>" /></div>
               <div class="field"><label>Início <span class="dim">(opcional)</span></label><input type="date" name="inicio" value="<%= i.promo_inicio || '' %>" /></div>
               <div class="field"><label>Até</label><input type="date" name="fim" value="<%= i.promo_fim || '' %>" required /></div>
+              <div class="field"><label>% do rep na campanha</label><input name="rep_percent" placeholder="normal: <%= formatPercent(clienteRepBps) %>" value="<%= i.promo_rep_txt %>" /></div>
               <div class="promo-btns">
                 <button class="btn sm" type="submit"><%= i.promo_tipo ? 'Salvar' : 'Aplicar' %></button>
                 <% if (i.promo_tipo) { %><button class="btn ghost sm" type="submit" formaction="/admin/precos/<%= i.id %>/promo/remover" formnovalidate>Tirar promoção</button><% } %>
                 <button class="btn ghost sm promo-toggle" type="button" data-target="promo-<%= i.id %>">Fechar</button>
               </div>
             </form>
-            <div class="dim promo-help">Em <b>%</b> o desconto é sobre o preço negociado; em <b>R$</b> o valor informado passa a ser o preço do item. Vale do início (ou de agora, se vazio) até a data final, inclusive. O cliente vê o preço promocional ao subir a etiqueta e o pedido grava o valor cobrado no aceite.</div>
+            <div class="dim promo-help">Em <b>%</b> o desconto é sobre o preço negociado; em <b>R$</b> o valor informado passa a ser o preço do item. Vale do início (ou de agora, se vazio) até a data final, inclusive. O cliente vê o preço promocional ao subir a etiqueta e o pedido grava o valor cobrado no aceite. O <b>% do rep na campanha</b> (opcional) só vale nesse período; fora dele a comissão volta ao padrão do cadastro. Deixe vazio para manter o % normal.</div>
           </div>
         </div>
       <% }); %>

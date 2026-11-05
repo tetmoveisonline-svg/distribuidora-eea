@@ -185,6 +185,9 @@ ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_tipo TEXT CHECK (promo_tipo IS 
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_valor INTEGER;
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_inicio DATE;
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_fim DATE;
+-- % do representante durante a campanha (pontos-base). NULL = mantem o % normal do cadastro do cliente.
+-- So vale enquanto a promocao estiver ativa (entre promo_inicio e promo_fim); fora disso volta ao normal.
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_rep_bps INTEGER;
 
 -- ===================== ENCERRAMENTO E CREDITO EM CONTA =====================
 -- Etiqueta que ficou para tras quando o admin encerrou o pedido: nao e cobrada.

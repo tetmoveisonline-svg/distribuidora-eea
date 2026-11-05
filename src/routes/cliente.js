@@ -167,6 +167,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
         itemId: item.id, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome,
         corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : item.sku,
         precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha,
+        repCampanhaBps: (item.rep_bps_campanha !== null && item.rep_bps_campanha !== undefined) ? Number(item.rep_bps_campanha) : null,
       });
     }
 
@@ -202,22 +203,42 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     );
     const comRow = cc.rows[0];
     if (comRow && comRow.u_id) {
-      const totalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
-      if (totalBps > 0) {
-        if (comRow.representante_pai_id) {
-          let prepBps = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
-          if (prepBps > totalBps) prepBps = totalBps;
-          const paiBps = totalBps - prepBps;
+      // % normal do representante para este cliente (vale fora de campanha).
+      const normalTotalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
+      const temPai = !!comRow.representante_pai_id;
+      // Proporcao da fatia do preposto sobre o total normal; mantida tambem na campanha.
+      let prepRatio = 0;
+      if (temPai && normalTotalBps > 0) {
+        let prepNormal = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
+        if (prepNormal > normalTotalBps) prepNormal = normalTotalBps;
+        prepRatio = prepNormal / normalTotalBps;
+      }
+      // Comissao calculada POR ITEM (cada linha usa o % da campanha, se o item estiver em campanha,
+      // ou o % normal do cliente) e somada. Guarda a soma em centavos; o bps fica como taxa media (exibicao).
+      let somaPrep = 0, somaPai = 0, algumBps = false;
+      for (const l of linhas) {
+        const lineBps = (l.repCampanhaBps !== null && l.repCampanhaBps !== undefined) ? Number(l.repCampanhaBps) : normalTotalBps;
+        if (lineBps <= 0) continue;
+        algumBps = true;
+        let prepLineBps, paiLineBps;
+        if (temPai) { prepLineBps = Math.min(lineBps, Math.round(lineBps * prepRatio)); paiLineBps = lineBps - prepLineBps; }
+        else { prepLineBps = lineBps; paiLineBps = 0; }
+        somaPrep += Math.round(l.totalCentavos * prepLineBps / 10000);
+        somaPai += Math.round(l.totalCentavos * paiLineBps / 10000);
+      }
+      if (algumBps) {
+        const blendPrep = totalCentavos > 0 ? Math.round(somaPrep * 10000 / totalCentavos) : 0;
+        if (temPai) {
+          const blendPai = totalCentavos > 0 ? Math.round(somaPai * 10000 / totalCentavos) : 0;
           await client.query(
             `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
                     responsavel_id = $5, comissao_resp_bps = $6, comissao_resp_centavos = $7 WHERE id = $1`,
-            [pedidoId, comRow.u_id, prepBps, Math.round(totalCentavos * prepBps / 10000),
-             comRow.representante_pai_id, paiBps, Math.round(totalCentavos * paiBps / 10000)]
+            [pedidoId, comRow.u_id, blendPrep, somaPrep, comRow.representante_pai_id, blendPai, somaPai]
           );
         } else {
           await client.query(
             `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4 WHERE id = $1`,
-            [pedidoId, comRow.u_id, totalBps, Math.round(totalCentavos * totalBps / 10000)]
+            [pedidoId, comRow.u_id, blendPrep, somaPrep]
           );
         }
       }

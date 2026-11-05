@@ -37,7 +37,7 @@ async function catalogoDoCliente(q, clienteId) {
   const prods = await q.query(
     `SELECT p.id AS produto_id, p.nome, p.descricao, p.peso_gramas, p.medidas, p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id,
             p.saldo, p.reservado,
-            i.id AS item_id, i.negociado, i.preco_centavos, i.promo_tipo, i.promo_valor,
+            i.id AS item_id, i.negociado, i.preco_centavos, i.promo_tipo, i.promo_valor, i.promo_rep_bps,
             to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
      FROM produtos p
      LEFT JOIN itens i ON i.produto_id = p.id AND i.cliente_id = $1 AND i.ativo = TRUE
@@ -54,9 +54,12 @@ async function catalogoDoCliente(q, clienteId) {
   for (const x of prods.rows) {
     const pc = comCustos(x, ref);
     let preco, original, promo = false, promoRotulo = '', origem;
+    // % do representante durante a campanha (so quando a promocao esta ativa hoje e foi definida).
+    let repCampanhaBps = null;
     if (x.item_id && x.negociado) {
       const ef = precoEfetivo(x, hoje);
       preco = ef.preco_centavos; original = ef.preco_original; promo = ef.promo; promoRotulo = ef.promo_rotulo; origem = 'negociado';
+      if (ef.promo && x.promo_rep_bps !== null && x.promo_rep_bps !== undefined) repCampanhaBps = Number(x.promo_rep_bps);
     } else if (pc.sugerido !== null) {
       preco = pc.sugerido; original = pc.sugerido; origem = 'sugerido';
     } else {
@@ -69,6 +72,7 @@ async function catalogoDoCliente(q, clienteId) {
       produto_id: x.produto_id, nome: x.nome, descricao: x.descricao, peso_gramas: x.peso_gramas, medidas: x.medidas,
       obs: [x.peso_gramas !== null && x.peso_gramas !== undefined ? (Number(x.peso_gramas) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' kg' : '', x.medidas || ''].filter(Boolean).join(' · '),
       preco_centavos: preco, preco_original: original, promo, promo_rotulo: promoRotulo, origem,
+      rep_bps_campanha: repCampanhaBps,
       cores, saldo: Number(x.saldo) - Number(x.reservado), fisico: Number(x.saldo), reservado: Number(x.reservado),
     });
   }

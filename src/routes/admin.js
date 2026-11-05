@@ -818,7 +818,7 @@ router.get('/precos', async (req, res, next) => {
     let itens = { rows: [] }, clienteNome = '';
     if (clienteId) {
       itens = await db.query(
-        `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id,
+        `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.promo_rep_bps, i.produto_id,
                 to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim,
                 p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id
          FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
@@ -826,6 +826,13 @@ router.get('/precos', async (req, res, next) => {
       );
       const cn = await db.query('SELECT nome FROM clientes WHERE id = $1', [clienteId]);
       clienteNome = cn.rowCount ? cn.rows[0].nome : '';
+    }
+    // % normal do representante para este cliente (vale fora da campanha): o do cadastro do cliente,
+    // ou, na falta, o % padrao do representante vinculado.
+    let clienteRepBps = 0;
+    if (clienteId) {
+      const cr = await db.query("SELECT c.comissao_total_bps, u.comissao_bps AS u_bps FROM clientes c LEFT JOIN usuarios u ON u.id = c.representante_id AND u.papel = 'representante' WHERE c.id = $1", [clienteId]);
+      if (cr.rowCount) clienteRepBps = Number(cr.rows[0].comissao_total_bps != null ? cr.rows[0].comissao_total_bps : (cr.rows[0].u_bps || 0)) || 0;
     }
     const hoje = hojeISO();
     const lista = itens.rows.map((i) => {
@@ -835,16 +842,20 @@ router.get('/precos', async (req, res, next) => {
       if (i.promo_tipo && !ef.promo) promoEstado = (i.promo_inicio && i.promo_inicio > hoje) ? 'agendada' : 'encerrada';
       // lucro por unidade com o preco negociado (e com a promocao, se ativa)
       const pc = comCustos(i, ref);
+      // Durante a campanha a comissao do rep usa o % da campanha (se definido); senao, o % do produto.
+      const repPromoBps = (ef.promo && i.promo_rep_bps !== null && i.promo_rep_bps !== undefined) ? Number(i.promo_rep_bps) : pc.rep_bps_efetivo;
       const lucroInfo = pc.temCustos ? {
         sugerido: pc.sugerido,
         lucro: lucroCom(i.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos),
-        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos) : null,
+        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: repPromoBps }, pc.func_centavos) : null,
         lucroAlvo: Number(pc.lucro_alvo || 0),
         diffSugerido: pc.sugerido !== null ? i.preco_centavos - pc.sugerido : null,
       } : null;
-      return { ...i, efetivo: ef, promoEstado, lucroInfo, promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
+      return { ...i, efetivo: ef, promoEstado, lucroInfo,
+        promo_rep_txt: (i.promo_rep_bps !== null && i.promo_rep_bps !== undefined) ? formatPercent(i.promo_rep_bps).replace('%', '') : '',
+        promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
     });
-    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
+    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, clienteRepBps, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
   } catch (e) { next(e); }
 });
 router.post('/precos', async (req, res, next) => {
@@ -881,7 +892,14 @@ router.post('/precos/:id/promo', async (req, res, next) => {
     const fim = /^\d{4}-\d{2}-\d{2}$/.test(req.body.fim || '') ? req.body.fim : null;
     if (!fim) throw new Error('Informe até quando vale a promoção.');
     if (ini && fim < ini) throw new Error('A data final é anterior à inicial.');
-    await db.query('UPDATE itens SET promo_tipo = $2, promo_valor = $3, promo_inicio = $4, promo_fim = $5 WHERE id = $1', [id, tipo, valor, ini, fim]);
+    // % do representante durante a campanha (opcional). Vazio = mantem o % normal do cadastro.
+    const repTxt = (req.body.rep_percent || '').toString().trim();
+    let repBps = null;
+    if (repTxt !== '') {
+      repBps = parsePercentToBps(repTxt);
+      if (repBps === null || repBps < 0 || repBps >= 10000) throw new Error('% do representante na campanha inválida (0 a 99,99%).');
+    }
+    await db.query('UPDATE itens SET promo_tipo = $2, promo_valor = $3, promo_inicio = $4, promo_fim = $5, promo_rep_bps = $6 WHERE id = $1', [id, tipo, valor, ini, fim, repBps]);
     {
       const it = await db.query('SELECT nome, produto_id, preco_centavos FROM itens WHERE id = $1', [id]);
       const novo = tipo === 'percentual' ? Math.round(it.rows[0].preco_centavos * (10000 - valor) / 10000) : valor;
@@ -892,14 +910,14 @@ router.post('/precos/:id/promo', async (req, res, next) => {
 });
 router.post('/precos/:id/promo/remover', async (req, res, next) => {
   try {
-    const it = await db.query('UPDATE itens SET promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL WHERE id = $1 RETURNING cliente_id', [pInt(req.params.id)]);
+    const it = await db.query('UPDATE itens SET promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL, promo_rep_bps = NULL WHERE id = $1 RETURNING cliente_id', [pInt(req.params.id)]);
     res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : '') + '&ok=' + encodeURIComponent('Promoção removida.'));
   } catch (e) { next(e); }
 });
 router.post('/precos/:id/remove', async (req, res, next) => {
   try {
     // remover a negociacao: o produto volta ao preco sugerido (o vinculo fica, sem negociacao, para o historico)
-    const it = await db.query('UPDATE itens SET negociado = FALSE, promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL WHERE id = $1 RETURNING cliente_id', [req.params.id]);
+    const it = await db.query('UPDATE itens SET negociado = FALSE, promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL, promo_rep_bps = NULL WHERE id = $1 RETURNING cliente_id', [req.params.id]);
     res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : ''));
   } catch (e) { next(e); }
 });
