@@ -53,7 +53,7 @@
     if (p.promo) return '<b style="color:var(--ok)">' + esc(p.preco_txt) + '</b> <span class="badge ok" style="margin-left:4px">' + esc(p.promo_rotulo) + '</span><div class="dim" style="font-size:11px;text-decoration:line-through">' + esc(p.preco_original_txt) + '</div>';
     return '<b>' + esc(p.preco_txt) + '</b>';
   }
-  var dados = <%- JSON.stringify(produtos) %>;
+  var dados = <%- jsonForScript(produtos) %>;
   var EST_API = '<%= typeof apiUrl !== "undefined" ? apiUrl : "/api/estoque" %>';
   var filtro = 'todos';
   try { var f0 = localStorage.getItem('estoqueFiltro'); if (f0 === 'com' || f0 === 'sem' || f0 === 'todos') filtro = f0; } catch (e) {}

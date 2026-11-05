@@ -3,12 +3,14 @@
 require('dotenv').config();
 
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 
 const db = require('./db');
 const { currentUser } = require('./auth');
+const { jsonForScript } = require('./util');
 const { ensureAdmin } = require('./bootstrap');
 
 const app = express();
@@ -20,23 +22,42 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '2mb' }));
 
+// Segredo de sessao: nunca usar um valor publico embutido. Se SESSION_SECRET nao estiver
+// definido, gera um aleatorio desta inicializacao (as sessoes caem a cada restart) e avisa.
+let sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  sessionSecret = crypto.randomBytes(48).toString('hex');
+  console.warn('AVISO: SESSION_SECRET nao definido. Usando um segredo aleatorio desta inicializacao (as sessoes serao invalidadas a cada restart). Defina SESSION_SECRET no ambiente.');
+}
+// Cookie Secure por padrao; so desliga quando NODE_ENV=development (desenvolvimento local em http).
+const emDesenvolvimento = process.env.NODE_ENV === 'development';
+
 app.use(session({
   store: new PgSession({ pool: db.pool, tableName: 'session', createTableIfMissing: true }),
-  secret: process.env.SESSION_SECRET || 'segredo-inseguro-troque-no-env',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 12, // 12h
-    secure: process.env.NODE_ENV === 'production',
+    secure: !emDesenvolvimento,
     sameSite: 'lax',
   },
 }));
+
+// Cabecalhos de seguranca basicos (sem CSP, para nao quebrar os scripts inline existentes).
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
 
 // Expoe o usuario logado para todas as views.
 app.use((req, res, next) => {
   res.locals.user = currentUser(req);
   res.locals.isFull = !!(res.locals.user && res.locals.user.papel === 'admin'); // admin completo (ve custos, lucros e comissoes)
+  res.locals.jsonForScript = jsonForScript; // serializacao segura para <script> inline
   // Radio na area do cliente (comeca pausada; o cliente da play). Vazio em RADIO_URL desliga.
   res.locals.radio = {
     nome: process.env.RADIO_NOME || '89 FM · A Rádio Rock',
