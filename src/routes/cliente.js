@@ -238,6 +238,17 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
     }
 
+    // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
+    // Criado antes do PDF para o comprovante sair com o vencimento e o Pix do valor a pagar.
+    const lanc = await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos, totalEtiquetas);
+    const fin = await client.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc FROM financeiro WHERE pedido_id = $1", [pedidoId]);
+    let pagamento = null;
+    if (fin.rowCount && Number(fin.rows[0].valor_centavos) > 0) {
+      const aPagar = Number(fin.rows[0].valor_centavos);
+      const d = require('../pix').dadosPagamento(numero, aPagar, formatBRL(aPagar));
+      pagamento = { vencimento: fin.rows[0].venc, valorCentavos: aPagar, creditoUsado: lanc.creditoUsado || 0, codigo: d.codigo, chave: d.chave, favorecido: d.favorecido };
+    }
+
     const cli = await client.query('SELECT nome, email FROM clientes WHERE id = $1', [clienteId]);
     const pdfBuffer = await gerarComprovante({
       numero, criadoEm: ped.rows[0].criado_em, aceiteEm: ped.rows[0].aceite_em, aceiteIp: ip,
@@ -245,17 +256,15 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       cliente: cli.rows[0] || {},
       linhas: linhas.map((l) => ({ arquivo_nome: l.arquivoNome, item_nome: l.itemNome + (l.sku ? ' [' + l.sku + ']' : ''), quantidade: l.quantidade, preco_centavos: l.precoCentavos, total_centavos: l.totalCentavos })),
       totalEtiquetas, totalCentavos,
-      formaPagamento: process.env.COMPROVANTE_FORMA_PAGAMENTO || 'A combinar',
+      formaPagamento: pagamento ? 'Pix' : (fin.rowCount && Number(fin.rows[0].valor_centavos) === 0 ? 'Crédito em conta' : (process.env.COMPROVANTE_FORMA_PAGAMENTO || 'A combinar')),
       prazoDespacho: process.env.COMPROVANTE_PRAZO_DESPACHO || 'Ate 1 dia util apos o aceite',
       observacoes: (body.observacoes || '').toString().slice(0, 500),
+      pagamento,
     });
     await client.query('UPDATE pedidos SET comprovante = $1 WHERE id = $2', [pdfBuffer, pedidoId]);
 
     // Estoque: reserva a quantidade de cada linha (o despacho consome depois).
     await estoque.reservarPedido(client, pedidoId, usuarioId);
-
-    // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
-    await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos, totalEtiquetas);
 
     await client.query('COMMIT');
     res.json({ ok: true, pedidoId, numero });

@@ -2,6 +2,7 @@
 
 const PDFDocument = require('pdfkit');
 const { formatBRL, formatDateTime } = require('./util');
+const { qrMatriz } = require('./qr');
 
 // Gera o comprovante/relatorio em PDF e retorna um Buffer.
 // dados = {
@@ -10,7 +11,8 @@ const { formatBRL, formatDateTime } = require('./util');
 //   cliente: { nome, email },
 //   linhas: [{ arquivo_nome, item_nome, quantidade, preco_centavos, total_centavos }],
 //   totalEtiquetas, totalCentavos,
-//   formaPagamento, prazoDespacho, observacoes
+//   formaPagamento, prazoDespacho, observacoes,
+//   pagamento (opcional): ver blocoPagamento
 // }
 function gerarComprovante(dados) {
   return new Promise((resolve, reject) => {
@@ -80,6 +82,9 @@ function gerarComprovante(dados) {
       extras.push('Observacoes: ' + (dados.observacoes && dados.observacoes.trim() ? dados.observacoes : '-'));
       doc.text(extras.join('    |    '), { width: 499 });
 
+      // ---------- Pagamento (Pix + vencimento) ----------
+      if (dados.pagamento) blocoPagamento(doc, C, dados.pagamento);
+
       // ---------- Bloco de aceite ----------
       doc.moveDown(1);
       const yA = doc.y;
@@ -104,6 +109,41 @@ function gerarComprovante(dados) {
   });
 }
 
+// Quadro de pagamento: QR do Pix com o valor, vencimento em destaque, chave, favorecido e copia e cola.
+// pg = { vencimento: 'DD/MM/AAAA', valorCentavos, creditoUsado, codigo, chave, favorecido }
+function blocoPagamento(doc, C, pg) {
+  doc.moveDown(1.2);
+  doc.x = 48;
+  secTitulo(doc, C, 'PAGAMENTO');
+  const y = doc.y + 2, alt = 146;
+  doc.roundedRect(48, y, 499, alt, 6).lineWidth(1).strokeColor(C.linha).stroke();
+  // QR
+  const m = qrMatriz(pg.codigo), n = m.length, lado = 118, mod = lado / (n + 4), qx = 60, qy = y + 14;
+  doc.rect(qx, qy, lado, lado).fill('#ffffff');
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (m[r][c]) doc.rect(qx + (c + 2) * mod, qy + (r + 2) * mod, mod + 0.05, mod + 0.05);
+  doc.fill('#000000');
+  // Vencimento em destaque (a direita)
+  const vx = 410, vw = 125;
+  doc.roundedRect(vx, y + 14, vw, 52, 5).fill('#fff6e5');
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#9a6b12').text('VENCIMENTO', vx, y + 22, { width: vw, align: 'center', characterSpacing: 0.5 });
+  doc.font('Helvetica-Bold').fontSize(15).fillColor('#7a4f00').text(pg.vencimento, vx, y + 36, { width: vw, align: 'center' });
+  // Dados
+  const tx = 192, tw = 205;
+  doc.font('Helvetica-Bold').fontSize(11).fillColor(C.texto).text('Pague com Pix', tx, y + 14, { width: tw });
+  doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Abra o app do banco > Pix > Ler QR Code. O valor já vem preenchido.', tx, y + 30, { width: tw });
+  const linha = (rot, val, yy, bold) => {
+    doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text(rot, tx, yy, { width: 62 });
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 9.5).fillColor(C.texto).text(val, tx + 64, yy - (bold ? 1.5 : 0), { width: tw + 140 - 64 });
+  };
+  linha('Valor', formatBRL(pg.valorCentavos), y + 58, true);
+  if (pg.creditoUsado > 0) doc.font('Helvetica').fontSize(8).fillColor(C.verde).text('(já abatido ' + formatBRL(pg.creditoUsado) + ' de crédito)', tx + 140, y + 59.5, { width: 205 });
+  linha('Chave CPF', pg.chave, y + 76);
+  linha('Favorecido', pg.favorecido, y + 92);
+  doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Copia e cola', tx, y + 110, { width: 62 });
+  doc.font('Courier').fontSize(6.6).fillColor('#4a525c').text(pg.codigo, tx + 64, y + 110, { width: 281, lineGap: 0.5 });
+  doc.x = 48; doc.y = y + alt;
+}
+
 function secTitulo(doc, C, txt) {
   doc.font('Helvetica-Bold').fontSize(8).fillColor('#8a93a0')
     .text(txt, { characterSpacing: 0.5 });
@@ -112,7 +152,7 @@ function secTitulo(doc, C, txt) {
 
 function desenharTabela(doc, C, linhas) {
   const x = 48;
-  const larguras = [200, 120, 40, 65, 74]; // arquivo, item, qtd, unit, total
+  const larguras = [190, 115, 35, 65, 74]; // arquivo, item, qtd, unit, total
   const heads = ['Etiqueta / arquivo', 'Item', 'Qtd', 'Valor unit.', 'Total'];
   let y = doc.y + 2;
 
