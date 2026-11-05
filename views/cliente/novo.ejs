@@ -113,10 +113,10 @@
 </div>
 
 <script>
-  window.ITENS = <%- JSON.stringify(itens) %>;
-  window.CREDITO = <%- JSON.stringify(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, abertos: credito.abertos, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
-  window.WHATSAPP = <%- JSON.stringify(whatsapp || '') %>;
-  window.CLIENTE = <%- JSON.stringify({ nome: clienteNome, login: clienteLogin }) %>;
+  window.ITENS = <%- jsonForScript(itens) %>;
+  window.CREDITO = <%- jsonForScript(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, abertos: credito.abertos, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
+  window.WHATSAPP = <%- jsonForScript(whatsapp || '') %>;
+  window.CLIENTE = <%- jsonForScript({ nome: clienteNome, login: clienteLogin }) %>;
 </script>
 <script type="module" src="/js/leitor-etiquetas.js"></script>
 <script src="/js/novo.js"></script>

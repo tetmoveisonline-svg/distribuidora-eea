@@ -127,9 +127,23 @@ function precoEfetivo(item, hoje) {
   return out;
 }
 
+// Serializa um valor para uso DENTRO de um <script> inline, de forma segura.
+// JSON.stringify sozinho nao escapa "<", ">", "&", nem U+2028/U+2029, o que permite
+// quebrar o contexto de script (ex.: </script>). Aqui escapamos esses caracteres.
+var BS = String.fromCharCode(92);
+var RE_LINE_SEP = new RegExp('[' + BS + 'u2028' + BS + 'u2029]', 'g');
+function jsonForScript(valor) {
+  return JSON.stringify(valor === undefined ? null : valor)
+    .split('<').join(BS + 'u003c')
+    .split('>').join(BS + 'u003e')
+    .split('&').join(BS + 'u0026')
+    .replace(RE_LINE_SEP, function (c) { return BS + 'u' + c.charCodeAt(0).toString(16).padStart(4, '0'); });
+}
+
 module.exports = {
   hojeISO,
   brDate,
+  jsonForScript,
   precoEfetivo,
   formatBRL,
   formatDateTime,

@@ -2,6 +2,11 @@
 
 const express = require('express');
 const multer = require('multer');
+const os = require('os');
+const fs = require('fs');
+const fsp = fs.promises;
+const pathmod = require('path');
+const crypto = require('crypto');
 const db = require('../db');
 const { exigeCliente, exigeLogin } = require('../auth');
 const imagens = require('../imagens');
@@ -34,8 +39,15 @@ async function enviarListaPrecos(req, res, produtos, negociado) {
   res.send(pdf);
 }
 
+// Grava os uploads em disco (temporario) em vez de manter todos em memoria: o pico de
+// memoria passa a ser ~1 arquivo por vez, evitando OOM com muitos PDFs grandes.
+const TMP_UP = pathmod.join(os.tmpdir(), 'a4-uploads');
+try { fs.mkdirSync(TMP_UP, { recursive: true }); } catch (e) { /* ja existe */ }
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, TMP_UP),
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + crypto.randomBytes(6).toString('hex') + '.pdf'),
+  }),
   limits: { fileSize: 25 * 1024 * 1024, files: 30 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname)) return cb(null, true);
@@ -88,25 +100,28 @@ router.get('/novo', exigeCliente, async (req, res, next) => {
 
 // ---------- Upload + deteccao de paginas ----------
 router.post('/api/upload', exigeCliente, upload.array('arquivos', 30), async (req, res) => {
+  const arquivos = req.files || [];
   try {
-    if (!req.files || req.files.length === 0) return res.status(400).json({ erro: 'Envie ao menos um PDF.' });
+    if (arquivos.length === 0) return res.status(400).json({ erro: 'Envie ao menos um PDF.' });
     // Codigos lidos no navegador (um conjunto {br,nfe} por pagina), alinhados aos arquivos.
     const codigosBody = req.body && req.body.codigos;
     const codigosArr = Array.isArray(codigosBody) ? codigosBody : (codigosBody !== undefined ? [codigosBody] : []);
     const resultado = [];
-    for (let fi = 0; fi < req.files.length; fi++) {
-      const f = req.files[fi];
+    for (let fi = 0; fi < arquivos.length; fi++) {
+      const f = arquivos[fi];
+      const buffer = await fsp.readFile(f.path); // 1 arquivo por vez na memoria
       let paginas = 0;
-      try { paginas = await contarPaginas(f.buffer); }
+      try { paginas = await contarPaginas(buffer); }
       catch (e) { return res.status(400).json({ erro: 'Nao consegui ler o PDF "' + f.originalname + '". Verifique o arquivo.' }); }
       if (paginas < 1) return res.status(400).json({ erro: 'O arquivo "' + f.originalname + '" nao tem paginas validas.' });
       const codigos = normalizarCodigos(codigosArr[fi], paginas);
       const ins = await db.query('INSERT INTO arquivos (usuario_id, nome, paginas, conteudo, codigos) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-        [req.session.user.id, f.originalname, paginas, f.buffer, codigos ? JSON.stringify(codigos) : null]);
+        [req.session.user.id, f.originalname, paginas, buffer, codigos ? JSON.stringify(codigos) : null]);
       resultado.push({ id: ins.rows[0].id, nome: f.originalname, paginas });
     }
     res.json({ arquivos: resultado });
   } catch (e) { console.error('Erro no upload:', e); res.status(500).json({ erro: 'Falha ao processar o upload.' }); }
+  finally { for (const f of arquivos) fsp.unlink(f.path).catch(() => {}); } // apaga os temporarios
 });
 
 // ---------- Criar pedido (aceite) ----------
@@ -166,7 +181,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
 
     const seq = await client.query("SELECT 'DS-' || nextval('pedido_numero_seq') AS numero");
     const numero = seq.rows[0].numero;
-    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+    const ip = (req.ip || '').toString(); // com trust proxy=1, req.ip e o IP real do cliente (nao o X-Forwarded-For bruto, falsificavel)
 
     const ped = await client.query(
       `INSERT INTO pedidos (numero, cliente_id, usuario_id, status, total_centavos, total_etiquetas, aceite_em, aceite_ip, etiquetas_expira_em)
