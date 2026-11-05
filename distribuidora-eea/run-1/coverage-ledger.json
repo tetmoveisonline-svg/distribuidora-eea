@@ -1,0 +1,478 @@
+[
+  {
+    "coverage_id": "admin-area::operator-to-adminfull::profile%2Fquick%2Fall-in-scope-subsystems::privilege-escalation",
+    "canonical_refs": {
+      "surface": "admin-area",
+      "boundary": "operator-to-adminfull",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "privilege-escalation"
+    },
+    "surface": "admin-area",
+    "boundary": "operator-to-adminfull",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "privilege-escalation",
+    "starting_paths": [
+      "src/routes/admin.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-quick-1",
+    "reviewed_paths": [
+      "src/auth.js",
+      "src/routes/admin.js",
+      "views/admin/precos.ejs",
+      "views/admin/produtos.ejs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter-quick-1",
+        "reviewed_paths": [
+          "src/routes/admin.js",
+          "src/auth.js",
+          "views/admin/produtos.ejs",
+          "views/admin/precos.ejs"
+        ],
+        "invariant": "operador must not see or change costs/commissions (admin-full only).",
+        "method": "source",
+        "result": "Cost/commission POSTs gated by exigeAdminFull and views gated by isFull server-side; no leak to operador.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "authentication::unauthenticated::profile%2Fquick%2Fall-in-scope-subsystems::brute-force",
+    "canonical_refs": {
+      "surface": "authentication",
+      "boundary": "unauthenticated",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "brute-force"
+    },
+    "surface": "authentication",
+    "boundary": "unauthenticated",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "brute-force",
+    "starting_paths": [
+      "src/routes/auth.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "src/routes/auth.js",
+      "src/server.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "src/routes/auth.js",
+          "src/server.js"
+        ],
+        "invariant": "Login must throttle or lock out repeated failures.",
+        "method": "source",
+        "result": "No limiter/lockout present; reproduced 6 failed attempts without throttling.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "login-no-rate-limit"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "bootstrap::unauthenticated::profile%2Fquick%2Fall-in-scope-subsystems::default-credentials",
+    "canonical_refs": {
+      "surface": "bootstrap",
+      "boundary": "unauthenticated",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "default-credentials"
+    },
+    "surface": "bootstrap",
+    "boundary": "unauthenticated",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "default-credentials",
+    "starting_paths": [
+      "src/bootstrap.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "src/bootstrap.js",
+      "src/server.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "src/bootstrap.js",
+          "src/server.js"
+        ],
+        "invariant": "No publicly known default admin credential may remain usable.",
+        "method": "source",
+        "result": "admin/admin123 created when ADMIN_* unset; live status is a deployment fact.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "setup-default-admin-credentials"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "client-ui::operator-to-client::profile%2Fquick%2Fall-in-scope-subsystems::stored-xss",
+    "canonical_refs": {
+      "surface": "client-ui",
+      "boundary": "operator-to-client",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "stored-xss"
+    },
+    "surface": "client-ui",
+    "boundary": "operator-to-client",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "stored-xss",
+    "starting_paths": [
+      "views/cliente/novo.ejs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "CLIENT-SIDE.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "src/routes/admin.js",
+      "src/routes/rep.js",
+      "views/cliente/estoque.ejs",
+      "views/cliente/novo.ejs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "views/cliente/novo.ejs",
+          "views/cliente/estoque.ejs",
+          "src/routes/rep.js",
+          "src/routes/admin.js"
+        ],
+        "invariant": "User-influenced strings in inline <script> must be script-context safe.",
+        "method": "source",
+        "result": "Name emitted via <%- JSON.stringify %> unescaped; </script> breakout reproduced.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "xss-ejs-unescaped-json-script"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "data-access::client-to-client::profile%2Fquick%2Fall-in-scope-subsystems::idor",
+    "canonical_refs": {
+      "surface": "data-access",
+      "boundary": "client-to-client",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "idor"
+    },
+    "surface": "data-access",
+    "boundary": "client-to-client",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "idor",
+    "starting_paths": [
+      "src/routes/cliente.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-quick-1",
+    "reviewed_paths": [
+      "src/financeiro.js",
+      "src/routes/bipagem.js",
+      "src/routes/cliente.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter-quick-1",
+        "reviewed_paths": [
+          "src/routes/cliente.js",
+          "src/routes/bipagem.js",
+          "src/financeiro.js"
+        ],
+        "invariant": "A client may read/write only its own orders, files, financials.",
+        "method": "source",
+        "result": "All client queries scoped by cliente_id/usuario_id; no IDOR found.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "database::user-input-to-sql::profile%2Fquick%2Fall-in-scope-subsystems::sql-injection",
+    "canonical_refs": {
+      "surface": "database",
+      "boundary": "user-input-to-sql",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "sql-injection"
+    },
+    "surface": "database",
+    "boundary": "user-input-to-sql",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "sql-injection",
+    "starting_paths": [
+      "src/routes/admin.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "hunter-quick-1",
+    "reviewed_paths": [
+      "src/estoque.js",
+      "src/financeiro.js",
+      "src/repasses.js",
+      "src/routes/admin.js",
+      "src/routes/cliente.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "hunter-quick-1",
+        "reviewed_paths": [
+          "src/routes/admin.js",
+          "src/routes/cliente.js",
+          "src/financeiro.js",
+          "src/repasses.js",
+          "src/estoque.js"
+        ],
+        "invariant": "All SQL values parameterized; identifiers not from user input.",
+        "method": "source",
+        "result": "All values use $N placeholders; only interpolated identifiers come from whitelisted constants.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "dependencies::supply-chain::profile%2Fquick%2Fall-in-scope-subsystems::known-vulnerabilities",
+    "canonical_refs": {
+      "surface": "dependencies",
+      "boundary": "supply-chain",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "known-vulnerabilities"
+    },
+    "surface": "dependencies",
+    "boundary": "supply-chain",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "known-vulnerabilities",
+    "starting_paths": [
+      "package.json"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "SUPPLY-CHAIN-AND-RELEASE.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "package.json",
+      "src/server.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "package.json",
+          "src/server.js"
+        ],
+        "invariant": "Dependencies should be free of known advisories on reachable paths.",
+        "method": "source",
+        "result": "npm audit: 1 critical (proxy-addr) / 2 high / 1 moderate; paths reachable.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "deps-express-transitive-advisories"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "session::attacker-to-session::profile%2Fquick%2Fall-in-scope-subsystems::session-fixation",
+    "canonical_refs": {
+      "surface": "session",
+      "boundary": "attacker-to-session",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "session-fixation"
+    },
+    "surface": "session",
+    "boundary": "attacker-to-session",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "session-fixation",
+    "starting_paths": [
+      "src/server.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "src/routes/auth.js",
+      "src/server.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "src/server.js",
+          "src/routes/auth.js"
+        ],
+        "invariant": "Session secret must be secret and the id rotated on login.",
+        "method": "source",
+        "result": "Public fallback secret + no regenerate(); server-side store limits to a fixation chain.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "session-default-secret-no-regenerate"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "session::network-transport::profile%2Fquick%2Fall-in-scope-subsystems::cookie-security",
+    "canonical_refs": {
+      "surface": "session",
+      "boundary": "network-transport",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "cookie-security"
+    },
+    "surface": "session",
+    "boundary": "network-transport",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "cookie-security",
+    "starting_paths": [
+      "src/server.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "src/server.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "src/server.js"
+        ],
+        "invariant": "Session cookie should carry Secure in production.",
+        "method": "source",
+        "result": "secure gated on NODE_ENV===production; cookie lacked Secure locally.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "session-cookie-secure-depends-nodeenv"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "upload::client-to-service::profile%2Fquick%2Fall-in-scope-subsystems::resource-exhaustion",
+    "canonical_refs": {
+      "surface": "upload",
+      "boundary": "client-to-service",
+      "subsystem": "profile/quick/all-in-scope-subsystems",
+      "attack_class": "resource-exhaustion"
+    },
+    "surface": "upload",
+    "boundary": "client-to-service",
+    "subsystem": "profile/quick/all-in-scope-subsystems",
+    "attack_class": "resource-exhaustion",
+    "starting_paths": [
+      "src/routes/cliente.js"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "verifier-quick-1",
+    "reviewed_paths": [
+      "src/imagens.js",
+      "src/routes/cliente.js"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "verifier-quick-1",
+        "reviewed_paths": [
+          "src/routes/cliente.js",
+          "src/imagens.js"
+        ],
+        "invariant": "Request body size held in memory must be bounded to instance capacity.",
+        "method": "source",
+        "result": "memoryStorage 25MB x 30 (~750MB) per client request; OOM depends on instance RAM.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "upload-memory-unbounded-oom"
+    ],
+    "unresolved": []
+  }
+]

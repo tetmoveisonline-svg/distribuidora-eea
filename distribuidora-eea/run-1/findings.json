@@ -1,0 +1,377 @@
+[
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "deps-express-transitive-advisories",
+    "title": "Dependências transitivas do Express com vulnerabilidades conhecidas",
+    "description": "O projeto depende de express ^4.19.2, que traz pacotes transitivos com advisories conhecidos (proxy-addr crítico de IP spoofing; body-parser e brace-expansion de negação de serviço; qs de negação de serviço). Os caminhos afetados (trust proxy, parsing de corpo e de query) são usados pela aplicação.",
+    "claimed_root_cause": "Versões antigas de dependências transitivas do Express com advisories publicados, em caminhos de código efetivamente usados (app.set trust proxy, express.json/urlencoded).",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "package.json",
+        "line": 18,
+        "scope": "dependencies",
+        "description": "express ^4.19.2 traz proxy-addr, body-parser, qs e brace-expansion de forma transitiva."
+      },
+      {
+        "kind": "sink",
+        "file": "src/server.js",
+        "line": 20,
+        "scope": "body parsers e trust proxy",
+        "description": "express.urlencoded/json (linhas 20-21) e app.set(\"trust proxy\",1) exercitam os pacotes transitivos vulneráveis."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "package.json",
+        "line": 18,
+        "description": "\"express\": \"^4.19.2\" (fonte das dependências transitivas)."
+      },
+      {
+        "file": "src/server.js",
+        "line": 15,
+        "description": "app.set(\"trust proxy\", 1); logo abaixo express.urlencoded/json."
+      }
+    ],
+    "blockers": [
+      "As versões exatas instaladas e a exploração concreta de cada advisory nesta implantação não foram demonstradas; o impacto real depende de runtime.",
+      "npm audit foi executado no sandbox do audit (1 critical, 2 high, 1 moderate), mas a exploração contra esta aplicação não foi comprovada."
+    ],
+    "validation_plan": {
+      "local": "Rodar npm audit / npm audit fix e atualizar o express para a última 4.x (ou avaliar 5.x) para zerar proxy-addr/body-parser/qs/brace-expansion; reexecutar os testes da aplicação.",
+      "deployment": "Após atualizar, publicar de novo e rodar npm audit no CI para confirmar zero advisories conhecidos."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "login-no-rate-limit",
+    "title": "Login sem limite de tentativas (força bruta online)",
+    "description": "O endpoint POST /login verifica a senha com bcrypt e devolve 401 em caso de falha, sem qualquer contador de tentativas, atraso progressivo, bloqueio temporário ou CAPTCHA. Um atacante não autenticado pode tentar senhas indefinidamente.",
+    "root_cause": "O manipulador de login não mantém nem consulta nenhum estado de throttling/lockout, e nenhum middleware de rate limiting está registrado na aplicação.",
+    "intended_behavior": "Tentativas de login repetidas e malsucedidas deveriam ser desaceleradas e/ou bloqueadas temporariamente por IP e por conta.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/routes/auth.js",
+        "line": 25,
+        "scope": "POST /login",
+        "description": "Endpoint não autenticado aceita login/senha arbitrários sem throttling."
+      },
+      {
+        "kind": "sink",
+        "file": "src/routes/auth.js",
+        "line": 38,
+        "scope": "bcrypt.compare",
+        "description": "Senha conferida sem contador/atraso/bloqueio; falhas retornam 401 e a próxima tentativa é aceita de imediato."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/routes/auth.js",
+        "line": 33,
+        "description": "SELECT do usuário por login; nenhum estado de tentativas é consultado."
+      },
+      {
+        "file": "src/server.js",
+        "line": 67,
+        "description": "Nenhum middleware de rate limiting registrado na aplicação nem na rota de login."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "Nenhuma — acessível antes da autenticação."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Um atacante não autenticado na rede.",
+      "payloads": [
+        "login=admin&senha=guess1",
+        "login=admin&senha=guess2"
+      ],
+      "instructions": [
+        "Enviar POST /login repetidamente com senhas candidatas.",
+        "Observar que cada tentativa falha retorna HTTP 401 sem atraso nem bloqueio.",
+        "Uma senha correta retorna 302 de imediato, mesmo logo após muitas falhas."
+      ],
+      "observed_result": "Em execução local, seis POSTs consecutivos com senha errada para o usuário admin retornaram HTTP 401 sem throttling, e em seguida a senha correta retornou HTTP 302 imediatamente, demonstrando adivinhação online ilimitada."
+    },
+    "remediation": {
+      "strategy": "Adicionar rate limiting por IP e por conta com atraso progressivo e bloqueio temporário no /login (por exemplo express-rate-limit mais um contador de tentativas por usuário), e alertar sobre rajadas. Combinar com a troca da senha padrão do admin."
+    },
+    "severity": {
+      "likelihood": {
+        "score": "medium",
+        "reason": "Nenhum controle impede adivinhação automatizada; trivial de roteirizar contra um endpoint público."
+      },
+      "impact": {
+        "score": "medium",
+        "reason": "Leva a comprometimento de conta quando combinado com senhas fracas ou padrão; limitado pela força da senha e pelo custo do bcrypt."
+      },
+      "overall_severity": "medium"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "A ausência de qualquer limitador é evidente no código-fonte e foi reproduzida localmente."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "session-cookie-secure-depends-nodeenv",
+    "title": "Flag Secure do cookie de sessão depende de NODE_ENV",
+    "description": "O atributo Secure do cookie de sessão é definido apenas quando NODE_ENV === \"production\". Se NODE_ENV for qualquer outro valor na implantação, o cookie de sessão pode ser transmitido sem Secure.",
+    "claimed_root_cause": "A opção secure do cookie de sessão é condicionada a NODE_ENV===\"production\"; fora disso o cookie não recebe o atributo Secure.",
+    "trace": [
+      {
+        "kind": "sink",
+        "file": "src/server.js",
+        "line": 31,
+        "scope": "configuração do cookie de sessão",
+        "description": "secure: process.env.NODE_ENV === \"production\" — sem Secure em qualquer outro caso."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/server.js",
+        "line": 31,
+        "description": "secure: process.env.NODE_ENV === \"production\"."
+      },
+      {
+        "file": "src/server.js",
+        "line": 15,
+        "description": "trust proxy está ligado; o Railway encerra TLS na borda."
+      }
+    ],
+    "blockers": [
+      "Se NODE_ENV=production está definido no ambiente do Railway é um fato de implantação que não está no repositório."
+    ],
+    "validation_plan": {
+      "deployment": "Conferir que NODE_ENV=production está definido no Railway; inspecionar o cabeçalho Set-Cookie do site ao vivo e checar o atributo Secure.",
+      "local": "Subir a aplicação com NODE_ENV sem definir e confirmar que o cookie connect.sid sai sem Secure (já observado localmente)."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "session-default-secret-no-regenerate",
+    "title": "Segredo de sessão padrão público e sessão não regenerada no login",
+    "description": "O express-session usa um segredo público de fallback (\"segredo-inseguro-troque-no-env\") e o login nunca chama req.session.regenerate(). Se SESSION_SECRET não estiver definido em produção, cookies com assinatura forjável somados à não rotação da sessão permitem um sequestro de sessão por fixação, quando existe um vetor de plantio de cookie.",
+    "claimed_root_cause": "Segredo de assinatura de sessão com fallback público e ausência de regeneração do identificador de sessão no login.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/server.js",
+        "line": 25,
+        "scope": "configuração do session()",
+        "description": "secret cai para uma constante pública quando SESSION_SECRET não está definido."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/routes/auth.js",
+        "line": 43,
+        "scope": "POST /login com sucesso",
+        "description": "Define req.session.user sem regenerar o id da sessão."
+      },
+      {
+        "kind": "sink",
+        "file": "src/server.js",
+        "line": 24,
+        "scope": "store PgSession",
+        "description": "Store server-side: um segredo conhecido forja apenas o id assinado, então o takeover exige fixação mais um vetor de plantio de cookie."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/server.js",
+        "line": 25,
+        "description": "secret: process.env.SESSION_SECRET || \"segredo-inseguro-troque-no-env\"."
+      },
+      {
+        "file": "src/routes/auth.js",
+        "line": 43,
+        "description": "req.session.user = {...} sem req.session.regenerate()."
+      }
+    ],
+    "blockers": [
+      "Se SESSION_SECRET está definido em produção é um fato de implantação que não está no repositório.",
+      "Se existe um vetor de plantio de cookie (subdomínio, MITM sobre cookie sem Secure, etc.) depende da implantação."
+    ],
+    "validation_plan": {
+      "deployment": "Confirmar que SESSION_SECRET está definido com um valor longo e aleatório no ambiente do Railway; se não, defini-lo e publicar de novo (invalida as sessões existentes).",
+      "local": "Com o segredo padrão, assinar um connect.sid para um id escolhido, definir o cookie antes do login, autenticar e verificar que o id não é rotacionado (req.session.regenerate ausente)."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "setup-default-admin-credentials",
+    "title": "Credenciais de administrador padrão (admin/admin123)",
+    "description": "bootstrap.ensureAdmin cria um admin com login \"admin\" e senha \"admin123\" quando ADMIN_LOGIN/ADMIN_SENHA não estão definidos. Se o primeiro admin de produção foi criado assim e nunca foi trocado, as credenciais são públicas e dão acesso total.",
+    "claimed_root_cause": "Fallback de credenciais padrão conhecidas na criação automática do admin quando as variáveis de ambiente não estão definidas.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/bootstrap.js",
+        "line": 9,
+        "scope": "ensureAdmin",
+        "description": "login cai para \"admin\" quando ADMIN_LOGIN não está definido."
+      },
+      {
+        "kind": "sink",
+        "file": "src/bootstrap.js",
+        "line": 14,
+        "scope": "ensureAdmin",
+        "description": "senha cai para \"admin123\" quando ADMIN_SENHA não está definido; é hasheada e inserida como papel admin."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/bootstrap.js",
+        "line": 14,
+        "description": "const senha = process.env.ADMIN_SENHA || \"admin123\";"
+      },
+      {
+        "file": "src/server.js",
+        "line": 97,
+        "description": "ensureAdmin roda automaticamente no boot."
+      }
+    ],
+    "blockers": [
+      "Se ADMIN_SENHA foi definido no primeiro deploy, e se a senha do admin foi trocada depois, é um fato de produção/runtime que não está no repositório."
+    ],
+    "validation_plan": {
+      "deployment": "No site de produção, tentar entrar com admin / admin123 (feito pelo dono, não destrutivo). Se funcionar, trocar a senha imediatamente e definir ADMIN_SENHA. Revisar a tabela usuarios por admins cuja senha nunca foi trocada.",
+      "local": "Num banco descartável com ADMIN_* sem definir, subir a aplicação e confirmar que admin/admin123 entra (já observado localmente)."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "upload-memory-unbounded-oom",
+    "title": "Upload em memória sem limite agregado (possível OOM/negação de serviço)",
+    "description": "Os uploads de PDF usam multer memoryStorage com limites de 25MB por arquivo e 30 arquivos, então um único pedido de um cliente autenticado pode bufferizar cerca de 750MB em RAM (cada buffer também é lido inteiro por contarPaginas), arriscando esgotar a memória numa instância pequena.",
+    "claimed_root_cause": "Armazenamento de upload em memória (memoryStorage) com limite por arquivo e por quantidade cujo produto excede a RAM típica da instância, sem limite agregado.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/routes/cliente.js",
+        "line": 90,
+        "scope": "POST /api/upload",
+        "description": "exigeCliente, upload.array(\"arquivos\", 30) aceita até 30 arquivos."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/routes/cliente.js",
+        "line": 39,
+        "scope": "config do multer",
+        "description": "memoryStorage com fileSize 25MB e files 30 (aprox. 750MB bufferizados)."
+      },
+      {
+        "kind": "sink",
+        "file": "src/routes/cliente.js",
+        "line": 100,
+        "scope": "contarPaginas(f.buffer)",
+        "description": "Cada buffer de arquivo é processado inteiro em memória."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/routes/cliente.js",
+        "line": 39,
+        "description": "limits: { fileSize: 25 * 1024 * 1024, files: 30 } com memoryStorage."
+      },
+      {
+        "file": "src/imagens.js",
+        "line": 9,
+        "description": "Segundo memoryStorage (6MB x 8) no caminho de imagens de produto (admin)."
+      }
+    ],
+    "blockers": [
+      "Se um pedido forjado realmente esgota a memória depende da RAM da instância e da concorrência no Railway — um fato de runtime que não está no repositório."
+    ],
+    "validation_plan": {
+      "local": "Em sandbox, enviar 30 arquivos de aprox. 25MB para /api/upload e medir o pico de RSS; confirmar se aproxima de ~750MB por pedido.",
+      "deployment": "Confirmar o limite de memória da instância no Railway e avaliar se um ou poucos uploads grandes concorrentes conseguem causar OOM."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "xss-ejs-unescaped-json-script",
+    "title": "XSS armazenado via JSON não escapado dentro de <script> (EJS)",
+    "description": "A área do cliente injeta dados em blocos <script> inline usando <%- JSON.stringify(...) %> (saída crua do EJS). JSON.stringify não escapa \"<\" nem \"/\", então um nome de cliente contendo </script><script>… encerra o script e executa código no navegador do cliente ao abrir /novo.",
+    "root_cause": "Uso de saída crua do EJS (<%-) para serializar dados em contexto de <script>, sem um codificador seguro; o nome do cliente é armazenado apenas com .trim(), sem escaping.",
+    "intended_behavior": "Qualquer string influenciada por usuário emitida dentro de um <script> inline deveria ser serializada por um codificador seguro para contexto de script (escapando <, >, &, U+2028/U+2029).",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/routes/rep.js",
+        "line": 189,
+        "scope": "POST /rep/clientes",
+        "description": "Um representante define o nome de um cliente apenas com .trim(); sem escaping."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/routes/cliente.js",
+        "line": 83,
+        "scope": "render de GET /novo",
+        "description": "clienteNome lido de clientes.nome é passado para a view."
+      },
+      {
+        "kind": "sink",
+        "file": "views/cliente/novo.ejs",
+        "line": 119,
+        "scope": "window.CLIENTE no <script> inline",
+        "description": "Valor emitido com <%- JSON.stringify(...) %>; JSON.stringify não escapa \"<\" nem \"/\", então </script> escapa do script."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "views/cliente/novo.ejs",
+        "line": 119,
+        "description": "window.CLIENTE = <%- JSON.stringify({ nome: clienteNome, login: clienteLogin }) %>; (saída crua do EJS)."
+      },
+      {
+        "file": "views/cliente/estoque.ejs",
+        "line": 56,
+        "description": "var dados = <%- JSON.stringify(produtos) %>; mesmo padrão não escapado em <script>."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authorization_role",
+        "description": "O injetor é um admin ou representante que define o nome do cliente; a vítima é esse cliente."
+      },
+      {
+        "kind": "user_interaction",
+        "description": "A vítima (cliente) abre a própria página /novo."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Um representante (ou admin) que cria/edita uma conta de cliente.",
+      "payloads": [
+        "nome=</script><script>CLAUDE_XSS=1</script>"
+      ],
+      "instructions": [
+        "Como representante, enviar POST /rep/clientes com nome igual a </script><script>…</script>.",
+        "Fazer o cliente entrar e abrir GET /novo.",
+        "Observar o script injetado executar no navegador do cliente."
+      ],
+      "observed_result": "Em execução local, GET /novo retornou window.CLIENTE = {\"nome\":\"</script><script>CLAUDE_XSS=1</script>\",...} com as tags não escapadas, enquanto o mesmo nome exibido em <span class=\"uname\"> apareceu corretamente escapado — confirmando a quebra do contexto de script."
+    },
+    "remediation": {
+      "strategy": "Serializar dados para scripts inline com um codificador que escape <, >, & e U+2028/U+2029 (ou passar os valores via um bloco <script type=\"application/json\"> lido com JSON.parse), em vez de <%- JSON.stringify() %>. Também normalizar/validar o campo nome na entrada."
+    },
+    "severity": {
+      "likelihood": {
+        "score": "low",
+        "reason": "Exige que um admin/representante injete em uma conta que ele já controla."
+      },
+      "impact": {
+        "score": "low",
+        "reason": "O script roda no navegador do próprio cliente injetado; o injetor já possui as credenciais desse cliente, então nenhum outro principal é comprometido."
+      },
+      "overall_severity": "low"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "Reproduzido localmente; a falha de escaping é evidente no código-fonte."
+    }
+  }
+]

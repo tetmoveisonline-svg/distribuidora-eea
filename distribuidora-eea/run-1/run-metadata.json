@@ -1,0 +1,40 @@
+{
+  "run_id": "distribuidora-eea-run-1",
+  "repo": "distribuidora-eea",
+  "target": "/home/claude/dist3",
+  "source_ref": {
+    "commit": "3e442fb05845c1f8c05126039322e84310b15498",
+    "worktree": "clean-for-review"
+  },
+  "profile": "quick",
+  "scope_paths": [
+    "src/",
+    "views/",
+    "package.json"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "selected_companion_files": [
+    "RECONNAISSANCE.md",
+    "HUNTING.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "CLIENT-SIDE.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md",
+    "SUPPLY-CHAIN-AND-RELEASE.md",
+    "VALIDATION-AND-REPORTING.md"
+  ],
+  "prior_runs": [],
+  "shared_file_owners": {
+    "parent": [
+      "run-metadata.json",
+      "architecture.md",
+      "coverage-ledger.json",
+      "findings.json",
+      "REPORT.md",
+      "FINDINGS-DETAIL.md",
+      "NEEDS-VALIDATION.md"
+    ]
+  },
+  "run_status": "complete"
+}
