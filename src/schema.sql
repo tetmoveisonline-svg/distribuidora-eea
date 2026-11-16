@@ -226,6 +226,10 @@ CREATE INDEX IF NOT EXISTS idx_produto_cores_produto ON produto_cores(produto_id
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_id INTEGER REFERENCES produto_cores(id) ON DELETE SET NULL;
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_nome TEXT;
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sku TEXT;
+-- Custo do produto CONGELADO no momento do aceite (snapshot), para o lucro do pedido nao mudar
+-- quando o custo do produto for reajustado depois. Preenchido no aceite (src/routes/cliente.js).
+-- O preenchimento dos pedidos antigos fica mais abaixo (depois de produtos.custo_centavos existir).
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
 
 -- O SKU e da cor (codigo completo), nao do produto. Migra o que ja foi cadastrado como base-sufixo.
 ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS sku TEXT;
@@ -256,6 +260,11 @@ CREATE INDEX IF NOT EXISTS idx_estoque_mov_produto ON estoque_mov(produto_id, cr
 -- ===================== CUSTO E LUCRO DO PRODUTO =====================
 -- Preco sugerido = (custo + taxa do funcionario + lucro desejado) / (1 - % do representante).
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
+-- Preenche o custo congelado dos pedidos ANTIGOS (feitos antes da coluna linhas.custo_centavos)
+-- com o custo ATUAL do produto. So afeta linhas ainda sem custo; novas linhas ja gravam no aceite.
+UPDATE linhas l SET custo_centavos = pr.custo_centavos
+  FROM itens i, produtos pr
+  WHERE l.custo_centavos IS NULL AND l.item_id = i.id AND i.produto_id = pr.id AND pr.custo_centavos IS NOT NULL;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS lucro_centavos INTEGER;
 -- Lucro desejado em R$ (lucro_tipo = 'valor', usa lucro_centavos) ou em % do preco de venda
 -- (lucro_tipo = 'percentual', margem em pontos-base em lucro_bps: 25% = 2500).

@@ -156,16 +156,27 @@ router.get('/pedidos', async (req, res, next) => {
   try {
     const r = await db.query(
       `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
-              p.aceite_em, p.etiquetas_expira_em, p.despachado_em, p.comissao_centavos,
+              p.aceite_em, p.etiquetas_expira_em, p.despachado_em,
+              p.comissao_centavos, p.comissao_resp_centavos, p.funcionario_id, p.taxa_func_centavos AS taxa_func_assinada,
+              (SELECT COALESCE(SUM(custo_centavos * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS custo_total,
               c.nome AS cliente_nome, u.nome AS rep_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
        LEFT JOIN usuarios u ON u.id = p.representante_id ORDER BY p.id DESC`
     );
     const fr = await funcRef();
-    const pedidos = r.rows.map((p) => ({
-      ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em),
-      taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
-    }));
+    const pedidos = r.rows.map((p) => {
+      // Lucro do pedido = valor - comissao (rep + preposto) - taxa do funcionario atribuido - custo CONGELADO dos itens.
+      const comissao = (Number(p.comissao_centavos) || 0) + (Number(p.comissao_resp_centavos) || 0);
+      const funcCusto = p.funcionario_id ? (Number(p.taxa_func_assinada) || 0) * p.total_etiquetas : 0;
+      const custoTotal = Number(p.custo_total) || 0;
+      const lucro = Number(p.total_centavos) - comissao - funcCusto - custoTotal;
+      const margem = Number(p.total_centavos) > 0 ? Math.round((lucro * 1000) / Number(p.total_centavos)) / 10 : 0;
+      return {
+        ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em),
+        taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
+        lucro_centavos: lucro, margem_pct: margem,
+      };
+    });
     res.render('admin/pedidos', { pedidos, funcRef: fr, ok: req.query.ok || null, formatBRL, formatDateTime });
   } catch (e) { next(e); }
 });

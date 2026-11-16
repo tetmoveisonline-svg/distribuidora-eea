@@ -160,13 +160,17 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
       const arq = await client.query('SELECT id, nome, paginas, codigos FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
       if (arq.rowCount === 0) throw httpErr(400, 'Arquivo invalido ou ja utilizado.');
+      // Custo CONGELADO do produto neste aceite (snapshot): fica gravado na linha e nao muda se o custo
+      // do produto for reajustado depois. Lido no servidor; nunca vai para o catalogo do cliente.
+      const custoRow = await client.query('SELECT custo_centavos FROM produtos WHERE id = $1', [item.produto_id]);
+      const custoCentavos = (custoRow.rowCount && custoRow.rows[0].custo_centavos !== null) ? Number(custoRow.rows[0].custo_centavos) : null;
       const totalLinha = item.preco_centavos * quantidade;
       totalCentavos += totalLinha; totalEtiquetas += quantidade;
       linhas.push({
         arquivoId, arquivoNome: arq.rows[0].nome, paginas: arq.rows[0].paginas, codigos: arq.rows[0].codigos || [],
         itemId: item.id, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome,
         corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : item.sku,
-        precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha,
+        precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha, custoCentavos,
         repCampanhaBps: (item.rep_bps_campanha !== null && item.rep_bps_campanha !== undefined) ? Number(item.rep_bps_campanha) : null,
       });
     }
@@ -257,9 +261,9 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
       await client.query('UPDATE arquivos SET pedido_id = $1 WHERE id = $2', [pedidoId, l.arquivoId]);
       const linhaIns = await client.query(
-        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku]
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku, custo_centavos)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
       );
       const linhaId = linhaIns.rows[0].id;
       const cods = Array.isArray(l.codigos) ? l.codigos : [];
