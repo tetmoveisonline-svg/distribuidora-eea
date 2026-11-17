@@ -26,7 +26,37 @@
       <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/etiquetas">Etiquetas (térmico) <span class="badge <%= horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(horas)) %>h</span></a>
     <% } %>
     <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/comprovante">Relatório / comprovante</a>
+    <% if (nf) { %><a class="doc-link" href="/admin/pedido/<%= pedido.id %>/nota-fiscal">Nota fiscal (PDF)</a><% } %>
   </div>
+
+  <% if (isFull && pedido.com_nf) { %>
+  <div class="nf-admin<%= nf ? ' ok' : '' %>" style="margin-top:16px;border:1px solid <%= nf ? 'var(--ok)' : 'var(--gold)' %>;border-radius:12px;padding:15px 17px;background:<%= nf ? 'var(--ok-soft)' : 'var(--gold-soft)' %>">
+    <div style="display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;margin-bottom:4px">
+      🧾 Nota fiscal do pedido
+      <% if (nf) { %><span style="margin-left:auto;font-size:11.5px;color:var(--ok);font-weight:700">✓ anexada em <%= nf.em %></span><% } %>
+    </div>
+    <% if (nf) { %>
+      <div class="dim" style="font-size:12.5px;margin-bottom:12px">Arquivo: <b style="color:var(--text)"><%= nf.nome %></b>. O cliente já pode baixar em "Meus envios".</div>
+      <div class="actions-inline">
+        <a class="btn sm" href="/admin/pedido/<%= pedido.id %>/nota-fiscal">⬇ Baixar PDF</a>
+        <details style="display:inline-block">
+          <summary class="doc-link" style="cursor:pointer">Substituir</summary>
+          <form method="post" action="/admin/pedido/<%= pedido.id %>/nota-fiscal" enctype="multipart/form-data" style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" name="nota" accept="application/pdf" required />
+            <button class="btn sm" type="submit">Enviar novo PDF</button>
+          </form>
+        </details>
+      </div>
+    <% } else { %>
+      <div class="dim" style="font-size:12.5px;margin-bottom:12px">Este pedido foi pedido <b style="color:var(--text)">com nota fiscal</b>. Emita a NF no seu sistema e anexe o PDF aqui — o cliente poderá baixar.</div>
+      <form method="post" action="/admin/pedido/<%= pedido.id %>/nota-fiscal" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="file" name="nota" accept="application/pdf" required />
+        <button class="btn" type="submit">Anexar nota fiscal</button>
+        <span class="dim" style="font-size:11.5px">Só PDF · até 10 MB · só você vê e anexa.</span>
+      </form>
+    <% } %>
+  </div>
+  <% } %>
 
   <%- include('../partials/etiquetas-detalhe', { pid: pedido.id, etqs: etiquetas, desp: etqDespachadas, tot: etqTotal, admin: true, formatDateTime: formatDateTime }) %>
 

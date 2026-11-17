@@ -270,6 +270,16 @@ ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS com_nf BOOLEAN NOT NULL DEFAULT FAL
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_bps INTEGER;            -- taxa do imposto na epoca (snapshot)
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_parcela_bps INTEGER;   -- quanto do pedido com NF (3000 = 30%)
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS imposto_centavos INTEGER NOT NULL DEFAULT 0;
+
+-- PDF da nota fiscal emitida, anexado pelo admin DEPOIS do pedido. Tabela separada para o
+-- arquivo (BYTEA) nao ser carregado nas listagens/telas; o download le o conteudo sob demanda.
+CREATE TABLE IF NOT EXISTS notas_fiscais (
+  pedido_id INTEGER PRIMARY KEY REFERENCES pedidos(id) ON DELETE CASCADE,
+  conteudo  BYTEA NOT NULL,
+  nome      TEXT,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Preenche o custo congelado dos pedidos ANTIGOS (feitos antes da coluna linhas.custo_centavos)
 -- com o custo ATUAL do produto. So afeta linhas ainda sem custo; novas linhas ja gravam no aceite.
 UPDATE linhas l SET custo_centavos = pr.custo_centavos

@@ -34,6 +34,10 @@
               <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
               <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
               <% } else { %><span class="badge warn">Aguardando</span><% } %>
+              <% if (p.com_nf) { %>
+                <% if (p.tem_nf) { %><a href="/admin/pedido/<%= p.id %>" class="badge ok" style="margin-left:4px;text-decoration:none">🧾 NF ✓</a>
+                <% } else { %><a href="/admin/pedido/<%= p.id %>" class="badge gold" style="margin-left:4px;text-decoration:none">🧾 anexar NF</a><% } %>
+              <% } %>
             </td>
           </tr>
         <% }); %>

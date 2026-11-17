@@ -2,7 +2,15 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
 const db = require('../db');
+
+// Upload do PDF da nota fiscal (em memoria; vai para o banco). Só PDF, até 10 MB.
+const uploadNf = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => cb(null, file.mimetype === 'application/pdf'),
+});
 const { exigeAdmin, exigeAdminFull } = require('../auth');
 const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
@@ -159,7 +167,8 @@ router.get('/pedidos', async (req, res, next) => {
       `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
               p.aceite_em, p.etiquetas_expira_em, p.despachado_em,
               p.comissao_centavos, p.comissao_resp_centavos, p.funcionario_id, p.taxa_func_centavos AS taxa_func_assinada,
-              p.imposto_centavos,
+              p.imposto_centavos, p.com_nf,
+              EXISTS (SELECT 1 FROM notas_fiscais nf WHERE nf.pedido_id = p.id) AS tem_nf,
               (SELECT COALESCE(SUM(custo_centavos * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS custo_total,
               c.nome AS cliente_nome, u.nome AS rep_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
@@ -206,8 +215,11 @@ router.get('/pedido/:id', async (req, res, next) => {
        WHERE e.pedido_id = $1 ORDER BY e.indice`, [pedido.id]
     );
     const etqDespachadas = etqs.rows.filter((e) => e.status === 'despachado').length;
+    // Metadados da NF anexada (sem carregar o PDF).
+    const nfRow = await db.query("SELECT nome, to_char(criado_em, 'DD/MM/YYYY HH24:MI') AS em FROM notas_fiscais WHERE pedido_id = $1", [pedido.id]);
+    const nf = nfRow.rowCount ? nfRow.rows[0] : null;
     res.render('admin/pedido', {
-      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr,
+      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr, nf,
       taxaFuncCentavos: fr ? fr.taxa_etiqueta_centavos * pedido.total_etiquetas : null,
       passos: andamentoDisplay(pedido),
       etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
@@ -327,6 +339,37 @@ router.get('/pedido/:id/comprovante', async (req, res, next) => {
     const p = await db.query('SELECT numero, comprovante FROM pedidos WHERE id = $1', [req.params.id]);
     if (p.rowCount === 0 || !p.rows[0].comprovante) return naoEncontrado(res, req);
     enviarPdf(res, 'comprovante-' + p.rows[0].numero + '.pdf', p.rows[0].comprovante);
+  } catch (e) { next(e); }
+});
+
+// ----- Nota fiscal: anexar (upload do PDF) e baixar. Só o admin completo anexa. -----
+router.post('/pedido/:id/nota-fiscal', exigeAdminFull, (req, res, next) => {
+  uploadNf.single('nota')(req, res, (err) => {
+    if (err) return res.redirect('/admin/pedido/' + pInt(req.params.id) + '?erro=' + encodeURIComponent(err.code === 'LIMIT_FILE_SIZE' ? 'O PDF passa de 10 MB.' : 'Falha no envio do arquivo.'));
+    next();
+  });
+}, async (req, res) => {
+  const pid = pInt(req.params.id);
+  try {
+    const ped = await db.query('SELECT id, com_nf FROM pedidos WHERE id = $1', [pid]);
+    if (ped.rowCount === 0) return res.redirect('/admin/pedidos');
+    if (!ped.rows[0].com_nf) return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Este pedido não foi pedido com nota fiscal.'));
+    if (!req.file || !req.file.buffer || !req.file.buffer.length) return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Anexe o PDF da nota fiscal.'));
+    const nome = (req.file.originalname || 'nota-fiscal.pdf').toString().slice(0, 180);
+    await db.query(
+      `INSERT INTO notas_fiscais (pedido_id, conteudo, nome, criado_em) VALUES ($1, $2, $3, now())
+       ON CONFLICT (pedido_id) DO UPDATE SET conteudo = EXCLUDED.conteudo, nome = EXCLUDED.nome, criado_em = now()`,
+      [pid, req.file.buffer, nome]
+    );
+    res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Nota fiscal anexada. O cliente já pode baixar.'));
+  } catch (e) { res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Falha ao salvar a nota fiscal.')); }
+});
+
+router.get('/pedido/:id/nota-fiscal', async (req, res, next) => {
+  try {
+    const nf = await db.query('SELECT n.conteudo, p.numero FROM notas_fiscais n JOIN pedidos p ON p.id = n.pedido_id WHERE n.pedido_id = $1', [pInt(req.params.id)]);
+    if (nf.rowCount === 0 || !nf.rows[0].conteudo) return naoEncontrado(res, req);
+    enviarPdf(res, 'nota-fiscal-' + nf.rows[0].numero + '.pdf', nf.rows[0].conteudo);
   } catch (e) { next(e); }
 });
 

@@ -24,6 +24,10 @@
           <a class="doc-link" href="/pedido/<%= p.id %>/etiquetas">Etiquetas <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span></a>
         <% } %>
         <a class="doc-link" href="/pedido/<%= p.id %>/comprovante">Comprovante</a>
+        <% if (p.com_nf) { %>
+          <% if (p.tem_nf) { %><a class="doc-link" href="/pedido/<%= p.id %>/nota-fiscal">🧾 Baixar nota fiscal</a>
+          <% } else { %><span class="doc-link off">🧾 Nota fiscal em emissão</span><% } %>
+        <% } %>
       </div>
 
       <%- include('../partials/etiquetas-detalhe', { pid: p.id, etqs: p.etiquetas, desp: p.etqDespachadas, tot: p.etqTotal, admin: false, formatDateTime: formatDateTime }) %>

@@ -339,7 +339,8 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
 router.get('/meus-envios', exigeCliente, async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT id, numero, status, total_centavos, total_etiquetas, aceite_em, criado_em, etiquetas_expira_em, preparando_em, despachado_em
+      `SELECT id, numero, status, total_centavos, total_etiquetas, aceite_em, criado_em, etiquetas_expira_em, preparando_em, despachado_em,
+              com_nf, EXISTS (SELECT 1 FROM notas_fiscais nf WHERE nf.pedido_id = pedidos.id) AS tem_nf
        FROM pedidos WHERE cliente_id = $1 ORDER BY id DESC`, [req.session.user.clienteId]
     );
     const pedidos = r.rows.map((p) => ({ ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em), passos: andamentoDisplay(p) }));
@@ -469,6 +470,18 @@ router.get('/pedido/:id/comprovante', exigeCliente, async (req, res, next) => {
     const p = await db.query('SELECT numero, comprovante FROM pedidos WHERE id = $1 AND cliente_id = $2', [req.params.id, req.session.user.clienteId]);
     if (p.rowCount === 0 || !p.rows[0].comprovante) return res.status(404).render('erro', { titulo: 'Comprovante indisponivel', mensagem: 'Comprovante nao encontrado.', user: req.session.user });
     enviarPdf(res, 'comprovante-' + p.rows[0].numero + '.pdf', p.rows[0].comprovante);
+  } catch (e) { next(e); }
+});
+
+// ---------- Download: nota fiscal (PDF anexado pela distribuidora) ----------
+router.get('/pedido/:id/nota-fiscal', exigeCliente, async (req, res, next) => {
+  try {
+    const nf = await db.query(
+      `SELECT n.conteudo, p.numero FROM notas_fiscais n JOIN pedidos p ON p.id = n.pedido_id
+       WHERE n.pedido_id = $1 AND p.cliente_id = $2`, [req.params.id, req.session.user.clienteId]
+    );
+    if (nf.rowCount === 0 || !nf.rows[0].conteudo) return res.status(404).render('erro', { titulo: 'Nota fiscal indisponivel', mensagem: 'A nota fiscal deste pedido ainda não está disponível.', user: req.session.user });
+    enviarPdf(res, 'nota-fiscal-' + nf.rows[0].numero + '.pdf', nf.rows[0].conteudo);
   } catch (e) { next(e); }
 });
 
