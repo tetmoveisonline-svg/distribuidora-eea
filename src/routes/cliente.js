@@ -14,6 +14,7 @@ const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('..
 const { gerarComprovante } = require('../comprovante');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
+const config = require('../config');
 const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
 
 // Catalogo do cliente: todos os produtos ativos ao preco sugerido, ou ao negociado quando houver
@@ -90,8 +91,9 @@ router.get('/novo', exigeCliente, async (req, res, next) => {
     const cli = await db.query('SELECT nome FROM clientes WHERE id = $1', [req.session.user.clienteId]);
     // WhatsApp da distribuidora (so digitos, com DDI). Vazio = botao nao aparece.
     const whatsapp = (process.env.EMPRESA_WHATSAPP || '').replace(/\D/g, '');
+    const nfBps = await config.nfBps(db);
     res.render('cliente/novo', {
-      itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', whatsapp,
+      itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', whatsapp, nfBps,
       clienteNome: (cli.rows[0] && cli.rows[0].nome) || req.session.user.nome, clienteLogin: req.session.user.login || '',
       formatBRL,
     });
@@ -175,13 +177,29 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       });
     }
 
+    // Nota fiscal (opcional). O admin define a TAXA de imposto (nfTaxaBps, vale p/ todos os produtos);
+    // o cliente escolhe a PARCELA do pedido que sai com NF (minimo 30%). O imposto incide SO sobre
+    // essa parcela e e repassado: o cliente paga total + imposto, e o imposto NAO entra no lucro nem
+    // na comissao (e o tributo que a empresa recolhe). totalCentavos = base da comissao/lucro.
+    const nfTaxaBps = await config.nfBps(client);
+    let comNf = body.comNf === true && nfTaxaBps > 0;
+    let nfParcelaBps = null, impostoCentavos = 0;
+    if (comNf) {
+      let parcela = parseInt(body.nfParcela, 10);
+      if (isNaN(parcela)) parcela = 3000; // default: minimo
+      parcela = Math.max(3000, Math.min(10000, parcela)); // [30%, 100%]
+      nfParcelaBps = parcela;
+      impostoCentavos = Math.round(totalCentavos * parcela / 10000 * nfTaxaBps / 10000);
+    }
+    const totalComImposto = totalCentavos + impostoCentavos; // valor que o cliente paga
+
     // Limite de credito: o que esta em aberto no financeiro consome o limite; vencido pode bloquear.
     const credito = await financeiro.creditoCliente(clienteId);
     if (credito && credito.bloqueado) {
       throw httpErr(400, 'Há pedido vencido em aberto (' + credito.maisVencido.numero + ', ' + formatBRL(credito.maisVencido.valor) + '). Regularize o pagamento para liberar novos envios.');
     }
-    if (credito && credito.controlado && totalCentavos > credito.disponivel) {
-      throw httpErr(400, 'O pedido (' + formatBRL(totalCentavos) + ') ultrapassa seu crédito disponível (' + formatBRL(credito.disponivel) + '). Reduza a quantidade ou fale com a empresa para liberar saldo.');
+    if (credito && credito.controlado && totalComImposto > credito.disponivel) {
+      throw httpErr(400, 'O pedido (' + formatBRL(totalComImposto) + ') ultrapassa seu crédito disponível (' + formatBRL(credito.disponivel) + '). Reduza a quantidade ou fale com a empresa para liberar saldo.');
     }
 
     const seq = await client.query("SELECT 'DS-' || nextval('pedido_numero_seq') AS numero");
@@ -189,10 +207,10 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     const ip = (req.ip || '').toString(); // com trust proxy=1, req.ip e o IP real do cliente (nao o X-Forwarded-For bruto, falsificavel)
 
     const ped = await client.query(
-      `INSERT INTO pedidos (numero, cliente_id, usuario_id, status, total_centavos, total_etiquetas, aceite_em, aceite_ip, etiquetas_expira_em)
-       VALUES ($1,$2,$3,'aguardando',$4,$5, now(), $6, now() + interval '72 hours')
+      `INSERT INTO pedidos (numero, cliente_id, usuario_id, status, total_centavos, total_etiquetas, aceite_em, aceite_ip, etiquetas_expira_em, com_nf, nf_bps, nf_parcela_bps, imposto_centavos)
+       VALUES ($1,$2,$3,'aguardando',$4,$5, now(), $6, now() + interval '72 hours', $7, $8, $9, $10)
        RETURNING id, criado_em, aceite_em`,
-      [numero, clienteId, usuarioId, totalCentavos, totalEtiquetas, ip]
+      [numero, clienteId, usuarioId, totalComImposto, totalEtiquetas, ip, comNf, comNf ? nfTaxaBps : null, nfParcelaBps, impostoCentavos]
     );
     const pedidoId = ped.rows[0].id;
 
@@ -280,7 +298,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
 
     // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
     // Criado antes do PDF para o comprovante sair com o vencimento e o Pix do valor a pagar.
-    const lanc = await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos, totalEtiquetas);
+    const lanc = await financeiro.criarLancamento(client, pedidoId, clienteId, totalComImposto, totalEtiquetas);
     const fin = await client.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc FROM financeiro WHERE pedido_id = $1", [pedidoId]);
     let pagamento = null;
     if (fin.rowCount && Number(fin.rows[0].valor_centavos) > 0) {
@@ -296,6 +314,7 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       cliente: cli.rows[0] || {},
       linhas: linhas.map((l) => ({ arquivo_nome: l.arquivoNome, item_nome: l.itemNome + (l.sku ? ' [' + l.sku + ']' : ''), quantidade: l.quantidade, preco_centavos: l.precoCentavos, total_centavos: l.totalCentavos })),
       totalEtiquetas, totalCentavos,
+      nf: comNf ? { taxaBps: nfTaxaBps, parcelaBps: nfParcelaBps, impostoCentavos, baseCentavos: totalCentavos, totalCentavos: totalComImposto } : null,
       formaPagamento: pagamento ? 'Pix' : (fin.rowCount && Number(fin.rows[0].valor_centavos) === 0 ? 'Crédito em conta' : (process.env.COMPROVANTE_FORMA_PAGAMENTO || 'A combinar')),
       prazoDespacho: process.env.COMPROVANTE_PRAZO_DESPACHO || 'Ate 1 dia util apos o aceite',
       observacoes: (body.observacoes || '').toString().slice(0, 500),
@@ -387,7 +406,8 @@ router.get('/inicio', exigeCliente, async (req, res, next) => {
 router.get('/estoque', exigeCliente, async (req, res, next) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
-    res.render('cliente/estoque', { produtos, formatDateTime });
+    const nfBps = await config.nfBps(db);
+    res.render('cliente/estoque', { produtos, formatDateTime, nfBps });
   } catch (e) { next(e); }
 });
 router.get('/estoque/lista.pdf', exigeCliente, async (req, res, next) => {
@@ -398,7 +418,8 @@ router.get('/produtos/:id/imagens/:img', exigeLogin, (req, res, next) => imagens
 router.get('/api/estoque', exigeCliente, async (req, res) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
-    res.json({ ok: true, produtos, atualizado_em: formatDateTime(new Date()) });
+    const nfBps = await config.nfBps(db);
+    res.json({ ok: true, produtos, nfBps, atualizado_em: formatDateTime(new Date()) });
   } catch (e) { console.error('Erro estoque cliente:', e); res.status(500).json({ erro: 'Falha ao carregar o estoque.' }); }
 });
 

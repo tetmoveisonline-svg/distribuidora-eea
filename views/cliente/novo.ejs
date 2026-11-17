@@ -1,5 +1,16 @@
 <%- include('../partials/app-open', { titulo: 'Novo envio', ativo: 'novo' }) %>
 
+<style>
+  .nf-box{margin-top:16px;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;background:var(--gold-soft)}
+  .nf-tag{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+  .nf-tag input{width:18px;height:18px}
+  .nf-flag{font-weight:600;color:var(--text)}
+  .nf-detail{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+  .nf-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .nf-input{display:flex;align-items:center;gap:6px}
+  .nf-input input{width:76px;padding:6px 8px;border:1px solid var(--field-border);border-radius:7px;background:var(--field-bg);color:var(--text);font-size:14px}
+</style>
+
 <h2 class="title">Novo envio</h2>
 <p class="sub">Suba os PDFs das etiquetas (formato térmico, 1 etiqueta por página). O sistema conta as páginas e já preenche a quantidade.</p>
 
@@ -66,6 +77,25 @@
     </div>
   </div>
 
+  <% if (nfBps > 0) { %>
+  <div class="nf-box" id="nfBox">
+    <label class="nf-tag">
+      <input type="checkbox" id="nfCheck" />
+      <span class="nf-flag">🧾 Quero nota fiscal</span>
+    </label>
+    <div class="nf-detail" id="nfDetail" style="display:none">
+      <div class="nf-row">
+        <label for="nfParcela">Quanto do pedido sai com nota fiscal?</label>
+        <div class="nf-input">
+          <input type="number" id="nfParcela" min="30" max="100" step="1" value="30" /> <span>%</span>
+        </div>
+      </div>
+      <div class="dim" id="nfResumo" style="font-size:12.5px;margin-top:6px"></div>
+      <div class="dim" style="font-size:11.5px;margin-top:4px">Imposto de <%= (nfBps % 100 === 0 ? (nfBps/100) : (nfBps/100).toFixed(2).replace('.', ',')) %>% sobre a parcela escolhida (mínimo 30%). Esse valor é o imposto da nota e entra no total a pagar.</div>
+    </div>
+  </div>
+  <% } %>
+
   <div class="totalbar">
     <div class="muted"><span id="fileCount">0</span> arquivos &middot; <b style="color:var(--text)"><span id="labelCount">0</span> etiquetas</b> no total</div>
     <div style="display:flex;align-items:center;gap:20px">
@@ -88,9 +118,15 @@
       <thead><tr><th>Arquivo</th><th>Item</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th class="num">Total</th></tr></thead>
       <tbody id="reviewBody"></tbody>
     </table>
+    <div id="reviewNf" style="display:none;margin:4px 0 2px;padding:10px 12px;border:1px solid var(--gold);border-radius:8px;background:var(--gold-soft)">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><span class="muted" id="reviewNfLabel">Nota fiscal</span><b id="reviewNfImposto">R$ 0,00</b></div>
+    </div>
     <div class="totalbar">
       <div class="muted"><b style="color:var(--text)"><span id="reviewLabels">0</span> etiquetas</b> no total</div>
-      <div class="big" id="reviewTotal">R$ 0,00</div>
+      <div style="text-align:right">
+        <div class="big" id="reviewTotal">R$ 0,00</div>
+        <div class="dim" id="reviewTotalNf" style="display:none;font-size:12.5px;margin-top:2px"></div>
+      </div>
     </div>
 
     <div class="field" style="margin-top:8px">
@@ -117,6 +153,7 @@
   window.CREDITO = <%- jsonForScript(credito ? { controlado: credito.controlado, disponivel: credito.disponivel, limite: credito.limite, aberto: credito.aberto, abertos: credito.abertos, bloqueado: credito.bloqueado, proximo: credito.proximo, maisVencido: credito.maisVencido } : null) %>;
   window.WHATSAPP = <%- jsonForScript(whatsapp || '') %>;
   window.CLIENTE = <%- jsonForScript({ nome: clienteNome, login: clienteLogin }) %>;
+  window.NF_BPS = <%- jsonForScript(nfBps || 0) %>;
 </script>
 <script type="module" src="/js/leitor-etiquetas.js"></script>
 <script src="/js/novo.js"></script>

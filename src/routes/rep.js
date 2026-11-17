@@ -6,6 +6,7 @@ const db = require('../db');
 const { exigeRepresentante } = require('../auth');
 const estoque = require('../estoque');
 const imagens = require('../imagens');
+const config = require('../config');
 const repasses = require('../repasses');
 const { formatBRL, formatDateTime, formatPercent, andamentoDisplay, montarMensagemAcesso, hojeISO, brDate } = require('../util');
 
@@ -136,7 +137,8 @@ router.get('/pedidos', async (req, res, next) => {
 router.get('/estoque', async (req, res, next) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosSugerido());
-    res.render('cliente/estoque', { produtos, ativo: 'rep-estoque', apiUrl: '/rep/api/estoque', pdfUrl: '/rep/estoque/lista.pdf', sugerido: true, formatDateTime });
+    const nfBps = await config.nfBps(db);
+    res.render('cliente/estoque', { produtos, ativo: 'rep-estoque', apiUrl: '/rep/api/estoque', pdfUrl: '/rep/estoque/lista.pdf', sugerido: true, formatDateTime, nfBps });
   } catch (e) { next(e); }
 });
 router.get('/estoque/lista.pdf', async (req, res, next) => {
@@ -145,7 +147,8 @@ router.get('/estoque/lista.pdf', async (req, res, next) => {
 router.get('/api/estoque', async (req, res) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosSugerido());
-    res.json({ ok: true, produtos, atualizado_em: formatDateTime(new Date()) });
+    const nfBps = await config.nfBps(db);
+    res.json({ ok: true, produtos, nfBps, atualizado_em: formatDateTime(new Date()) });
   } catch (e) { console.error('Erro estoque rep:', e); res.status(500).json({ erro: 'Falha ao carregar o estoque.' }); }
 });
 

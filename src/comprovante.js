@@ -73,6 +73,25 @@ function gerarComprovante(dados) {
       doc.text(formatBRL(dados.totalCentavos), 48, yT + 7, { width: 491, align: 'right' });
       doc.y = yT + 34;
 
+      // ---------- Nota fiscal (imposto repassado sobre a parcela escolhida) ----------
+      if (dados.nf && dados.nf.impostoCentavos > 0) {
+        const nf = dados.nf;
+        const pct = (bps) => (bps % 100 === 0 ? String(bps / 100) : (bps / 100).toFixed(2).replace('.', ',')) + '%';
+        doc.moveDown(0.2);
+        const yN = doc.y;
+        doc.font('Helvetica').fontSize(9.5).fillColor(C.suave)
+          .text('Nota fiscal · imposto ' + pct(nf.taxaBps) + ' sobre ' + pct(nf.parcelaBps) + ' do pedido (' + formatBRL(Math.round(nf.baseCentavos * nf.parcelaBps / 10000)) + ')', 56, yN, { width: 360 });
+        doc.font('Helvetica').fontSize(9.5).fillColor(C.texto)
+          .text('+ ' + formatBRL(nf.impostoCentavos), 48, yN, { width: 491, align: 'right' });
+        doc.moveDown(0.3);
+        const yG = doc.y + 4;
+        doc.rect(48, yG, 499, 24).fill(C.aceiteBg);
+        doc.fillColor(C.aceiteTexto).font('Helvetica-Bold').fontSize(11)
+          .text('Total a pagar (com nota fiscal)', 56, yG + 6);
+        doc.text(formatBRL(nf.totalCentavos), 48, yG + 6, { width: 491, align: 'right' });
+        doc.y = yG + 32;
+      }
+
       // ---------- Extras ----------
       doc.moveDown(0.4);
       doc.font('Helvetica').fontSize(9.5).fillColor(C.suave);

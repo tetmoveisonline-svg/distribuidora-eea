@@ -260,6 +260,16 @@ CREATE INDEX IF NOT EXISTS idx_estoque_mov_produto ON estoque_mov(produto_id, cr
 -- ===================== CUSTO E LUCRO DO PRODUTO =====================
 -- Preco sugerido = (custo + taxa do funcionario + lucro desejado) / (1 - % do representante).
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
+
+-- Configuracoes gerais (chave/valor). Guarda a taxa do imposto da nota fiscal (nf_bps, em pontos-base).
+CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT);
+INSERT INTO config (chave, valor) VALUES ('nf_bps', '0') ON CONFLICT (chave) DO NOTHING;
+
+-- Nota fiscal por pedido: parcela escolhida pelo cliente e imposto (repasse) daquele pedido.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS com_nf BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_bps INTEGER;            -- taxa do imposto na epoca (snapshot)
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_parcela_bps INTEGER;   -- quanto do pedido com NF (3000 = 30%)
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS imposto_centavos INTEGER NOT NULL DEFAULT 0;
 -- Preenche o custo congelado dos pedidos ANTIGOS (feitos antes da coluna linhas.custo_centavos)
 -- com o custo ATUAL do produto. So afeta linhas ainda sem custo; novas linhas ja gravam no aceite.
 UPDATE linhas l SET custo_centavos = pr.custo_centavos

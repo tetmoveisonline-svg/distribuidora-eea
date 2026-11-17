@@ -190,12 +190,44 @@
     return { totalC: totalC, labels: labels };
   }
 
+  // ---------- Nota fiscal (opcional) ----------
+  // NF_BPS = taxa de imposto definida pelo admin (bps; 1000 = 10%). O cliente escolhe a PARCELA do
+  // pedido (min 30%) que sai com NF; o imposto incide so sobre essa parcela e entra no total a pagar.
+  var NF_BPS = Number(window.NF_BPS || 0);
+  var nfCheck = document.getElementById('nfCheck');
+  var nfParcelaEl = document.getElementById('nfParcela');
+  var nfDetail = document.getElementById('nfDetail');
+  var nfResumo = document.getElementById('nfResumo');
+
+  function nfParcelaPct() {
+    var v = parseInt(nfParcelaEl && nfParcelaEl.value, 10);
+    if (isNaN(v)) v = 30;
+    if (v < 30) v = 30; if (v > 100) v = 100;
+    return v;
+  }
+  // Calculo da NF sobre uma base (centavos). Retorna null quando nao se aplica.
+  function nfCalc(baseC) {
+    if (!(NF_BPS > 0) || !nfCheck || !nfCheck.checked) return null;
+    var pct = nfParcelaPct();
+    var parcelaC = Math.round(baseC * pct / 100);
+    var imposto = Math.round(parcelaC * NF_BPS / 10000);
+    return { pct: pct, parcelaBps: pct * 100, parcelaC: parcelaC, imposto: imposto, total: baseC + imposto };
+  }
+
   function updateTotals() {
     var t = totals();
     document.getElementById('fileCount').textContent = rows.length;
     document.getElementById('labelCount').textContent = t.labels;
     document.getElementById('grandTotal').textContent = brl(t.totalC);
-    var excede = verificarCredito(t.totalC);
+    var nf = nfCalc(t.totalC);
+    if (nfDetail) nfDetail.style.display = (nfCheck && nfCheck.checked) ? 'block' : 'none';
+    if (nfResumo) {
+      nfResumo.textContent = nf
+        ? 'Parcela com NF: ' + brl(nf.parcelaC) + ' · imposto: ' + brl(nf.imposto) + ' · total a pagar: ' + brl(nf.total)
+        : '';
+    }
+    var cobravel = nf ? nf.total : t.totalC; // credito considera o valor que o cliente paga
+    var excede = verificarCredito(cobravel);
     var semCor = rows.some(faltaCor);
     revisarBtn.disabled = rows.length === 0 || excede || semCor;
     revisarBtn.title = semCor ? 'Escolha a cor de cada arquivo para revisar' : '';
@@ -308,6 +340,20 @@
     var t = totals();
     document.getElementById('reviewLabels').textContent = t.labels;
     document.getElementById('reviewTotal').textContent = brl(t.totalC);
+    var nf = nfCalc(t.totalC);
+    var rNf = document.getElementById('reviewNf');
+    var rTotNf = document.getElementById('reviewTotalNf');
+    if (rNf) {
+      if (nf) {
+        document.getElementById('reviewNfLabel').textContent = 'Nota fiscal · imposto sobre ' + nf.pct + '% (' + brl(nf.parcelaC) + ')';
+        document.getElementById('reviewNfImposto').textContent = '+ ' + brl(nf.imposto);
+        rNf.style.display = 'block';
+        if (rTotNf) { rTotNf.textContent = 'Total a pagar: ' + brl(nf.total); rTotNf.style.display = 'block'; }
+      } else {
+        rNf.style.display = 'none';
+        if (rTotNf) rTotNf.style.display = 'none';
+      }
+    }
     document.getElementById('confirmCk').checked = false;
     document.getElementById('acceptBtn').disabled = true;
     document.getElementById('acceptMsg').style.display = 'none';
@@ -318,9 +364,12 @@
   function aceitar() {
     var btn = document.getElementById('acceptBtn');
     btn.disabled = true; btn.textContent = 'Gerando...';
+    var comNf = !!(NF_BPS > 0 && nfCheck && nfCheck.checked);
     var payload = {
       aceite: true,
       observacoes: document.getElementById('obs').value || '',
+      comNf: comNf,
+      nfParcela: comNf ? nfParcelaPct() * 100 : null, // em bps (ex.: 30% -> 3000)
       itens: rows.map(function (r) { return { arquivoId: r.arquivoId, itemId: r.itemId, corId: r.corId, quantidade: r.quantidade }; }),
     };
     fetch('/api/pedidos', {
@@ -358,6 +407,12 @@
   dropzone.addEventListener('drop', function (e) {
     if (e.dataTransfer && e.dataTransfer.files) upload(e.dataTransfer.files);
   });
+
+  if (nfCheck) nfCheck.addEventListener('change', updateTotals);
+  if (nfParcelaEl) {
+    nfParcelaEl.addEventListener('input', updateTotals);
+    nfParcelaEl.addEventListener('change', function () { nfParcelaEl.value = nfParcelaPct(); updateTotals(); });
+  }
 
   revisarBtn.addEventListener('click', abrirRevisar);
   document.getElementById('voltarBtn').addEventListener('click', fecharRevisar);

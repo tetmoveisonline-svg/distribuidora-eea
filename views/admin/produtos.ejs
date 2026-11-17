@@ -6,6 +6,18 @@
 <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
 <% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 
+<% if (isFull) { %>
+<div class="card pad" style="margin-bottom:16px">
+  <div class="section-title">Imposto da nota fiscal <span class="badge gold" style="margin-left:6px">só você</span></div>
+  <p class="sub" style="margin:4px 0 12px">Percentual do imposto quando o cliente pede com nota fiscal. Vale para <b>todos os produtos</b>. O cliente escolhe, no envio, quanto do pedido sai com NF (mínimo 30%); o imposto incide só sobre essa parte.</p>
+  <form method="post" action="/admin/config/nf" style="display:flex;align-items:end;gap:12px;flex-wrap:wrap">
+    <div class="field" style="margin:0;width:140px"><label>Imposto NF (%)</label><input name="imposto" value="<%= nfBps ? formatPercent(nfBps).replace('%','') : '' %>" placeholder="ex.: 10" /></div>
+    <button class="btn" type="submit">Salvar imposto</button>
+    <span class="dim" style="font-size:12.5px;margin-bottom:9px">Atual: <b style="color:var(--text)"><%= nfBps ? formatPercent(nfBps) : 'sem imposto (0%)' %></b></span>
+  </form>
+</div>
+<% } %>
+
 <div class="grid2">
   <div class="card pad">
     <div class="section-title">Novo produto</div>

@@ -1,8 +1,16 @@
 <%
   // Cartoes por produto: nome, peso/medidas, preco (com promocao) e as cores como chips com saldo.
+  var _nfBps = (typeof nfBps !== 'undefined' && nfBps > 0) ? nfBps : 0;
+  function _brl(c) { return 'R$ ' + (Number(c || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function _nfPct() { return _nfBps % 100 === 0 ? String(_nfBps / 100) : (_nfBps / 100).toFixed(2).replace('.', ','); }
+  function nfLinha(p) {
+    if (!_nfBps || !p.preco_centavos) return '';
+    var comNf = Math.round(p.preco_centavos * (1 + _nfBps / 10000));
+    return '<div class="ec-nf" title="valor com nota fiscal (imposto de ' + _nfPct() + '%)">com nota fiscal (+' + _nfPct() + '%): <b>' + _brl(comNf) + '</b></div>';
+  }
   function precoCell(p) {
-    if (p.promo) return '<span class="ec-preco promo">' + p.preco_txt + '</span><span class="ec-was">' + p.preco_original_txt + '</span><span class="badge ok">' + p.promo_rotulo + '</span>';
-    return '<span class="ec-preco">' + p.preco_txt + '</span>';
+    if (p.promo) return '<span class="ec-preco promo">' + p.preco_txt + '</span><span class="ec-was">' + p.preco_original_txt + '</span><span class="badge ok">' + p.promo_rotulo + '</span>' + nfLinha(p);
+    return '<span class="ec-preco">' + p.preco_txt + '</span>' + nfLinha(p);
   }
   function cls(n) { return n <= 0 ? 'zero' : (n <= 5 ? 'baixo' : 'ok'); }
   function chip(nome, sku, disp, meu, pedidos) {

@@ -55,6 +55,7 @@ const {
 // Calculo de preco sugerido e taxas: modulo compartilhado com a area do cliente.
 const { refCustos, comCustos } = require('../precos');
 const imagens = require('../imagens');
+const config = require('../config');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -158,6 +159,7 @@ router.get('/pedidos', async (req, res, next) => {
       `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
               p.aceite_em, p.etiquetas_expira_em, p.despachado_em,
               p.comissao_centavos, p.comissao_resp_centavos, p.funcionario_id, p.taxa_func_centavos AS taxa_func_assinada,
+              p.imposto_centavos,
               (SELECT COALESCE(SUM(custo_centavos * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS custo_total,
               c.nome AS cliente_nome, u.nome AS rep_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
@@ -169,8 +171,11 @@ router.get('/pedidos', async (req, res, next) => {
       const comissao = (Number(p.comissao_centavos) || 0) + (Number(p.comissao_resp_centavos) || 0);
       const funcCusto = p.funcionario_id ? (Number(p.taxa_func_assinada) || 0) * p.total_etiquetas : 0;
       const custoTotal = Number(p.custo_total) || 0;
-      const lucro = Number(p.total_centavos) - comissao - funcCusto - custoTotal;
-      const margem = Number(p.total_centavos) > 0 ? Math.round((lucro * 1000) / Number(p.total_centavos)) / 10 : 0;
+      // O imposto da NF e repasse (nao e lucro): tira do valor antes de calcular o lucro e a margem.
+      const imposto = Number(p.imposto_centavos) || 0;
+      const base = Number(p.total_centavos) - imposto;
+      const lucro = base - comissao - funcCusto - custoTotal;
+      const margem = base > 0 ? Math.round((lucro * 1000) / base) / 10 : 0;
       return {
         ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em),
         taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
@@ -619,8 +624,18 @@ router.get('/produtos', async (req, res, next) => {
     }
     const imgMap = await imagens.listarPorProdutos(r.rows.map((p) => p.id));
     const produtos = r.rows.map((p) => ({ ...comCustos(p, ref), cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })), imagens: imgMap.get(p.id) || [] }));
-    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, pesoTxt });
+    const nfBps = await config.nfBps(db);
+    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', nfBps, erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, pesoTxt });
   } catch (e) { next(e); }
+});
+// Taxa do imposto da nota fiscal (vale para todos os produtos) - so o admin completo define.
+router.post('/config/nf', exigeAdminFull, async (req, res) => {
+  try {
+    const bps = parsePercentToBps(req.body.imposto);
+    if (bps === null || bps < 0 || bps >= 100000) throw new Error('Informe o imposto em % (ex.: 10).');
+    await config.setNfBps(db, bps);
+    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Imposto da nota fiscal salvo: ' + formatPercent(bps) + '.'));
+  } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.message || 'Falha ao salvar o imposto.')); }
 });
 router.post('/produtos', async (req, res, next) => {
   try {

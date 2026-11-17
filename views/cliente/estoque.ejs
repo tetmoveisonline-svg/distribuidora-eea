@@ -1,5 +1,7 @@
 <%- include('../partials/app-open', { titulo: 'Estoque', ativo: (typeof ativo !== 'undefined' ? ativo : 'estoque') }) %>
 
+<style>.ec-nf{margin-top:3px;font-size:11.5px;color:var(--gold)}.ec-nf b{color:var(--gold)}</style>
+
 <h2 class="title">Estoque</h2>
 <% if (typeof sugerido !== 'undefined' && sugerido) { %>
 <p class="sub">Preço sugerido e o estoque disponível de todos os produtos. Este é o mesmo estoque que o cliente enxerga. Atualiza sozinho a cada 30 segundos.</p>
@@ -17,7 +19,7 @@
     <span class="dim" style="font-size:12px">Atualizado às <span id="estAtual"><%= formatDateTime(new Date()).slice(11) %></span> · <button type="button" class="btn ghost sm" id="estRefresh">Atualizar agora</button> <a class="btn sm" style="margin-left:6px" href="<%= typeof pdfUrl !== 'undefined' ? pdfUrl : '/estoque/lista.pdf' %>" title="baixar a lista de preços em PDF">⬇ Baixar lista de preços (PDF)</a></span>
   </div>
   <div id="estBox">
-    <%- include('../partials/estoque-tabela', { produtos: produtos }) %>
+    <%- include('../partials/estoque-tabela', { produtos: produtos, nfBps: (typeof nfBps !== 'undefined' ? nfBps : 0) }) %>
   </div>
 </div>
 
@@ -54,6 +56,14 @@
     return '<b>' + esc(p.preco_txt) + '</b>';
   }
   var dados = <%- jsonForScript(produtos) %>;
+  var NF_BPS = <%- jsonForScript(typeof nfBps !== 'undefined' ? nfBps : 0) %>;
+  function brlc(c) { return 'R$ ' + (Number(c || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function nfPct() { return NF_BPS % 100 === 0 ? String(NF_BPS / 100) : (NF_BPS / 100).toFixed(2).replace('.', ','); }
+  function nfLinha(p) {
+    if (!(NF_BPS > 0) || !p.preco_centavos) return '';
+    var comNf = Math.round(p.preco_centavos * (1 + NF_BPS / 10000));
+    return '<div class="ec-nf" title="valor com nota fiscal (imposto de ' + nfPct() + '%)">com nota fiscal (+' + nfPct() + '%): <b>' + brlc(comNf) + '</b></div>';
+  }
   var EST_API = '<%= typeof apiUrl !== "undefined" ? apiUrl : "/api/estoque" %>';
   var filtro = 'todos';
   try { var f0 = localStorage.getItem('estoqueFiltro'); if (f0 === 'com' || f0 === 'sem' || f0 === 'todos') filtro = f0; } catch (e) {}
@@ -95,8 +105,8 @@
         '<b class="ec-n">' + disp + '</b>' + (meu > 0 ? '<span class="ec-meu" title="' + esc(pedidos) + '">· ' + meu + ' seus</span>' : '') + '</span>';
     }
     function precoCard(p) {
-      if (p.promo) return '<span class="ec-preco promo">' + esc(p.preco_txt) + '</span><span class="ec-was">' + esc(p.preco_original_txt) + '</span><span class="badge ok">' + esc(p.promo_rotulo) + '</span>';
-      return '<span class="ec-preco">' + esc(p.preco_txt) + '</span>';
+      if (p.promo) return '<span class="ec-preco promo">' + esc(p.preco_txt) + '</span><span class="ec-was">' + esc(p.preco_original_txt) + '</span><span class="badge ok">' + esc(p.promo_rotulo) + '</span>' + nfLinha(p);
+      return '<span class="ec-preco">' + esc(p.preco_txt) + '</span>' + nfLinha(p);
     }
     var h = '<div class="ec-grid">';
     produtos.forEach(function (p) {
@@ -118,7 +128,7 @@
   function atualizar() {
     fetch(EST_API).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return;
-      dados = d.produtos; renderTudo();
+      dados = d.produtos; if (typeof d.nfBps !== 'undefined') NF_BPS = d.nfBps; renderTudo();
       at.textContent = String(d.atualizado_em).slice(11);
     }).catch(function () {});
   }
