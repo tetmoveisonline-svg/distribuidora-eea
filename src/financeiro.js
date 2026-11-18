@@ -28,11 +28,32 @@ async function criarLancamento(client, pedidoId, clienteId, valorCentavos, total
             CASE WHEN $3::int = 0 THEN now() ELSE NULL::timestamptz END,
             CASE WHEN $3::int = 0 THEN 'Crédito em conta' ELSE NULL::text END
      FROM clientes c WHERE c.id = $2
-     ON CONFLICT (pedido_id) DO NOTHING`,
+     ON CONFLICT (pedido_id, COALESCE(parcela_num, 0)) DO NOTHING`,
     [pedidoId, clienteId, aPagar, valorCentavos, totalEtiquetas || null, usar]
   );
   if (usar > 0) await client.query('UPDATE clientes SET credito_centavos = credito_centavos - $2 WHERE id = $1', [clienteId, usar]);
   return { creditoUsado: usar };
+}
+
+// Cria N parcelas de um pedido (hoje: retirada no CD). Divide o total em partes IGUAIS (os centavos
+// que sobram entram nas primeiras parcelas) e usa uma data de vencimento por parcela. Sem juros e
+// sem usar credito em conta (cada parcela vira um lancamento 'aberto' proprio).
+// parcelas = [{ venc: 'YYYY-MM-DD' }, ...]; o valor de cada uma e calculado aqui.
+async function criarParcelas(client, pedidoId, clienteId, totalCentavos, parcelas) {
+  const n = parcelas.length;
+  if (n < 1) throw new Error('Informe ao menos uma parcela.');
+  const base = Math.floor(totalCentavos / n);
+  let resto = totalCentavos - base * n; // centavos a distribuir nas primeiras
+  for (let i = 0; i < n; i++) {
+    const valor = base + (resto > 0 ? 1 : 0);
+    if (resto > 0) resto--;
+    await client.query(
+      `INSERT INTO financeiro (pedido_id, cliente_id, valor_centavos, vencimento, valor_original_centavos, parcela_num, parcela_total, status)
+       VALUES ($1,$2,$3,$4::date,$3,$5,$6,'aberto')
+       ON CONFLICT (pedido_id, COALESCE(parcela_num, 0)) DO NOTHING`,
+      [pedidoId, clienteId, valor, parcelas[i].venc, i + 1, n]
+    );
+  }
 }
 
 // Encerra um pedido com sobras: etiquetas nao despachadas viram 'nao_enviada', a cobranca
@@ -118,6 +139,7 @@ async function listar(f) {
   const r = await db.query(
     `SELECT f.id, f.pedido_id, f.cliente_id, f.valor_centavos, f.status, f.pago_em, f.forma_pagamento, f.observacao,
             f.valor_original_centavos, f.etiquetas_total, f.etiquetas_cobradas, f.credito_gerado_centavos, f.credito_usado_centavos,
+            f.parcela_num, f.parcela_total,
             to_char(f.encerrado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS encerrado_em_br,
             to_char(f.vencimento, 'YYYY-MM-DD') AS vencimento_iso,
             to_char(f.vencimento, 'DD/MM/YYYY') AS vencimento_br,
@@ -198,7 +220,7 @@ async function mesesDisponiveis(clienteId) {
   return r.rows.map((x) => ({ ym: x.ym, rotulo: rotuloMes(x.ym) }));
 }
 
-module.exports = { FORMAS, hojeISO, mesAtual, criarLancamento, listar, resumo, filtrarSituacao, mesesDisponiveis, rotuloMes };
+module.exports = { FORMAS, hojeISO, mesAtual, criarLancamento, criarParcelas, listar, resumo, filtrarSituacao, mesesDisponiveis, rotuloMes };
 
 // Credito do cliente: limite menos o que esta em aberto (inclui vencido) no financeiro.
 // limite null = sem controle (disponivel = null). bloqueado = tem vencido e o cadastro manda bloquear.

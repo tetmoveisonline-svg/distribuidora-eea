@@ -216,6 +216,15 @@ ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS encerrado_em TIMESTAMPTZ;
 UPDATE financeiro f SET valor_original_centavos = f.valor_centavos WHERE f.valor_original_centavos IS NULL;
 UPDATE financeiro f SET etiquetas_total = p.total_etiquetas FROM pedidos p WHERE p.id = f.pedido_id AND f.etiquetas_total IS NULL;
 
+-- Parcelamento (hoje usado nas retiradas no CD): um pedido pode gerar varias parcelas, cada uma
+-- um lancamento proprio com seu vencimento. Pedidos normais ficam com parcela_num NULL (= a vista).
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS parcela_num INTEGER;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS parcela_total INTEGER;
+-- Troca o UNIQUE(pedido_id) por um unico por (pedido, parcela): assim o pedido a vista continua
+-- com um lancamento so (parcela_num NULL -> 0) e o parcelado aceita uma linha por parcela.
+ALTER TABLE financeiro DROP CONSTRAINT IF EXISTS financeiro_pedido_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS financeiro_pedido_parcela_uk ON financeiro (pedido_id, COALESCE(parcela_num, 0));
+
 -- ===================== SKU E CORES =====================
 -- SKU base do produto (opcional). Cada cor tem um sufixo e vira um SKU proprio (base-sufixo).
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS sku TEXT;

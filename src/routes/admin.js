@@ -219,8 +219,14 @@ router.get('/pedido/:id', async (req, res, next) => {
     // Metadados da NF anexada (sem carregar o PDF).
     const nfRow = await db.query("SELECT nome, to_char(criado_em, 'DD/MM/YYYY HH24:MI') AS em FROM notas_fiscais WHERE pedido_id = $1", [pedido.id]);
     const nf = nfRow.rowCount ? nfRow.rows[0] : null;
+    // Parcelas (retirada parcelada): lançamentos com parcela_num.
+    let parcelas = [];
+    if (pedido.tipo === 'retirada') {
+      const pp = await db.query("SELECT parcela_num, parcela_total, valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc, status FROM financeiro WHERE pedido_id = $1 AND parcela_num IS NOT NULL ORDER BY parcela_num", [pedido.id]);
+      parcelas = pp.rows;
+    }
     res.render('admin/pedido', {
-      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr, nf,
+      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr, nf, parcelas,
       taxaFuncCentavos: fr ? fr.taxa_etiqueta_centavos * pedido.total_etiquetas : null,
       passos: andamentoDisplay(pedido),
       etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
@@ -464,9 +470,26 @@ router.post('/retirada', exigeAdminFull, async (req, res) => {
       );
     }
     await estoque.reservarPedido(client, pedidoId, req.session.user.id);
-    await financeiro.criarLancamento(client, pedidoId, clienteId, totalComImposto, totalQtd);
+
+    // Pagamento: a vista (um lancamento) ou parcelado (uma parcela por data, valores iguais).
+    let parcelaVencs = [];
+    try { parcelaVencs = typeof body.parcelaVencs === 'string' ? JSON.parse(body.parcelaVencs) : (Array.isArray(body.parcelaVencs) ? body.parcelaVencs : []); } catch (e) { parcelaVencs = []; }
+    const nParcelas = parseInt(body.parcelas, 10) || 1;
+    let msgPag = 'lancei no financeiro do cliente';
+    if (nParcelas > 1) {
+      if (parcelaVencs.length !== nParcelas) throw new Error('As datas das parcelas estão incompletas.');
+      const vencs = parcelaVencs.map((d) => {
+        const s = String(d).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('Data de parcela inválida.');
+        return { venc: s };
+      });
+      await financeiro.criarParcelas(client, pedidoId, clienteId, totalComImposto, vencs);
+      msgPag = 'lancei em ' + nParcelas + ' parcelas no financeiro do cliente';
+    } else {
+      await financeiro.criarLancamento(client, pedidoId, clienteId, totalComImposto, totalQtd);
+    }
     await client.query('COMMIT');
-    res.redirect('/admin/pedido/' + pedidoId + '?ok=' + encodeURIComponent('Retirada ' + numero + ' criada. Reservei o estoque e lancei no financeiro do cliente.'));
+    res.redirect('/admin/pedido/' + pedidoId + '?ok=' + encodeURIComponent('Retirada ' + numero + ' criada. Reservei o estoque e ' + msgPag + '.'));
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent(e.message || 'Falha ao criar a retirada.'));

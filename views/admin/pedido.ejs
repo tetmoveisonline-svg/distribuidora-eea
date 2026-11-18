@@ -25,6 +25,21 @@
     <% } %>
   </div>
   <% if (pedido.status !== 'retirado') { %><div class="hint-box" style="margin-top:12px">Ao confirmar, o <b>estoque baixa</b> (física). Até lá a mercadoria fica <b>reservada</b> para este cliente. O pagamento já está lançado no Financeiro do cliente.</div><% } %>
+  <% if (parcelas && parcelas.length) { %>
+  <div style="margin-top:14px">
+    <div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">💳 Parcelado em <%= parcelas[0].parcela_total %>x</div>
+    <table>
+      <thead><tr><th>Parcela</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th></tr></thead>
+      <tbody>
+        <% parcelas.forEach(function (pp) { %>
+          <tr><td><%= pp.parcela_num %> de <%= pp.parcela_total %></td><td><%= pp.venc %></td><td class="num"><%= formatBRL(pp.valor_centavos) %></td>
+            <td><% if (pp.status==='pago') { %><span class="badge ok">Pago</span><% } else if (pp.status==='cancelado') { %><span class="badge neutral">Cancelado</span><% } else { %><span class="badge warn">Em aberto</span><% } %></td></tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <div class="dim" style="font-size:11px;margin-top:6px">Cada parcela é um lançamento no Financeiro do cliente, com vencimento e Pix próprios.</div>
+  </div>
+  <% } %>
 </div>
 <% } else { %>
 <div class="card pad" style="margin-bottom:16px">

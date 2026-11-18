@@ -15,6 +15,17 @@
   .ret-nf .tag{display:flex;align-items:center;gap:10px}
   .ret-nf input[type=number]{width:70px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:7px;padding:6px 8px;color:var(--text)}
   .ret-nf .res{font-size:12.5px;color:var(--text-dim);margin-top:8px}
+  .ret-pg{margin-top:14px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--panel)}
+  .ret-pg .rowp{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .ret-pg .f{display:flex;flex-direction:column;gap:5px}
+  .ret-pg .plbl{font-size:11px;color:var(--text-dim)}
+  .ret-pg select,.ret-pg input{background:var(--field-bg);border:1px solid var(--field-border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13.5px}
+  .ret-pg input[type=number]{width:84px}
+  .ret-pg table{width:100%;border-collapse:collapse}
+  .ret-pg th{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;text-align:left;padding:6px 6px;font-weight:600}
+  .ret-pg th.n,.ret-pg td.n{text-align:right}
+  .ret-pg td{font-size:12.5px;padding:7px 6px;border-top:1px solid var(--border)}
+  .ret-pg td input[type=date]{padding:6px 8px}
 </style>
 
 <h2 class="title">Nova retirada no CD</h2>
@@ -46,6 +57,19 @@
     </div>
     <% } %>
 
+    <div class="ret-pg" id="pgBox">
+      <div class="rowp">
+        <div class="f"><span class="plbl">Pagamento</span>
+          <select id="pgForma"><option value="avista">À vista</option><option value="parcelado">Parcelado</option></select>
+        </div>
+        <div class="f pgonly" style="display:none"><span class="plbl">Parcelas</span><input type="number" id="pgN" min="2" max="24" value="3" /></div>
+        <div class="f pgonly" style="display:none"><span class="plbl">Dias entre elas</span><input type="number" id="pgDias" min="1" max="365" value="30" /></div>
+        <div class="f pgonly" style="display:none"><span class="plbl">1º vencimento</span><input type="date" id="pgPrimeiro" /></div>
+        <button type="button" class="btn ghost sm pgonly" id="pgGerar" style="display:none">↻ Gerar datas</button>
+      </div>
+      <div id="pgParcelas" style="margin-top:10px"></div>
+    </div>
+
     <div class="totalbar" style="margin-top:14px">
       <div class="muted" id="resumoLinha">0 itens</div>
       <div class="big" id="grandTotal">R$ 0,00</div>
@@ -54,6 +78,8 @@
     <input type="hidden" name="itens" id="itensJson" />
     <input type="hidden" name="comNf" id="comNfHidden" value="false" />
     <input type="hidden" name="nfParcela" id="nfParcelaHidden" value="" />
+    <input type="hidden" name="parcelas" id="parcelasHidden" value="1" />
+    <input type="hidden" name="parcelaVencs" id="parcelaVencsHidden" value="" />
 
     <div style="display:flex;gap:10px;margin-top:14px">
       <a class="btn ghost" href="/admin/pedidos">Cancelar</a>
@@ -131,19 +157,55 @@
     document.getElementById('resumoLinha').innerHTML = qtd+' itens'+(comNf? ' · parcela com NF '+brl(parcelaC)+' · imposto '+brl(imposto):'');
     document.getElementById('grandTotal').textContent = brl(total);
     var nfr=document.getElementById('nfResumo'); if(nfr) nfr.textContent = comNf? ('Parcela com NF: '+brl(parcelaC)+' · imposto: '+brl(imposto)+' · total a pagar: '+brl(total)) : '';
+    curTotal = total;
+    renderPg();
     var semCor = rows.some(faltaCor);
-    elCriar.disabled = rows.length===0 || qtd===0 || semCor;
-    elCriar.title = semCor? 'Escolha a cor de cada produto' : '';
+    elCriar.disabled = rows.length===0 || qtd===0 || semCor || !pgValido();
+    elCriar.title = semCor? 'Escolha a cor de cada produto' : (!pgValido()? 'Preencha as datas das parcelas' : '');
   }
 
   var nfc=document.getElementById('nfCheck'); if(nfc) nfc.addEventListener('change',totals);
   var nfp=document.getElementById('nfParcela'); if(nfp){ nfp.addEventListener('input',totals); nfp.addEventListener('change',function(){ nfp.value=nfPct(); totals(); }); }
+
+  // ---------- Pagamento: à vista ou parcelado ----------
+  var curTotal = 0;
+  var pgVencs = [];            // ['YYYY-MM-DD', ...]
+  var elForma=document.getElementById('pgForma'), elN=document.getElementById('pgN'), elDias=document.getElementById('pgDias'), elPrim=document.getElementById('pgPrimeiro'), elPgList=document.getElementById('pgParcelas');
+  function parcelado(){ return elForma && elForma.value==='parcelado'; }
+  function nParc(){ var v=parseInt(elN&&elN.value,10); if(isNaN(v)||v<2)v=2; if(v>24)v=24; return v; }
+  function diasP(){ var v=parseInt(elDias&&elDias.value,10); if(isNaN(v)||v<1)v=1; if(v>365)v=365; return v; }
+  function hojeMais(d){ var t=new Date(); t.setDate(t.getDate()+d); return t.toISOString().slice(0,10); }
+  function addDias(iso,d){ var p=iso.split('-'); var t=new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); t.setDate(t.getDate()+d); var y=t.getFullYear(),m=('0'+(t.getMonth()+1)).slice(-2),dd=('0'+t.getDate()).slice(-2); return y+'-'+m+'-'+dd; }
+  function brDate(iso){ if(!iso) return '—'; var p=iso.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+  function gerarDatas(){ var n=nParc(), dias=diasP(); var prim=(elPrim&&elPrim.value)||hojeMais(7); pgVencs=[]; for(var i=0;i<n;i++){ pgVencs.push(i===0?prim:addDias(prim,dias*i)); } }
+  function valoresParcela(){ var n=nParc(); var base=Math.floor(curTotal/n); var resto=curTotal-base*n; var out=[]; for(var i=0;i<n;i++){ out.push(base+(i<resto?1:0)); } return out; }
+  function pgValido(){ if(!parcelado()) return true; var n=nParc(); if(pgVencs.length!==n) return false; for(var i=0;i<n;i++){ if(!/^\d{4}-\d{2}-\d{2}$/.test(pgVencs[i]||'')) return false; } return true; }
+  function renderPg(){
+    var on=parcelado();
+    document.querySelectorAll('.pgonly').forEach(function(el){ el.style.display= on? (el.tagName==='BUTTON'?'inline-block':'flex') : 'none'; });
+    if(!on){ elPgList.innerHTML=''; return; }
+    if(pgVencs.length!==nParc()) gerarDatas();
+    if(elPrim && !elPrim.value) elPrim.value=pgVencs[0]||hojeMais(7);
+    var vals=valoresParcela();
+    var h='<table><thead><tr><th>Parcela</th><th>Vencimento</th><th class="n">Valor</th></tr></thead><tbody>';
+    for(var i=0;i<nParc();i++){ h+='<tr><td>'+(i+1)+' de '+nParc()+'</td><td><input type="date" data-i="'+i+'" class="pgdt" value="'+(pgVencs[i]||'')+'" /></td><td class="n">'+brl(vals[i])+'</td></tr>'; }
+    h+='</tbody></table><div class="dim" style="font-size:11px;margin-top:6px">Cada data é editável. Total '+brl(curTotal)+' em '+nParc()+'x.</div>';
+    elPgList.innerHTML=h;
+    elPgList.querySelectorAll('.pgdt').forEach(function(el){ el.addEventListener('change',function(){ pgVencs[+el.dataset.i]=el.value; totals(); }); });
+  }
+  if(elForma) elForma.addEventListener('change',function(){ if(parcelado()){ if(elPrim&&!elPrim.value) elPrim.value=hojeMais(7); gerarDatas(); } totals(); });
+  if(elN) elN.addEventListener('change',function(){ gerarDatas(); totals(); });
+  if(elDias) elDias.addEventListener('change',function(){ gerarDatas(); totals(); });
+  if(elPrim) elPrim.addEventListener('change',function(){ gerarDatas(); totals(); });
+  var elGerar=document.getElementById('pgGerar'); if(elGerar) elGerar.addEventListener('click',function(){ gerarDatas(); totals(); });
 
   document.getElementById('retForm').addEventListener('submit', function(e){
     var comNf = NF_BPS>0 && nfc && nfc.checked;
     document.getElementById('itensJson').value = JSON.stringify(rows.map(function(r){ return {itemId:r.itemId, corId:r.corId, quantidade:r.qtd}; }));
     document.getElementById('comNfHidden').value = comNf? 'true':'false';
     document.getElementById('nfParcelaHidden').value = comNf? (nfPct()*100) : '';
+    document.getElementById('parcelasHidden').value = parcelado()? nParc() : 1;
+    document.getElementById('parcelaVencsHidden').value = parcelado()? JSON.stringify(pgVencs) : '';
   });
 })();
 </script>

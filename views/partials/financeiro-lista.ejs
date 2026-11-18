@@ -26,7 +26,7 @@
   <tbody>
     <% lancamentos.forEach(function (l) { %>
       <tr class="fin-row" data-fin="<%= l.id %>">
-        <td><b><%= l.numero %></b></td>
+        <td><b><%= l.numero %></b><% if (l.parcela_total) { %> <span class="badge neutral" style="padding:1px 7px;font-size:10.5px"><%= l.parcela_num %>/<%= l.parcela_total %></span><% } %></td>
         <% if (admin) { %><td><%= l.cliente_nome %></td><% } %>
         <td class="dim"><%= l.itens_resumo %> · <%= l.total_etiquetas %> etiq.</td>
         <td class="<%= l.situacao === 'vencido' ? 'fin-venc' : '' %>"><%= l.vencimento_br %></td>
