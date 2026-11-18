@@ -12,7 +12,7 @@ const { exigeCliente, exigeLogin } = require('../auth');
 const imagens = require('../imagens');
 const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
-const { gerarComprovanteRetirada } = require('../comprovante-retirada');
+const { gerarComprovanteRetirada, montarDados } = require('../comprovante-retirada');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
 const config = require('../config');
@@ -493,16 +493,8 @@ router.get('/pedido/:id/retirada.pdf', exigeCliente, async (req, res, next) => {
     if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return res.status(404).render('erro', { titulo: 'Comprovante indisponivel', mensagem: 'Comprovante de retirada não encontrado.', user: req.session.user });
     const p = pr.rows[0];
     const linhas = await db.query('SELECT item_nome, quantidade, preco_centavos, total_centavos FROM linhas WHERE pedido_id = $1 ORDER BY id', [p.id]);
-    const fin = await db.query("SELECT to_char(vencimento, 'DD/MM/YYYY') AS venc FROM financeiro WHERE pedido_id = $1", [p.id]);
-    const base = Number(p.total_centavos) - (Number(p.imposto_centavos) || 0);
-    const pdf = await gerarComprovanteRetirada({
-      numero: p.numero, criadoEm: p.aceite_em || p.criado_em, retiradoEm: p.retirado_em,
-      empresa: { nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
-      cliente: { nome: p.cliente_nome, email: p.cliente_email },
-      linhas: linhas.rows, totalItens: p.total_etiquetas, totalCentavos: base,
-      nf: p.com_nf ? { taxaBps: p.nf_bps, parcelaBps: p.nf_parcela_bps, impostoCentavos: p.imposto_centavos, baseCentavos: base, totalCentavos: Number(p.total_centavos) } : null,
-      vencimento: fin.rowCount ? fin.rows[0].venc : null,
-    });
+    const fin = await db.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc_br, parcela_num, parcela_total FROM financeiro WHERE pedido_id = $1 ORDER BY parcela_num NULLS FIRST, id", [p.id]);
+    const pdf = await gerarComprovanteRetirada(montarDados(p, linhas.rows, fin.rows));
     enviarPdf(res, 'retirada-' + p.numero + '.pdf', pdf);
   } catch (e) { next(e); }
 });
