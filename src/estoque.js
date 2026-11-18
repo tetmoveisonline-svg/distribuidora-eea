@@ -63,6 +63,14 @@ async function reservarPedido(client, pedidoId, usuarioId) {
   }
 }
 
+// Retirada no CD confirmada: consome o fisico e a reserva da quantidade de cada linha de uma vez
+// (nao ha etiquetas; a baixa acontece quando o admin confirma que o cliente retirou).
+async function baixarRetirada(client, pedidoId, usuarioId) {
+  for (const l of await linhasDoPedido(client, pedidoId)) {
+    await movimentar(client, { produtoId: l.produto_id, corId: l.cor_id, corNome: l.cor_nome, quantidade: -l.quantidade, reserva: -l.quantidade, motivo: 'Retirada', pedidoId, linhaId: l.id, usuarioId });
+  }
+}
+
 // Despacho: consome 1 do fisico e 1 da reserva pela etiqueta despachada.
 async function baixarEtiqueta(client, etiquetaId, usuarioId) {
   const r = await client.query(
@@ -94,7 +102,7 @@ async function saldosParaCliente(clienteId) {
     `SELECT l.cor_id, i.produto_id, string_agg(DISTINCT pe.numero, ', ') AS pedidos,
             sum(l.quantidade - (SELECT count(*) FROM etiquetas e WHERE e.linha_id = l.id AND e.status = 'despachado'))::int AS reservado
      FROM linhas l JOIN pedidos pe ON pe.id = l.pedido_id LEFT JOIN itens i ON i.id = l.item_id
-     WHERE pe.cliente_id = $1 AND pe.status <> 'despachado' AND i.produto_id IS NOT NULL
+     WHERE pe.cliente_id = $1 AND pe.status NOT IN ('despachado','retirado') AND i.produto_id IS NOT NULL
      GROUP BY l.cor_id, i.produto_id`, [clienteId]
   );
   const mineMap = new Map(mine.rows.map((x) => [(x.produto_id) + ':' + (x.cor_id || 0), x]));
@@ -150,4 +158,4 @@ async function historico(f) {
   return r.rows;
 }
 
-module.exports = { MOTIVOS, movimentar, reservarPedido, baixarEtiqueta, liberarReservaPedido, saldosParaCliente, saldosSugerido, saldosTodos, historico };
+module.exports = { MOTIVOS, movimentar, reservarPedido, baixarEtiqueta, baixarRetirada, liberarReservaPedido, saldosParaCliente, saldosSugerido, saldosTodos, historico };

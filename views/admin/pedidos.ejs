@@ -1,7 +1,10 @@
 <%- include('../partials/app-open', { titulo: 'Pedidos recebidos', ativo: 'pedidos' }) %>
 
-<h2 class="title">Pedidos recebidos</h2>
-<p class="sub">Você (admin) vê tudo: valor, comissão do representante, taxa do funcionário e o <b>seu lucro</b> em cada pedido. Clique num pedido para abrir o detalhe e atribuir a comissão.</p>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <h2 class="title" style="margin:0">Pedidos recebidos</h2>
+  <% if (isFull) { %><a class="btn sm" href="/admin/retirada/nova">📦 Nova retirada no CD</a><% } %>
+</div>
+<p class="sub">Você (admin) vê tudo: valor, comissão do representante, taxa do funcionário e o <b>seu lucro</b> em cada pedido. Clique num pedido para abrir o detalhe e atribuir a comissão. Pedidos <b>RT-</b> são retiradas no CD.</p>
 
 <% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 
@@ -31,7 +34,11 @@
             <td class="num" style="white-space:nowrap"><b style="color:<%= p.lucro_centavos >= 0 ? 'var(--ok)' : 'var(--danger)' %>"><%= formatBRL(p.lucro_centavos) %></b><div class="dim" style="font-size:11px"><%= p.margem_pct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>%</div></td>
             <% } %>
             <td>
-              <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
+              <% if (p.tipo === 'retirada') { %>
+                <span class="badge info">📦 Retirada</span>
+                <% if (p.status === 'retirado') { %><span class="badge ok" style="margin-left:4px">Retirado</span>
+                <% } else { %><span class="badge warn" style="margin-left:4px">Aguardando retirada</span><% } %>
+              <% } else if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
               <% } else if (p.status === 'preparando') { %><span class="badge info">Em preparação</span>
               <% } else { %><span class="badge warn">Aguardando</span><% } %>
               <% if (p.com_nf) { %>

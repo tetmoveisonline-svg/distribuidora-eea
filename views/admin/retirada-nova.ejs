@@ -1,0 +1,151 @@
+<%- include('../partials/app-open', { titulo: 'Nova retirada no CD', ativo: 'pedidos' }) %>
+
+<style>
+  .ret-rows{margin-top:6px}
+  .ret-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;background:var(--panel)}
+  .ret-row .f{display:flex;flex-direction:column;gap:5px}
+  .ret-row .f.prod{flex:1 1 230px}
+  .ret-row .f.cor{flex:1 1 150px}
+  .ret-row .lbl{font-size:11px;color:var(--text-dim)}
+  .ret-row select,.ret-row input{background:var(--field-bg);border:1px solid var(--field-border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13.5px}
+  .ret-row .qtd{width:72px;text-align:right}
+  .ret-row .val{font-size:13.5px;padding:8px 0;min-width:90px;text-align:right}
+  .ret-row .rm{background:transparent;border:none;color:var(--danger);font-size:12.5px;cursor:pointer;padding:8px 2px}
+  .ret-nf{margin-top:14px;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;background:var(--gold-soft)}
+  .ret-nf .tag{display:flex;align-items:center;gap:10px}
+  .ret-nf input[type=number]{width:70px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:7px;padding:6px 8px;color:var(--text)}
+  .ret-nf .res{font-size:12.5px;color:var(--text-dim);margin-top:8px}
+</style>
+
+<h2 class="title">Nova retirada no CD</h2>
+<p class="sub">Para clientes que retiram a mercadoria no seu centro de distribuição. Você monta o pedido direto, sem etiquetas. O estoque só baixa quando você confirmar a retirada.</p>
+
+<% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
+
+<div class="card pad">
+  <form id="retForm" method="post" action="/admin/retirada">
+    <div class="field"><label for="cliente">Cliente</label>
+      <select id="cliente" name="clienteId" required>
+        <option value="">— escolha o cliente —</option>
+        <% clientes.forEach(function (c) { %><option value="<%= c.id %>"><%= c.nome %></option><% }); %>
+      </select>
+    </div>
+
+    <label class="lbl" style="font-size:12px;color:var(--text-dim);display:block;margin:8px 0 6px">Produtos da retirada</label>
+    <div id="rows" class="ret-rows"></div>
+    <div id="semCliente" class="dim" style="font-size:12.5px">Escolha um cliente para carregar os produtos.</div>
+    <button type="button" class="btn ghost sm" id="addRow" style="display:none;margin-top:4px">+ adicionar produto</button>
+
+    <% if (nfBps > 0) { %>
+    <div class="ret-nf" id="nfBox">
+      <label class="tag"><input type="checkbox" id="nfCheck" /> <span style="font-weight:600">🧾 Com nota fiscal</span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-dim)" id="nfPctWrap">% com NF (mín. 30%) <input type="number" id="nfParcela" min="30" max="100" value="30" /> %</span>
+      </label>
+      <div class="res" id="nfResumo"></div>
+      <div class="dim" style="font-size:11px;margin-top:4px">Imposto de <%= (nfBps % 100 === 0 ? (nfBps/100) : (nfBps/100).toFixed(2).replace('.', ',')) %>% sobre a parcela escolhida. Entra no total a pagar.</div>
+    </div>
+    <% } %>
+
+    <div class="totalbar" style="margin-top:14px">
+      <div class="muted" id="resumoLinha">0 itens</div>
+      <div class="big" id="grandTotal">R$ 0,00</div>
+    </div>
+
+    <input type="hidden" name="itens" id="itensJson" />
+    <input type="hidden" name="comNf" id="comNfHidden" value="false" />
+    <input type="hidden" name="nfParcela" id="nfParcelaHidden" value="" />
+
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <a class="btn ghost" href="/admin/pedidos">Cancelar</a>
+      <button class="btn" type="submit" id="criar" disabled>Criar retirada</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var NF_BPS = <%- jsonForScript(nfBps || 0) %>;
+  var itens = [];           // catalogo do cliente
+  var rows = [];            // [{itemId, corId, qtd}]
+  var elRows = document.getElementById('rows');
+  var elAdd = document.getElementById('addRow');
+  var elSem = document.getElementById('semCliente');
+  var elCriar = document.getElementById('criar');
+
+  function brl(c){ return 'R$ ' + (Number(c||0)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function itemById(id){ for (var i=0;i<itens.length;i++){ if(String(itens[i].id)===String(id)) return itens[i]; } return null; }
+  function nfPct(){ var el=document.getElementById('nfParcela'); var v=parseInt(el&&el.value,10); if(isNaN(v))v=30; if(v<30)v=30; if(v>100)v=100; return v; }
+
+  document.getElementById('cliente').addEventListener('change', function(){
+    var id=this.value; rows=[]; itens=[];
+    if(!id){ elRows.innerHTML=''; elSem.style.display='block'; elAdd.style.display='none'; render(); return; }
+    fetch('/admin/retirada/itens?cliente='+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(d){
+      itens = (d && d.itens) || [];
+      elSem.style.display = itens.length? 'none':'block';
+      if(!itens.length){ elSem.textContent='Este cliente não tem produtos com preço. Cadastre em Preços por cliente.'; }
+      elAdd.style.display = itens.length? 'inline-block':'none';
+      if(itens.length){ rows=[{itemId:itens[0].id, corId:null, qtd:1}]; }
+      render();
+    }).catch(function(){ elSem.textContent='Falha ao carregar os produtos.'; elSem.style.display='block'; });
+  });
+
+  elAdd.addEventListener('click', function(){ if(itens.length){ rows.push({itemId:itens[0].id, corId:null, qtd:1}); render(); } });
+
+  function render(){
+    var html='';
+    rows.forEach(function(row, idx){
+      var it=itemById(row.itemId)||{preco_centavos:0,cores:[]};
+      var opts=itens.map(function(x){ return '<option value="'+x.id+'"'+(String(x.id)===String(row.itemId)?' selected':'')+'>'+esc(x.nome)+' — '+brl(x.preco_centavos)+'</option>'; }).join('');
+      var corHtml='';
+      if(it.cores && it.cores.length){
+        var co='<option value="">— cor —</option>'+it.cores.map(function(c){ return '<option value="'+c.id+'"'+(c.id===row.corId?' selected':'')+'>'+esc(c.nome)+(c.sku?' · '+esc(c.sku):'')+' · '+c.saldo+' disp.</option>'; }).join('');
+        corHtml='<div class="f cor"><span class="lbl">Cor</span><select data-idx="'+idx+'" class="selcor">'+co+'</select></div>';
+      }
+      var total=it.preco_centavos*(row.qtd||0);
+      html+='<div class="ret-row">'+
+        '<div class="f prod"><span class="lbl">Produto</span><select data-idx="'+idx+'" class="selprod">'+opts+'</select></div>'+
+        corHtml+
+        '<div class="f"><span class="lbl">Qtd</span><input data-idx="'+idx+'" class="qtd qtdinp" value="'+(row.qtd||1)+'" inputmode="numeric" /></div>'+
+        '<div class="f"><span class="lbl">Total</span><div class="val">'+brl(total)+'</div></div>'+
+        '<button type="button" class="rm" data-idx="'+idx+'">remover</button>'+
+      '</div>';
+    });
+    elRows.innerHTML=html;
+    elRows.querySelectorAll('.selprod').forEach(function(el){ el.addEventListener('change',function(){ var r=rows[+el.dataset.idx]; r.itemId=el.value; r.corId=null; render(); }); });
+    elRows.querySelectorAll('.selcor').forEach(function(el){ el.addEventListener('change',function(){ rows[+el.dataset.idx].corId=el.value?parseInt(el.value,10):null; render(); }); });
+    elRows.querySelectorAll('.qtdinp').forEach(function(el){ el.addEventListener('change',function(){ var v=parseInt(el.value,10); rows[+el.dataset.idx].qtd=(!v||v<1)?1:v; render(); }); });
+    elRows.querySelectorAll('.rm').forEach(function(el){ el.addEventListener('click',function(){ rows.splice(+el.dataset.idx,1); render(); }); });
+    totals();
+  }
+
+  function faltaCor(row){ var it=itemById(row.itemId); return !!(it && it.cores && it.cores.length>0 && !it.cores.find(function(c){return c.id===row.corId;})); }
+
+  function totals(){
+    var base=0, qtd=0;
+    rows.forEach(function(r){ var it=itemById(r.itemId)||{preco_centavos:0}; base+=it.preco_centavos*(r.qtd||0); qtd+=(r.qtd||0); });
+    var comNf = NF_BPS>0 && document.getElementById('nfCheck') && document.getElementById('nfCheck').checked;
+    var imposto=0, parcelaC=0;
+    if(comNf){ var pct=nfPct(); parcelaC=Math.round(base*pct/100); imposto=Math.round(parcelaC*NF_BPS/10000); }
+    var total=base+imposto;
+    document.getElementById('resumoLinha').innerHTML = qtd+' itens'+(comNf? ' · parcela com NF '+brl(parcelaC)+' · imposto '+brl(imposto):'');
+    document.getElementById('grandTotal').textContent = brl(total);
+    var nfr=document.getElementById('nfResumo'); if(nfr) nfr.textContent = comNf? ('Parcela com NF: '+brl(parcelaC)+' · imposto: '+brl(imposto)+' · total a pagar: '+brl(total)) : '';
+    var semCor = rows.some(faltaCor);
+    elCriar.disabled = rows.length===0 || qtd===0 || semCor;
+    elCriar.title = semCor? 'Escolha a cor de cada produto' : '';
+  }
+
+  var nfc=document.getElementById('nfCheck'); if(nfc) nfc.addEventListener('change',totals);
+  var nfp=document.getElementById('nfParcela'); if(nfp){ nfp.addEventListener('input',totals); nfp.addEventListener('change',function(){ nfp.value=nfPct(); totals(); }); }
+
+  document.getElementById('retForm').addEventListener('submit', function(e){
+    var comNf = NF_BPS>0 && nfc && nfc.checked;
+    document.getElementById('itensJson').value = JSON.stringify(rows.map(function(r){ return {itemId:r.itemId, corId:r.corId, quantidade:r.qtd}; }));
+    document.getElementById('comNfHidden').value = comNf? 'true':'false';
+    document.getElementById('nfParcelaHidden').value = comNf? (nfPct()*100) : '';
+  });
+})();
+</script>
+
+<%- include('../partials/app-close') %>

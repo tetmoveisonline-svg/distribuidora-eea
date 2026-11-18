@@ -1,31 +1,58 @@
-<%- include('../partials/app-open', { titulo: 'Pedido ' + pedido.numero, ativo: 'pedidos' }) %>
+<% var ehRetirada = pedido.tipo === 'retirada'; %>
+<%- include('../partials/app-open', { titulo: (ehRetirada ? 'Retirada ' : 'Pedido ') + pedido.numero, ativo: 'pedidos' }) %>
 
-<h2 class="title">Pedido <%= pedido.numero %></h2>
-<p class="sub">Cliente: <%= pedido.cliente_nome %><%= pedido.cliente_email ? ' · ' + pedido.cliente_email : '' %> · aceito em <%= formatDateTime(pedido.aceite_em) %></p>
+<h2 class="title"><%= ehRetirada ? 'Retirada' : 'Pedido' %> <%= pedido.numero %></h2>
+<p class="sub">Cliente: <%= pedido.cliente_nome %><%= pedido.cliente_email ? ' · ' + pedido.cliente_email : '' %> · <%= ehRetirada ? 'criada' : 'aceito' %> em <%= formatDateTime(pedido.aceite_em) %></p>
 
+<% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
 
+<% if (ehRetirada) { %>
+<div class="card pad" style="margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="badge info">📦 Retirada no CD</span>
+    <% if (pedido.status === 'retirado') { %>
+      <span class="badge ok">Retirado<%= pedido.retirado_em ? ' · ' + formatDateTime(pedido.retirado_em) : '' %></span>
+      <span class="dim" style="font-size:12.5px">O estoque já foi baixado.</span>
+    <% } else { %>
+      <span class="badge warn">Aguardando retirada</span>
+      <% if (isFull) { %>
+      <form method="post" action="/admin/pedido/<%= pedido.id %>/confirmar-retirada" style="margin-left:auto"
+            onsubmit="return confirm('Confirmar a retirada de <%= pedido.numero %>?\n\nIsso baixa o estoque dos itens. Faça só quando o cliente levar a mercadoria.')">
+        <button class="btn" type="submit">✓ Confirmar retirada</button>
+      </form>
+      <% } %>
+    <% } %>
+  </div>
+  <% if (pedido.status !== 'retirado') { %><div class="hint-box" style="margin-top:12px">Ao confirmar, o <b>estoque baixa</b> (física). Até lá a mercadoria fica <b>reservada</b> para este cliente. O pagamento já está lançado no Financeiro do cliente.</div><% } %>
+</div>
+<% } else { %>
 <div class="card pad" style="margin-bottom:16px">
   <%- include('../partials/timeline', { passos: passos }) %>
 </div>
+<% } %>
 
 <div class="card pad" style="margin-bottom:16px">
   <table>
-    <thead><tr><th>Arquivo</th><th>Produto</th><th class="num">Qtd</th><th class="num">Unit.</th><th class="num">Total</th></tr></thead>
+    <thead><tr><% if (!ehRetirada) { %><th>Arquivo</th><% } %><th>Produto</th><th class="num">Qtd</th><th class="num">Unit.</th><th class="num">Total</th></tr></thead>
     <tbody>
       <% linhas.forEach(function (l) { %>
-        <tr><td><%= l.arquivo_nome %></td><td><%= l.item_nome %></td><td class="num"><%= l.quantidade %></td><td class="num"><%= formatBRL(l.preco_centavos) %></td><td class="num"><%= formatBRL(l.total_centavos) %></td></tr>
+        <tr><% if (!ehRetirada) { %><td><%= l.arquivo_nome %></td><% } %><td><%= l.item_nome %></td><td class="num"><%= l.quantidade %></td><td class="num"><%= formatBRL(l.preco_centavos) %></td><td class="num"><%= formatBRL(l.total_centavos) %></td></tr>
       <% }); %>
     </tbody>
   </table>
-  <div class="totalbar"><div class="muted"><b style="color:var(--text)"><%= pedido.total_etiquetas %> etiquetas</b></div><div class="big"><%= formatBRL(pedido.total_centavos) %></div></div>
+  <div class="totalbar"><div class="muted"><b style="color:var(--text)"><%= pedido.total_etiquetas %> <%= ehRetirada ? 'itens' : 'etiquetas' %></b></div><div class="big"><%= formatBRL(pedido.total_centavos) %></div></div>
   <div class="actions-inline" style="margin-top:14px">
-    <% if (expirado) { %>
-      <span class="doc-link off">Etiquetas expiradas</span>
+    <% if (ehRetirada) { %>
+      <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/retirada.pdf">⬇ Comprovante de retirada (PDF)</a>
     <% } else { %>
-      <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/etiquetas">Etiquetas (térmico) <span class="badge <%= horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(horas)) %>h</span></a>
+      <% if (expirado) { %>
+        <span class="doc-link off">Etiquetas expiradas</span>
+      <% } else { %>
+        <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/etiquetas">Etiquetas (térmico) <span class="badge <%= horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(horas)) %>h</span></a>
+      <% } %>
+      <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/comprovante">Relatório / comprovante</a>
     <% } %>
-    <a class="doc-link" href="/admin/pedido/<%= pedido.id %>/comprovante">Relatório / comprovante</a>
     <% if (nf) { %><a class="doc-link" href="/admin/pedido/<%= pedido.id %>/nota-fiscal">Nota fiscal (PDF)</a><% } %>
   </div>
 
@@ -58,9 +85,11 @@
   </div>
   <% } %>
 
+  <% if (!ehRetirada) { %>
   <%- include('../partials/etiquetas-detalhe', { pid: pedido.id, etqs: etiquetas, desp: etqDespachadas, tot: etqTotal, admin: true, formatDateTime: formatDateTime }) %>
+  <% } %>
 
-  <% if (isFull) { %>
+  <% if (isFull && !ehRetirada) { %>
   <details class="danger-zone">
     <summary>Excluir este pedido (teste ou lançamento errado)</summary>
     <form method="post" action="/admin/pedido/<%= pedido.id %>/excluir" class="fin-form" style="margin-top:10px"
@@ -72,6 +101,7 @@
   <% } %>
 </div>
 
+<% if (!ehRetirada) { %>
 <% if (isFull) { %>
 <div class="grid2">
   <!-- comissão do representante -->
@@ -151,6 +181,7 @@
     <div class="hint-box" style="margin-top:12px">O despacho é automático: as etiquetas mudam de situação ao serem bipadas na separação e no caminhão. <a href="/admin/bipagem?pedido=<%= pedido.id %>">Abrir na Bipagem</a>.</div>
   </div>
 </div>
+<% } %>
 
 <div style="margin-top:18px"><a class="btn ghost" href="/admin/pedidos">Voltar aos pedidos</a></div>
 

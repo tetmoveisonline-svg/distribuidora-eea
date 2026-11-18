@@ -6,31 +6,46 @@
 <% if (pedidos.length === 0) { %>
   <div class="card pad"><div class="empty">Você ainda não tem envios. Comece em "Novo envio".</div></div>
 <% } else { %>
-  <% pedidos.forEach(function (p) { %>
+  <% pedidos.forEach(function (p) { var ehRet = p.tipo === 'retirada'; %>
     <div class="card pad" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap">
-        <div><b><%= p.numero %></b> <span class="dim" style="font-size:12px">· <%= formatDateTime(p.aceite_em) %> · <%= p.total_etiquetas %> etiquetas · <%= formatBRL(p.total_centavos) %></span></div>
-        <% if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
+        <div><b><%= p.numero %></b> <span class="dim" style="font-size:12px">· <%= formatDateTime(p.aceite_em) %> · <%= p.total_etiquetas %> <%= ehRet ? 'itens' : 'etiquetas' %> · <%= formatBRL(p.total_centavos) %></span></div>
+        <% if (ehRet) { %>
+          <span style="display:flex;gap:6px"><span class="badge neutral">📦 Retirada no CD</span><% if (p.status === 'retirado') { %><span class="badge ok">Retirado</span><% } else { %><span class="badge warn">Aguardando retirada</span><% } %></span>
+        <% } else if (p.status === 'despachado') { %><span class="badge ok">Despachado</span>
         <% } else if (p.status === 'separacao' || p.status === 'preparando') { %><span class="badge neutral">Em separação</span>
         <% } else { %><span class="badge warn">Aguardando despacho</span><% } %>
       </div>
 
-      <%- include('../partials/timeline', { passos: p.passos }) %>
+      <% if (ehRet) { %>
+        <div class="hint-box" style="margin:0 0 4px">
+          <% if (p.status === 'retirado') { %>Mercadoria retirada no CD em <%= formatDateTime(p.retirado_em) %>.<% } else { %>Mercadoria reservada para retirada no nosso centro de distribuição (CD). Pague pelo Financeiro e combine a retirada.<% } %>
+        </div>
+        <div class="actions-inline" style="margin-top:16px">
+          <a class="doc-link" href="/pedido/<%= p.id %>/retirada.pdf">⬇ Comprovante de retirada</a>
+          <% if (p.com_nf) { %>
+            <% if (p.tem_nf) { %><a class="doc-link" href="/pedido/<%= p.id %>/nota-fiscal">🧾 Baixar nota fiscal</a>
+            <% } else { %><span class="doc-link off">🧾 Nota fiscal em emissão</span><% } %>
+          <% } %>
+        </div>
+      <% } else { %>
+        <%- include('../partials/timeline', { passos: p.passos }) %>
 
-      <div class="actions-inline" style="margin-top:16px">
-        <% if (p.expirado) { %>
-          <span class="doc-link off">Etiquetas expiradas</span>
-        <% } else { %>
-          <a class="doc-link" href="/pedido/<%= p.id %>/etiquetas">Etiquetas <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span></a>
-        <% } %>
-        <a class="doc-link" href="/pedido/<%= p.id %>/comprovante">Comprovante</a>
-        <% if (p.com_nf) { %>
-          <% if (p.tem_nf) { %><a class="doc-link" href="/pedido/<%= p.id %>/nota-fiscal">🧾 Baixar nota fiscal</a>
-          <% } else { %><span class="doc-link off">🧾 Nota fiscal em emissão</span><% } %>
-        <% } %>
-      </div>
+        <div class="actions-inline" style="margin-top:16px">
+          <% if (p.expirado) { %>
+            <span class="doc-link off">Etiquetas expiradas</span>
+          <% } else { %>
+            <a class="doc-link" href="/pedido/<%= p.id %>/etiquetas">Etiquetas <span class="badge <%= p.horas < 6 ? 'danger' : 'warn' %>" style="padding:1px 6px"><%= Math.max(0, Math.floor(p.horas)) %>h</span></a>
+          <% } %>
+          <a class="doc-link" href="/pedido/<%= p.id %>/comprovante">Comprovante</a>
+          <% if (p.com_nf) { %>
+            <% if (p.tem_nf) { %><a class="doc-link" href="/pedido/<%= p.id %>/nota-fiscal">🧾 Baixar nota fiscal</a>
+            <% } else { %><span class="doc-link off">🧾 Nota fiscal em emissão</span><% } %>
+          <% } %>
+        </div>
 
-      <%- include('../partials/etiquetas-detalhe', { pid: p.id, etqs: p.etiquetas, desp: p.etqDespachadas, tot: p.etqTotal, admin: false, formatDateTime: formatDateTime }) %>
+        <%- include('../partials/etiquetas-detalhe', { pid: p.id, etqs: p.etiquetas, desp: p.etqDespachadas, tot: p.etqTotal, admin: false, formatDateTime: formatDateTime }) %>
+      <% } %>
     </div>
   <% }); %>
 <% } %>

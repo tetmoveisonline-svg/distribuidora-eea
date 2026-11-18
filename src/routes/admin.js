@@ -61,9 +61,10 @@ const {
 } = require('../util');
 
 // Calculo de preco sugerido e taxas: modulo compartilhado com a area do cliente.
-const { refCustos, comCustos } = require('../precos');
+const { refCustos, comCustos, catalogoDoCliente, garantirItem } = require('../precos');
 const imagens = require('../imagens');
 const config = require('../config');
+const { gerarComprovanteRetirada } = require('../comprovante-retirada');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -164,7 +165,7 @@ async function funcRef() {
 router.get('/pedidos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
+      `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas, p.tipo,
               p.aceite_em, p.etiquetas_expira_em, p.despachado_em,
               p.comissao_centavos, p.comissao_resp_centavos, p.funcionario_id, p.taxa_func_centavos AS taxa_func_assinada,
               p.imposto_centavos, p.com_nf,
@@ -224,7 +225,7 @@ router.get('/pedido/:id', async (req, res, next) => {
       passos: andamentoDisplay(pedido),
       etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
       expirado: etiquetasExpiradas(pedido.etiquetas_expira_em), horas: horasRestantes(pedido.etiquetas_expira_em),
-      erro: req.query.erro || null,
+      erro: req.query.erro || null, ok: req.query.ok || null,
       formatBRL, formatDateTime, formatPercent,
     });
   } catch (e) { next(e); }
@@ -370,6 +371,145 @@ router.get('/pedido/:id/nota-fiscal', async (req, res, next) => {
     const nf = await db.query('SELECT n.conteudo, p.numero FROM notas_fiscais n JOIN pedidos p ON p.id = n.pedido_id WHERE n.pedido_id = $1', [pInt(req.params.id)]);
     if (nf.rowCount === 0 || !nf.rows[0].conteudo) return naoEncontrado(res, req);
     enviarPdf(res, 'nota-fiscal-' + nf.rows[0].numero + '.pdf', nf.rows[0].conteudo);
+  } catch (e) { next(e); }
+});
+
+// ===================== RETIRADA NO CD =====================
+// Formulario para criar uma retirada (cliente retira a mercadoria no CD). Só admin completo.
+router.get('/retirada/nova', exigeAdminFull, async (req, res, next) => {
+  try {
+    const clientes = await db.query('SELECT id, nome FROM clientes ORDER BY nome');
+    const nfBps = await config.nfBps(db);
+    res.render('admin/retirada-nova', { clientes: clientes.rows, nfBps, erro: req.query.erro || null, formatBRL });
+  } catch (e) { next(e); }
+});
+
+// Catalogo (produtos com preço) de um cliente, para montar a retirada no navegador.
+router.get('/retirada/itens', exigeAdminFull, async (req, res) => {
+  try {
+    const clienteId = pInt(req.query.cliente);
+    if (!clienteId) return res.json({ ok: true, itens: [] });
+    const cat = await catalogoDoCliente(db, clienteId);
+    const itens = cat.map((x) => ({
+      id: x.id, produto_id: x.produto_id, nome: x.nome, preco_centavos: x.preco_centavos,
+      cores: (x.cores || []).map((c) => ({ id: c.id, nome: c.nome, sku: c.sku, saldo: c.saldo })),
+    }));
+    res.json({ ok: true, itens });
+  } catch (e) { console.error('Erro retirada/itens:', e); res.status(500).json({ erro: 'Falha ao carregar os produtos.' }); }
+});
+
+// Cria a retirada: monta o pedido (tipo retirada), reserva o estoque e lança no financeiro.
+router.post('/retirada', exigeAdminFull, async (req, res) => {
+  const body = req.body || {};
+  const clienteId = pInt(body.clienteId);
+  let itensReq = [];
+  try { itensReq = typeof body.itens === 'string' ? JSON.parse(body.itens) : (Array.isArray(body.itens) ? body.itens : []); } catch (e) { itensReq = []; }
+  if (!clienteId) return res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent('Escolha o cliente.'));
+  if (!Array.isArray(itensReq) || itensReq.length === 0) return res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent('Adicione ao menos um produto.'));
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const cliRow = await client.query('SELECT id, nome, email FROM clientes WHERE id = $1', [clienteId]);
+    if (cliRow.rowCount === 0) throw new Error('Cliente inválido.');
+    const catMap = new Map((await catalogoDoCliente(client, clienteId)).map((i) => [String(i.id), i]));
+
+    const linhas = [];
+    let totalCentavos = 0, totalQtd = 0;
+    for (const l of itensReq) {
+      const qtd = parseInt(l.quantidade, 10);
+      if (!qtd || qtd < 1) throw new Error('Quantidade inválida em uma das linhas.');
+      const item = catMap.get(String(l.itemId));
+      if (!item) throw new Error('Produto inválido para este cliente.');
+      let cor = null;
+      if (item.cores && item.cores.length > 0) {
+        const corId = parseInt(l.corId, 10);
+        cor = item.cores.find((c) => c.id === corId) || null;
+        if (!cor) throw new Error('Escolha a cor de "' + item.nome + '".');
+      }
+      const itemId = await garantirItem(client, clienteId, item);
+      const custoRow = await client.query('SELECT custo_centavos FROM produtos WHERE id = $1', [item.produto_id]);
+      const custoCentavos = (custoRow.rowCount && custoRow.rows[0].custo_centavos !== null) ? Number(custoRow.rows[0].custo_centavos) : null;
+      const totalLinha = item.preco_centavos * qtd;
+      totalCentavos += totalLinha; totalQtd += qtd;
+      linhas.push({ itemId, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome, corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : null, precoCentavos: item.preco_centavos, quantidade: qtd, totalCentavos: totalLinha, custoCentavos });
+    }
+
+    // Nota fiscal (mesmas regras dos pedidos): taxa do admin, parcela escolhida (min 30%).
+    const nfTaxaBps = await config.nfBps(client);
+    const comNf = body.comNf === 'true' || body.comNf === 'on' || body.comNf === true;
+    let nfParcelaBps = null, impostoCentavos = 0, comNfFinal = false;
+    if (comNf && nfTaxaBps > 0) {
+      comNfFinal = true;
+      let parcela = parseInt(body.nfParcela, 10);
+      if (isNaN(parcela)) parcela = 3000;
+      parcela = Math.max(3000, Math.min(10000, parcela));
+      nfParcelaBps = parcela;
+      impostoCentavos = Math.round(totalCentavos * parcela / 10000 * nfTaxaBps / 10000);
+    }
+    const totalComImposto = totalCentavos + impostoCentavos;
+
+    const numero = (await client.query("SELECT 'RT-' || nextval('retirada_numero_seq') AS numero")).rows[0].numero;
+    const ped = await client.query(
+      `INSERT INTO pedidos (numero, cliente_id, usuario_id, tipo, status, total_centavos, total_etiquetas, aceite_em, com_nf, nf_bps, nf_parcela_bps, imposto_centavos)
+       VALUES ($1,$2,$3,'retirada','aguardando',$4,$5, now(), $6,$7,$8,$9) RETURNING id`,
+      [numero, clienteId, req.session.user.id, totalComImposto, totalQtd, comNfFinal, comNfFinal ? nfTaxaBps : null, nfParcelaBps, impostoCentavos]
+    );
+    const pedidoId = ped.rows[0].id;
+    for (const l of linhas) {
+      await client.query(
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku, custo_centavos)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [pedidoId, l.itemId, l.itemNome, 'Retirada no CD', l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
+      );
+    }
+    await estoque.reservarPedido(client, pedidoId, req.session.user.id);
+    await financeiro.criarLancamento(client, pedidoId, clienteId, totalComImposto, totalQtd);
+    await client.query('COMMIT');
+    res.redirect('/admin/pedido/' + pedidoId + '?ok=' + encodeURIComponent('Retirada ' + numero + ' criada. Reservei o estoque e lancei no financeiro do cliente.'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent(e.message || 'Falha ao criar a retirada.'));
+  } finally { client.release(); }
+});
+
+// Confirma que o cliente retirou: baixa o estoque (fisico) e marca como retirado.
+router.post('/pedido/:id/confirmar-retirada', exigeAdminFull, async (req, res) => {
+  const pid = pInt(req.params.id);
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const p = await client.query('SELECT id, tipo, status FROM pedidos WHERE id = $1 FOR UPDATE', [pid]);
+    if (p.rowCount === 0 || p.rows[0].tipo !== 'retirada') { await client.query('ROLLBACK'); return res.redirect('/admin/pedidos'); }
+    if (p.rows[0].status === 'retirado') { await client.query('ROLLBACK'); return res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Esta retirada já estava confirmada.')); }
+    await estoque.baixarRetirada(client, pid, req.session.user.id);
+    await client.query("UPDATE pedidos SET status = 'retirado', retirado_em = now() WHERE id = $1", [pid]);
+    await client.query('COMMIT');
+    res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Retirada confirmada. O estoque foi baixado.'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Falha ao confirmar a retirada.'));
+  } finally { client.release(); }
+});
+
+// Comprovante de retirada (PDF, gerado na hora).
+router.get('/pedido/:id/retirada.pdf', async (req, res, next) => {
+  try {
+    const pr = await db.query('SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1', [pInt(req.params.id)]);
+    if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return naoEncontrado(res, req);
+    const p = pr.rows[0];
+    const linhas = await db.query('SELECT item_nome, quantidade, preco_centavos, total_centavos FROM linhas WHERE pedido_id = $1 ORDER BY id', [p.id]);
+    const fin = await db.query("SELECT to_char(vencimento, 'DD/MM/YYYY') AS venc FROM financeiro WHERE pedido_id = $1", [p.id]);
+    const base = Number(p.total_centavos) - (Number(p.imposto_centavos) || 0);
+    const pdf = await gerarComprovanteRetirada({
+      numero: p.numero, criadoEm: p.aceite_em || p.criado_em, retiradoEm: p.retirado_em,
+      empresa: { nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
+      cliente: { nome: p.cliente_nome, email: p.cliente_email },
+      linhas: linhas.rows, totalItens: p.total_etiquetas, totalCentavos: base,
+      nf: p.com_nf ? { taxaBps: p.nf_bps, parcelaBps: p.nf_parcela_bps, impostoCentavos: p.imposto_centavos, baseCentavos: base, totalCentavos: Number(p.total_centavos) } : null,
+      vencimento: fin.rowCount ? fin.rows[0].venc : null,
+    });
+    enviarPdf(res, 'retirada-' + p.numero + '.pdf', pdf);
   } catch (e) { next(e); }
 });
 

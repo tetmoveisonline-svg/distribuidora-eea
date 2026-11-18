@@ -85,7 +85,14 @@ CREATE TABLE IF NOT EXISTS pedidos (
 -- Mantemos 'preparando' na lista por compatibilidade com pedidos antigos (evita falha na constraint no boot).
 ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_status_check;
 ALTER TABLE pedidos ADD CONSTRAINT pedidos_status_check
-  CHECK (status IN ('aguardando','preparando','separacao','despachado'));
+  CHECK (status IN ('aguardando','preparando','separacao','despachado','retirado'));
+
+-- Tipo do pedido: 'envio' (fluxo normal de etiquetas) ou 'retirada' (cliente busca no CD).
+-- A retirada e criada pelo admin, reserva estoque e so baixa quando o admin confirma a retirada.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'envio';
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS retirado_em TIMESTAMPTZ;
+-- Numeracao propria das retiradas (RT-...), separada dos envios (DS-...).
+CREATE SEQUENCE IF NOT EXISTS retirada_numero_seq START 1;
 
 -- Comissao do representante (definida no pedido pelo admin).
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS representante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
