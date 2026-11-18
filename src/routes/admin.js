@@ -496,6 +496,96 @@ router.post('/retirada', exigeAdminFull, async (req, res) => {
   } finally { client.release(); }
 });
 
+// Editar retirada (só enquanto aguardando): abre a tela de criação pré-preenchida.
+router.get('/pedido/:id/editar', exigeAdminFull, async (req, res, next) => {
+  try {
+    const pid = pInt(req.params.id);
+    const pr = await db.query('SELECT p.*, c.nome AS cliente_nome FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1', [pid]);
+    if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return naoEncontrado(res, req);
+    const ped = pr.rows[0];
+    if (ped.status !== 'aguardando') return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Só dá para editar enquanto a retirada está aguardando.'));
+    const linhas = await db.query('SELECT l.quantidade, l.cor_id, i.produto_id FROM linhas l LEFT JOIN itens i ON i.id = l.item_id WHERE l.pedido_id = $1 ORDER BY l.id', [pid]);
+    const parc = await db.query("SELECT to_char(vencimento, 'YYYY-MM-DD') AS venc FROM financeiro WHERE pedido_id = $1 AND parcela_num IS NOT NULL ORDER BY parcela_num", [pid]);
+    const nfBps = await config.nfBps(db);
+    const edit = {
+      pedidoId: pid, clienteId: ped.cliente_id, clienteNome: ped.cliente_nome,
+      comNf: ped.com_nf, nfBps: ped.nf_bps, nfParcelaBps: ped.nf_parcela_bps, numero: ped.numero,
+      itens: linhas.rows.filter((r) => r.produto_id).map((r) => ({ produtoId: r.produto_id, corId: r.cor_id, quantidade: r.quantidade })),
+      parcelaVencs: parc.rows.map((r) => r.venc),
+    };
+    res.render('admin/retirada-nova', { clientes: [{ id: ped.cliente_id, nome: ped.cliente_nome }], nfBps, edit, erro: req.query.erro || null, formatBRL });
+  } catch (e) { next(e); }
+});
+
+router.post('/pedido/:id/editar', exigeAdminFull, async (req, res) => {
+  const pid = pInt(req.params.id);
+  const body = req.body || {};
+  let itensReq = [];
+  try { itensReq = typeof body.itens === 'string' ? JSON.parse(body.itens) : (Array.isArray(body.itens) ? body.itens : []); } catch (e) { itensReq = []; }
+  if (!Array.isArray(itensReq) || itensReq.length === 0) return res.redirect('/admin/pedido/' + pid + '/editar?erro=' + encodeURIComponent('Adicione ao menos um produto.'));
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const ped = (await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pid])).rows[0];
+    if (!ped || ped.tipo !== 'retirada') { await client.query('ROLLBACK'); return res.redirect('/admin/pedidos'); }
+    if (ped.status !== 'aguardando') throw new Error('Só dá para editar enquanto a retirada está aguardando.');
+    const clienteId = ped.cliente_id;
+    const catMap = new Map((await catalogoDoCliente(client, clienteId)).map((i) => [String(i.id), i]));
+    const linhas = [];
+    let totalCentavos = 0, totalQtd = 0;
+    for (const l of itensReq) {
+      const qtd = parseInt(l.quantidade, 10);
+      if (!qtd || qtd < 1) throw new Error('Quantidade inválida em uma das linhas.');
+      const item = catMap.get(String(l.itemId));
+      if (!item) throw new Error('Produto inválido para este cliente.');
+      let cor = null;
+      if (item.cores && item.cores.length > 0) {
+        const corId = parseInt(l.corId, 10);
+        cor = item.cores.find((c) => c.id === corId) || null;
+        if (!cor) throw new Error('Escolha a cor de "' + item.nome + '".');
+      }
+      const itemId = await garantirItem(client, clienteId, item);
+      const custoRow = await client.query('SELECT custo_centavos FROM produtos WHERE id = $1', [item.produto_id]);
+      const custoCentavos = (custoRow.rowCount && custoRow.rows[0].custo_centavos !== null) ? Number(custoRow.rows[0].custo_centavos) : null;
+      const totalLinha = item.preco_centavos * qtd;
+      totalCentavos += totalLinha; totalQtd += qtd;
+      linhas.push({ itemId, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome, corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : null, precoCentavos: item.preco_centavos, quantidade: qtd, totalCentavos: totalLinha, custoCentavos });
+    }
+    // Estorna a reserva atual e limpa linhas/lancamentos antigos.
+    await estoque.estornarReserva(client, pid, req.session.user.id);
+    await client.query('DELETE FROM financeiro WHERE pedido_id = $1', [pid]);
+    await client.query('DELETE FROM linhas WHERE pedido_id = $1', [pid]);
+    // NF mantida como estava: recalcula o imposto sobre a nova base.
+    const impostoCentavos = ped.com_nf ? Math.round(totalCentavos * (ped.nf_parcela_bps / 10000) * (ped.nf_bps / 10000)) : 0;
+    const totalComImposto = totalCentavos + impostoCentavos;
+    for (const l of linhas) {
+      await client.query(
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku, custo_centavos)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [pid, l.itemId, l.itemNome, 'Retirada no CD', l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
+      );
+    }
+    await estoque.reservarPedido(client, pid, req.session.user.id);
+    // Pagamento (igual à criação): à vista ou parcelado por datas.
+    let parcelaVencs = [];
+    try { parcelaVencs = typeof body.parcelaVencs === 'string' ? JSON.parse(body.parcelaVencs) : (Array.isArray(body.parcelaVencs) ? body.parcelaVencs : []); } catch (e) { parcelaVencs = []; }
+    const nParcelas = parseInt(body.parcelas, 10) || 1;
+    if (nParcelas > 1) {
+      if (parcelaVencs.length !== nParcelas) throw new Error('As datas das parcelas estão incompletas.');
+      const vencs = parcelaVencs.map((d) => { const s = String(d).trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('Data de parcela inválida.'); return { venc: s }; });
+      await financeiro.criarParcelas(client, pid, clienteId, totalComImposto, vencs);
+    } else {
+      await financeiro.criarLancamento(client, pid, clienteId, totalComImposto, totalQtd);
+    }
+    await client.query('UPDATE pedidos SET total_centavos = $2, total_etiquetas = $3, imposto_centavos = $4 WHERE id = $1', [pid, totalComImposto, totalQtd, impostoCentavos]);
+    await client.query('COMMIT');
+    res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Retirada ' + ped.numero + ' atualizada.'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.redirect('/admin/pedido/' + pid + '/editar?erro=' + encodeURIComponent(e.message || 'Falha ao salvar as alterações.'));
+  } finally { client.release(); }
+});
+
 // Confirma que o cliente retirou: baixa o estoque (fisico) e marca como retirado.
 router.post('/pedido/:id/confirmar-retirada', exigeAdminFull, async (req, res) => {
   const pid = pInt(req.params.id);

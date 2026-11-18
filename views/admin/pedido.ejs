@@ -17,10 +17,13 @@
     <% } else { %>
       <span class="badge warn">Aguardando retirada</span>
       <% if (isFull) { %>
-      <form method="post" action="/admin/pedido/<%= pedido.id %>/confirmar-retirada" style="margin-left:auto"
-            onsubmit="return confirm('Confirmar a retirada de <%= pedido.numero %>?\n\nIsso baixa o estoque dos itens. Faça só quando o cliente levar a mercadoria.')">
-        <button class="btn" type="submit">✓ Confirmar retirada</button>
-      </form>
+      <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+        <a class="btn ghost" href="/admin/pedido/<%= pedido.id %>/editar">✏️ Editar</a>
+        <form method="post" action="/admin/pedido/<%= pedido.id %>/confirmar-retirada"
+              onsubmit="return confirm('Confirmar a retirada de <%= pedido.numero %>?\n\nIsso baixa o estoque dos itens. Faça só quando o cliente levar a mercadoria.')">
+          <button class="btn" type="submit">✓ Confirmar retirada</button>
+        </form>
+      </div>
       <% } %>
     <% } %>
   </div>
@@ -104,11 +107,11 @@
   <%- include('../partials/etiquetas-detalhe', { pid: pedido.id, etqs: etiquetas, desp: etqDespachadas, tot: etqTotal, admin: true, formatDateTime: formatDateTime }) %>
   <% } %>
 
-  <% if (isFull && !ehRetirada) { %>
+  <% if (isFull) { %>
   <details class="danger-zone">
-    <summary>Excluir este pedido (teste ou lançamento errado)</summary>
+    <summary>Excluir <%= ehRetirada ? 'esta retirada' : 'este pedido' %> (teste ou lançamento errado)</summary>
     <form method="post" action="/admin/pedido/<%= pedido.id %>/excluir" class="fin-form" style="margin-top:10px"
-          onsubmit="return confirm('Excluir o pedido <%= pedido.numero %>?\n\nEtiquetas, comprovante, lançamento financeiro e repasses somem; o estoque reservado/despachado é estornado. Não tem volta.')">
+          onsubmit="return confirm('Excluir <%= ehRetirada ? ('a retirada ' + pedido.numero) : ('o pedido ' + pedido.numero) %>?\n\nO lançamento/parcelas no financeiro somem e o estoque <%= ehRetirada ? 'reservado/baixado' : 'reservado/despachado' %> é estornado. Não tem volta.')">
       <div class="field" style="margin:0;min-width:220px"><label>Senha do administrador</label><input type="password" name="senha" autocomplete="current-password" required /></div>
       <button class="btn danger sm" type="submit">Excluir pedido</button>
     </form>

@@ -71,6 +71,15 @@ async function baixarRetirada(client, pedidoId, usuarioId) {
   }
 }
 
+// Libera a reserva atual de um pedido (usado ao EDITAR uma retirada ainda aguardando: solta a
+// reserva das linhas atuais antes de regravar as novas). Atribuido ao proprio pedido para o
+// estoque_mov continuar fechando a conta se o pedido for excluido depois.
+async function estornarReserva(client, pedidoId, usuarioId) {
+  for (const l of await linhasDoPedido(client, pedidoId)) {
+    await movimentar(client, { produtoId: l.produto_id, corId: l.cor_id, corNome: l.cor_nome, quantidade: 0, reserva: -l.quantidade, motivo: 'Estorno (edição)', pedidoId, linhaId: l.id, usuarioId });
+  }
+}
+
 // Despacho: consome 1 do fisico e 1 da reserva pela etiqueta despachada.
 async function baixarEtiqueta(client, etiquetaId, usuarioId) {
   const r = await client.query(
@@ -158,4 +167,4 @@ async function historico(f) {
   return r.rows;
 }
 
-module.exports = { MOTIVOS, movimentar, reservarPedido, baixarEtiqueta, baixarRetirada, liberarReservaPedido, saldosParaCliente, saldosSugerido, saldosTodos, historico };
+module.exports = { MOTIVOS, movimentar, reservarPedido, baixarEtiqueta, baixarRetirada, estornarReserva, liberarReservaPedido, saldosParaCliente, saldosSugerido, saldosTodos, historico };

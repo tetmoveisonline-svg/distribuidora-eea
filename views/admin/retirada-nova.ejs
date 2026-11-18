@@ -1,4 +1,5 @@
-<%- include('../partials/app-open', { titulo: 'Nova retirada no CD', ativo: 'pedidos' }) %>
+<% var ehEdit = (typeof edit !== 'undefined' && edit); %>
+<%- include('../partials/app-open', { titulo: ehEdit ? ('Editar retirada ' + edit.numero) : 'Nova retirada no CD', ativo: 'pedidos' }) %>
 
 <style>
   .ret-rows{margin-top:6px}
@@ -28,17 +29,17 @@
   .ret-pg td input[type=date]{padding:6px 8px}
 </style>
 
-<h2 class="title">Nova retirada no CD</h2>
-<p class="sub">Para clientes que retiram a mercadoria no seu centro de distribuição. Você monta o pedido direto, sem etiquetas. O estoque só baixa quando você confirmar a retirada.</p>
+<h2 class="title"><%= ehEdit ? ('Editar retirada ' + edit.numero) : 'Nova retirada no CD' %></h2>
+<p class="sub"><% if (ehEdit) { %>Ajuste os produtos/quantidades e o parcelamento. O estoque é reajustado ao salvar. (A nota fiscal e o cliente são mantidos.)<% } else { %>Para clientes que retiram a mercadoria no seu centro de distribuição. Você monta o pedido direto, sem etiquetas. O estoque só baixa quando você confirmar a retirada.<% } %></p>
 
 <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
 
 <div class="card pad">
-  <form id="retForm" method="post" action="/admin/retirada">
+  <form id="retForm" method="post" action="<%= ehEdit ? ('/admin/pedido/' + edit.pedidoId + '/editar') : '/admin/retirada' %>">
     <div class="field"><label for="cliente">Cliente</label>
-      <select id="cliente" name="clienteId" required>
+      <select id="cliente" name="clienteId" required <%= ehEdit ? 'disabled' : '' %>>
         <option value="">— escolha o cliente —</option>
-        <% clientes.forEach(function (c) { %><option value="<%= c.id %>"><%= c.nome %></option><% }); %>
+        <% clientes.forEach(function (c) { %><option value="<%= c.id %>" <%= ehEdit && c.id === edit.clienteId ? 'selected' : '' %>><%= c.nome %></option><% }); %>
       </select>
     </div>
 
@@ -47,7 +48,7 @@
     <div id="semCliente" class="dim" style="font-size:12.5px">Escolha um cliente para carregar os produtos.</div>
     <button type="button" class="btn ghost sm" id="addRow" style="display:none;margin-top:4px">+ adicionar produto</button>
 
-    <% if (nfBps > 0) { %>
+    <% if (nfBps > 0 && !ehEdit) { %>
     <div class="ret-nf" id="nfBox">
       <label class="tag"><input type="checkbox" id="nfCheck" /> <span style="font-weight:600">🧾 Com nota fiscal</span>
         <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-dim)" id="nfPctWrap">% com NF (mín. 30%) <input type="number" id="nfParcela" min="30" max="100" value="30" /> %</span>
@@ -55,6 +56,8 @@
       <div class="res" id="nfResumo"></div>
       <div class="dim" style="font-size:11px;margin-top:4px">Imposto de <%= (nfBps % 100 === 0 ? (nfBps/100) : (nfBps/100).toFixed(2).replace('.', ',')) %>% sobre a parcela escolhida. Entra no total a pagar.</div>
     </div>
+    <% } else if (ehEdit && edit.comNf) { %>
+    <div class="ret-nf" style="opacity:.9"><span style="font-weight:600">🧾 Com nota fiscal <%= (edit.nfParcelaBps/100) %>%</span> <span class="dim" style="font-size:12px">— mantida. O imposto é recalculado sobre o novo valor.</span></div>
     <% } %>
 
     <div class="ret-pg" id="pgBox">
@@ -82,8 +85,8 @@
     <input type="hidden" name="parcelaVencs" id="parcelaVencsHidden" value="" />
 
     <div style="display:flex;gap:10px;margin-top:14px">
-      <a class="btn ghost" href="/admin/pedidos">Cancelar</a>
-      <button class="btn" type="submit" id="criar" disabled>Criar retirada</button>
+      <a class="btn ghost" href="<%= ehEdit ? ('/admin/pedido/' + edit.pedidoId) : '/admin/pedidos' %>">Cancelar</a>
+      <button class="btn" type="submit" id="criar" disabled><%= ehEdit ? 'Salvar alterações' : 'Criar retirada' %></button>
     </div>
   </form>
 </div>
@@ -91,6 +94,7 @@
 <script>
 (function () {
   var NF_BPS = <%- jsonForScript(nfBps || 0) %>;
+  var EDIT = <%- ehEdit ? jsonForScript(edit) : 'null' %>;
   var itens = [];           // catalogo do cliente
   var rows = [];            // [{itemId, corId, qtd}]
   var elRows = document.getElementById('rows');
@@ -103,18 +107,19 @@
   function itemById(id){ for (var i=0;i<itens.length;i++){ if(String(itens[i].id)===String(id)) return itens[i]; } return null; }
   function nfPct(){ var el=document.getElementById('nfParcela'); var v=parseInt(el&&el.value,10); if(isNaN(v))v=30; if(v<30)v=30; if(v>100)v=100; return v; }
 
-  document.getElementById('cliente').addEventListener('change', function(){
-    var id=this.value; rows=[]; itens=[];
+  function carregarItens(id, done){
+    rows=[]; itens=[];
     if(!id){ elRows.innerHTML=''; elSem.style.display='block'; elAdd.style.display='none'; render(); return; }
     fetch('/admin/retirada/itens?cliente='+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(d){
       itens = (d && d.itens) || [];
       elSem.style.display = itens.length? 'none':'block';
       if(!itens.length){ elSem.textContent='Este cliente não tem produtos com preço. Cadastre em Preços por cliente.'; }
       elAdd.style.display = itens.length? 'inline-block':'none';
-      if(itens.length){ rows=[{itemId:itens[0].id, corId:null, qtd:1}]; }
-      render();
+      if(done){ done(); } else { if(itens.length){ rows=[{itemId:itens[0].id, corId:null, qtd:1}]; } render(); }
     }).catch(function(){ elSem.textContent='Falha ao carregar os produtos.'; elSem.style.display='block'; });
-  });
+  }
+  function itemByProduto(pid){ for(var i=0;i<itens.length;i++){ if(Number(itens[i].produto_id)===Number(pid)) return itens[i]; } return null; }
+  document.getElementById('cliente').addEventListener('change', function(){ carregarItens(this.value); });
 
   elAdd.addEventListener('click', function(){ if(itens.length){ rows.push({itemId:itens[0].id, corId:null, qtd:1}); render(); } });
 
@@ -152,7 +157,8 @@
     rows.forEach(function(r){ var it=itemById(r.itemId)||{preco_centavos:0}; base+=it.preco_centavos*(r.qtd||0); qtd+=(r.qtd||0); });
     var comNf = NF_BPS>0 && document.getElementById('nfCheck') && document.getElementById('nfCheck').checked;
     var imposto=0, parcelaC=0;
-    if(comNf){ var pct=nfPct(); parcelaC=Math.round(base*pct/100); imposto=Math.round(parcelaC*NF_BPS/10000); }
+    if(EDIT && EDIT.comNf){ parcelaC=Math.round(base*(EDIT.nfParcelaBps/10000)); imposto=Math.round(base*(EDIT.nfParcelaBps/10000)*(EDIT.nfBps/10000)); comNf=true; }
+    else if(comNf){ var pct=nfPct(); parcelaC=Math.round(base*pct/100); imposto=Math.round(parcelaC*NF_BPS/10000); }
     var total=base+imposto;
     document.getElementById('resumoLinha').innerHTML = qtd+' itens'+(comNf? ' · parcela com NF '+brl(parcelaC)+' · imposto '+brl(imposto):'');
     document.getElementById('grandTotal').textContent = brl(total);
@@ -207,6 +213,17 @@
     document.getElementById('parcelasHidden').value = parcelado()? nParc() : 1;
     document.getElementById('parcelaVencsHidden').value = parcelado()? JSON.stringify(pgVencs) : '';
   });
+
+  // ---------- Modo edição: pré-preenche produtos e parcelas ----------
+  if (EDIT) {
+    carregarItens(EDIT.clienteId, function(){
+      rows = (EDIT.itens||[]).map(function(e){ var it=itemByProduto(e.produtoId); return { itemId: it? it.id : (itens[0]&&itens[0].id), corId: e.corId, qtd: e.quantidade }; }).filter(function(r){ return r.itemId!=null; });
+      if (EDIT.parcelaVencs && EDIT.parcelaVencs.length){
+        elForma.value='parcelado'; if(elN) elN.value=EDIT.parcelaVencs.length; pgVencs=EDIT.parcelaVencs.slice(); if(elPrim) elPrim.value=pgVencs[0]||'';
+      } else { elForma.value='avista'; }
+      render();
+    });
+  }
 })();
 </script>
 
