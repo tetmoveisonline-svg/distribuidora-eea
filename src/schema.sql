@@ -247,6 +247,13 @@ ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sku TEXT;
 -- O preenchimento dos pedidos antigos fica mais abaixo (depois de produtos.custo_centavos existir).
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
 
+-- Preco de SISTEMA (base) da linha, quando o preco cobrado (preco_centavos) foi acima do sistema.
+-- Usado em retiradas em que o preposto vende por um valor maior: a comissao e calculada sobre a
+-- base e a diferenca (preco_centavos - preco_base_centavos) e o acrescimo que vai 100% pro preposto.
+-- Para todas as linhas sem acrescimo, base = preco cobrado.
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS preco_base_centavos INTEGER;
+UPDATE linhas SET preco_base_centavos = preco_centavos WHERE preco_base_centavos IS NULL;
+
 -- O SKU e da cor (codigo completo), nao do produto. Migra o que ja foi cadastrado como base-sufixo.
 ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS sku TEXT;
 UPDATE produto_cores c SET sku = CASE WHEN p.sku IS NOT NULL AND p.sku <> '' AND c.sufixo IS NOT NULL THEN p.sku || '-' || c.sufixo ELSE c.sufixo END

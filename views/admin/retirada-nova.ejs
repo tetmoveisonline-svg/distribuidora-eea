@@ -10,6 +10,9 @@
   .ret-row .lbl{font-size:11px;color:var(--text-dim)}
   .ret-row select,.ret-row input{background:var(--field-bg);border:1px solid var(--field-border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13.5px}
   .ret-row .qtd{width:72px;text-align:right}
+  .ret-row .vendainp{width:104px;text-align:right}
+  .ret-row .venda-lbl{color:var(--gold)}
+  .ret-row .vhint{font-size:10.5px;color:var(--text-dim);margin-top:4px;white-space:nowrap}
   .ret-row .val{font-size:13.5px;padding:8px 0;min-width:90px;text-align:right}
   .ret-row .rm{background:transparent;border:none;color:var(--danger);font-size:12.5px;cursor:pointer;padding:8px 2px}
   .ret-nf{margin-top:14px;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;background:var(--gold-soft)}
@@ -104,6 +107,11 @@
 
   function brl(c){ return 'R$ ' + (Number(c||0)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function precoFmt(c){ return (Number(c||0)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  // "1.950,06" / "195,06" / "195" -> centavos (ou null se vazio/inválido)
+  function parseVenda(s){ if(s==null) return null; var t=String(s).trim(); if(t==='') return null; t=t.replace(/\./g,'').replace(',','.').replace(/[^0-9.]/g,''); if(t==='') return null; var v=parseFloat(t); if(isNaN(v)) return null; return Math.round(v*100); }
+  // preço cobrado na linha: venda se preenchida e maior que o sistema; senão o preço de sistema
+  function precoLinha(row, it){ var base=it?Number(it.preco_centavos||0):0; var v=parseVenda(row&&row.venda); return (v!=null && v>base)? v : base; }
   function itemById(id){ for (var i=0;i<itens.length;i++){ if(String(itens[i].id)===String(id)) return itens[i]; } return null; }
   function nfPct(){ var el=document.getElementById('nfParcela'); var v=parseInt(el&&el.value,10); if(isNaN(v))v=30; if(v<30)v=30; if(v>100)v=100; return v; }
 
@@ -133,11 +141,16 @@
         var co='<option value="">— cor —</option>'+it.cores.map(function(c){ return '<option value="'+c.id+'"'+(c.id===row.corId?' selected':'')+'>'+esc(c.nome)+(c.sku?' · '+esc(c.sku):'')+' · '+c.saldo+' disp.</option>'; }).join('');
         corHtml='<div class="f cor"><span class="lbl">Cor</span><select data-idx="'+idx+'" class="selcor">'+co+'</select></div>';
       }
-      var total=it.preco_centavos*(row.qtd||0);
+      var base=Number(it.preco_centavos||0);
+      var precoUnit=precoLinha(row, it);
+      var acr=precoUnit-base;
+      var total=precoUnit*(row.qtd||0);
+      var hint = acr>0 ? ('sistema '+brl(base)+' · +'+brl(acr)) : ('sistema '+brl(base));
       html+='<div class="ret-row">'+
         '<div class="f prod"><span class="lbl">Produto</span><select data-idx="'+idx+'" class="selprod">'+opts+'</select></div>'+
         corHtml+
         '<div class="f"><span class="lbl">Qtd</span><input data-idx="'+idx+'" class="qtd qtdinp" value="'+(row.qtd||1)+'" inputmode="numeric" /></div>'+
+        '<div class="f"><span class="lbl venda-lbl">Preço de venda ✎</span><input data-idx="'+idx+'" class="vendainp" value="'+esc(row.venda||'')+'" placeholder="'+precoFmt(base)+'" inputmode="decimal" /><div class="vhint">'+hint+'</div></div>'+
         '<div class="f"><span class="lbl">Total</span><div class="val">'+brl(total)+'</div></div>'+
         '<button type="button" class="rm" data-idx="'+idx+'">remover</button>'+
       '</div>';
@@ -146,6 +159,7 @@
     elRows.querySelectorAll('.selprod').forEach(function(el){ el.addEventListener('change',function(){ var r=rows[+el.dataset.idx]; r.itemId=el.value; r.corId=null; render(); }); });
     elRows.querySelectorAll('.selcor').forEach(function(el){ el.addEventListener('change',function(){ rows[+el.dataset.idx].corId=el.value?parseInt(el.value,10):null; render(); }); });
     elRows.querySelectorAll('.qtdinp').forEach(function(el){ el.addEventListener('change',function(){ var v=parseInt(el.value,10); rows[+el.dataset.idx].qtd=(!v||v<1)?1:v; render(); }); });
+    elRows.querySelectorAll('.vendainp').forEach(function(el){ el.addEventListener('change',function(){ rows[+el.dataset.idx].venda=el.value; render(); }); });
     elRows.querySelectorAll('.rm').forEach(function(el){ el.addEventListener('click',function(){ rows.splice(+el.dataset.idx,1); render(); }); });
     totals();
   }
@@ -154,7 +168,7 @@
 
   function totals(){
     var base=0, qtd=0;
-    rows.forEach(function(r){ var it=itemById(r.itemId)||{preco_centavos:0}; base+=it.preco_centavos*(r.qtd||0); qtd+=(r.qtd||0); });
+    rows.forEach(function(r){ var it=itemById(r.itemId)||{preco_centavos:0}; base+=precoLinha(r,it)*(r.qtd||0); qtd+=(r.qtd||0); });
     var comNf = NF_BPS>0 && document.getElementById('nfCheck') && document.getElementById('nfCheck').checked;
     var imposto=0, parcelaC=0;
     if(EDIT && EDIT.comNf){ parcelaC=Math.round(base*(EDIT.nfParcelaBps/10000)); imposto=Math.round(base*(EDIT.nfParcelaBps/10000)*(EDIT.nfBps/10000)); comNf=true; }
@@ -207,7 +221,7 @@
 
   document.getElementById('retForm').addEventListener('submit', function(e){
     var comNf = NF_BPS>0 && nfc && nfc.checked;
-    document.getElementById('itensJson').value = JSON.stringify(rows.map(function(r){ return {itemId:r.itemId, corId:r.corId, quantidade:r.qtd}; }));
+    document.getElementById('itensJson').value = JSON.stringify(rows.map(function(r){ return {itemId:r.itemId, corId:r.corId, quantidade:r.qtd, precoVenda:(r.venda||'')}; }));
     document.getElementById('comNfHidden').value = comNf? 'true':'false';
     document.getElementById('nfParcelaHidden').value = comNf? (nfPct()*100) : '';
     document.getElementById('parcelasHidden').value = parcelado()? nParc() : 1;
@@ -217,7 +231,7 @@
   // ---------- Modo edição: pré-preenche produtos e parcelas ----------
   if (EDIT) {
     carregarItens(EDIT.clienteId, function(){
-      rows = (EDIT.itens||[]).map(function(e){ var it=itemByProduto(e.produtoId); return { itemId: it? it.id : (itens[0]&&itens[0].id), corId: e.corId, qtd: e.quantidade }; }).filter(function(r){ return r.itemId!=null; });
+      rows = (EDIT.itens||[]).map(function(e){ var it=itemByProduto(e.produtoId); return { itemId: it? it.id : (itens[0]&&itens[0].id), corId: e.corId, qtd: e.quantidade, venda: e.venda||'' }; }).filter(function(r){ return r.itemId!=null; });
       if (EDIT.parcelaVencs && EDIT.parcelaVencs.length){
         elForma.value='parcelado'; if(elN) elN.value=EDIT.parcelaVencs.length; pgVencs=EDIT.parcelaVencs.slice(); if(elPrim) elPrim.value=pgVencs[0]||'';
       } else { elForma.value='avista'; }
