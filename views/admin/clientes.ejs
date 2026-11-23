@@ -1,5 +1,42 @@
 <%- include('../partials/app-open', { titulo: 'Clientes', ativo: 'clientes' }) %>
 
+<style>
+  /* ===== Clientes — tabela refinada (Opção 3) ===== */
+  .cli-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .cli-toolbar .ferramentas { display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; }
+  .busca-wrap { position:relative; }
+  .busca-wrap input { background:var(--field-bg); border:1px solid var(--field-border); border-radius:9px; padding:8px 12px 8px 30px; color:var(--text); font-size:13px; min-width:200px; outline:none; }
+  .busca-wrap input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--focus); }
+  .busca-wrap .ic { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:13px; pointer-events:none; }
+  .filtro-sel { background:var(--field-bg); border:1px solid var(--field-border); border-radius:9px; padding:8px 10px; color:var(--text); font-size:12.5px; cursor:pointer; outline:none; }
+
+  .clientes-tbl { width:100%; border-collapse:collapse; }
+  .clientes-tbl th { font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.4px; text-align:left; padding:10px 10px; font-weight:600; border-bottom:1px solid var(--border); }
+  .clientes-tbl th.num, .clientes-tbl td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .clientes-tbl td { padding:12px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .clientes-tbl tbody tr.linha:nth-of-type(odd) { background:rgba(127,127,127,.03); }
+  .clientes-tbl tbody tr.linha:hover { background:var(--accent-soft); }
+  .cli-cell { display:flex; align-items:center; gap:10px; }
+  .ini { width:34px; height:34px; border-radius:9px; background:var(--panel); border:1px solid var(--border-strong); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12.5px; color:var(--info); flex:none; }
+  .cli-nome { font-weight:600; }
+  .cli-login { color:var(--text-dim); font-size:12.5px; }
+  .lim-txt { font-size:12px; margin-bottom:5px; }
+  .bar { height:6px; border-radius:5px; background:var(--field-bg); overflow:hidden; border:1px solid var(--border); max-width:170px; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+  .acts { display:flex; gap:6px; justify-content:flex-end; }
+  .btn.ico { background:transparent; border:1px solid var(--border-strong); color:var(--text-muted); padding:6px 9px; border-radius:8px; font-size:13px; line-height:1; cursor:pointer; }
+  .btn.ico:hover { background:var(--field-bg); color:var(--text); }
+  .btn.ico.perigo { color:var(--danger); border-color:color-mix(in srgb, var(--danger) 45%, var(--border-strong)); }
+  .btn.ico.perigo:hover { background:var(--danger-soft); }
+  .editor-row > td { background:var(--panel); padding:0 !important; border-bottom:1px solid var(--border); }
+  .editor-box { padding:14px; }
+  .nome-input { min-width:200px; }
+  .cli-vazio { padding:26px; text-align:center; color:var(--text-dim); }
+  @media (max-width:820px) {
+    .clientes-tbl .col-login, .clientes-tbl .col-negoc { display:none; }
+  }
+</style>
+
 <h2 class="title">Clientes</h2>
 <p class="sub">Cada cliente tem login/senha próprios para subir as etiquetas.</p>
 
@@ -31,95 +68,145 @@
 </script>
 <% } %>
 
-<div class="grid2">
-  <div class="card pad">
-    <div class="section-title">Novo cliente</div>
-    <form method="post" action="/admin/clientes">
-      <div class="field"><label>Nome / empresa</label><input name="nome" placeholder="Loja do Cliente Ltda" /></div>
-      <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
-      <div class="field"><label>WhatsApp (DDD + número)</label><input name="telefone" placeholder="17999990000" inputmode="numeric" /></div>
-      <div class="field"><label>Login</label><input name="login" placeholder="loja.cliente" /></div>
-      <div class="field"><label>Senha</label><input name="senha" placeholder="definir senha" /></div>
-      <div class="field"><label>Prazo de pagamento (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>
-      <div class="field"><label>Limite de crédito (R$) — vazio = sem limite</label><input name="limite" placeholder="5.000,00" /></div>
-      <button class="btn block" type="submit">Salvar cliente</button>
-    </form>
+<div class="card pad">
+  <div class="cli-toolbar">
+    <div class="section-title" style="margin:0">Clientes cadastrados <span class="dim" style="font-weight:400">(<%= clientes.length %>)</span></div>
+    <div class="ferramentas">
+      <div class="busca-wrap"><span class="ic">🔍</span><input id="buscaCli" type="search" placeholder="Buscar cliente ou login…" autocomplete="off" /></div>
+      <select id="filtroStatus" class="filtro-sel">
+        <option value="todos">Status: todos</option>
+        <option value="ativo">Só ativos</option>
+        <option value="inativo">Só inativos</option>
+      </select>
+      <button type="button" class="btn" id="btnNovoCliente">+ Novo cliente</button>
+    </div>
   </div>
-  <div class="card pad">
-    <div class="section-title">Clientes cadastrados</div>
-    <% if (clientes.length === 0) { %><div class="empty">Nenhum cliente ainda.</div><% } else { %>
-    <table>
-      <thead><tr><th>Cliente</th><th>Login</th><th class="num">Negociações</th><th>Comissão (quem agregou)</th><th>Prazo · limite · vencido</th><th>Status</th><th></th></tr></thead>
+
+  <% if (clientes.length === 0) { %>
+    <div class="cli-vazio">Nenhum cliente ainda. Clique em “+ Novo cliente” para cadastrar o primeiro.</div>
+  <% } else { %>
+  <div style="overflow-x:auto">
+    <table class="clientes-tbl">
+      <thead><tr>
+        <th>Cliente</th>
+        <th class="col-login">Login</th>
+        <th class="num col-negoc">Negoc.</th>
+        <th>Em aberto / limite</th>
+        <th>Prazo</th>
+        <th>Status</th>
+        <th style="text-align:right">Ações</th>
+      </tr></thead>
       <tbody>
-        <% clientes.forEach(function (c) { %>
-          <tr>
+        <% clientes.forEach(function (c) {
+             var ini = (c.nome || '').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase() || '?';
+        %>
+          <tr class="linha" id="row-<%= c.id %>" data-busca="<%= (c.nome + ' ' + (c.login || '')).toLowerCase() %>" data-status="<%= c.ativo ? 'ativo' : 'inativo' %>">
             <td>
-              <div class="nome-view" id="nomeview-<%= c.id %>" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span><%= c.nome %></span>
-                <button type="button" class="btn ghost sm nome-edit" data-id="<%= c.id %>" title="Editar nome" style="padding:2px 9px;font-size:11px;line-height:1.5">✏️ editar nome</button>
+              <div class="nome-view cli-cell" id="nomeview-<%= c.id %>">
+                <div class="ini"><%= ini %></div>
+                <div>
+                  <div class="cli-nome"><%= c.nome %></div>
+                  <% if (c.telefone) { %><div class="cli-login">📱 <%= c.telefone %></div><% } %>
+                </div>
               </div>
-              <form method="post" action="/admin/clientes/<%= c.id %>/nome" class="nome-form" id="nomeform-<%= c.id %>" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
-                <input name="nome" value="<%= c.nome %>" maxlength="120" required style="min-width:150px" />
+              <form method="post" action="/admin/clientes/<%= c.id %>/nome" class="nome-form" id="nomeform-<%= c.id %>" style="display:none;align-items:center;gap:7px;flex-wrap:wrap">
+                <input name="nome" value="<%= c.nome %>" maxlength="120" required class="nome-input" />
                 <button class="btn sm" type="submit">Salvar</button>
                 <button type="button" class="btn ghost sm nome-cancel" data-id="<%= c.id %>">Cancelar</button>
               </form>
-              <% if (c.limite_centavos !== null) { %><div class="dim" style="font-size:11.5px"><%= formatBRL(c.em_aberto) %> em aberto de <%= formatBRL(c.limite_centavos) %></div><% } %>
             </td>
-            <td class="dim"><%= c.login || '—' %></td>
-            <td class="num"><%= c.produtos %></td>
+            <td class="cli-login col-login"><%= c.login || '—' %></td>
+            <td class="num col-negoc"><%= c.produtos %></td>
             <td>
-              <div style="font-size:12.5px">
-                <% if (c.representante_id) { %>
-                  <% if (c.rep_eh_preposto) { %>
-                    <%= c.rep_nome %> <span class="dim">(prep.)</span> <%= formatPercent(c.comissao_preposto_bps || 0) %>
-                    <span class="dim">+ <%= c.rep_pai_nome || '—' %> <%= formatPercent((c.comissao_total_bps || 0) - (c.comissao_preposto_bps || 0)) %></span>
-                  <% } else { %>
-                    <%= c.rep_nome %> · <%= formatPercent(c.comissao_total_bps || 0) %>
-                  <% } %>
-                <% } else { %><span class="dim">—</span><% } %>
-                <button type="button" class="btn ghost sm com-toggle" data-id="<%= c.id %>" style="margin-left:6px">editar</button>
-              </div>
+              <% if (c.limite_centavos !== null) { var pct = c.limite_centavos > 0 ? Math.min(100, Math.round(c.em_aberto / c.limite_centavos * 100)) : 0; %>
+                <div class="lim-txt"><%= formatBRL(c.em_aberto) %> <span class="dim">de <%= formatBRL(c.limite_centavos) %></span></div>
+                <div class="bar"><i style="width:<%= Math.max(pct, 2) %>%<%= pct >= 100 ? ';background:var(--danger)' : (pct >= 80 ? ';background:var(--warn, #d2a33f)' : '') %>"></i></div>
+              <% } else { %>
+                <span class="dim">Sem limite<% if (c.em_aberto > 0) { %> · <%= formatBRL(c.em_aberto) %> em aberto<% } %></span>
+              <% } %>
             </td>
-            <td>
-              <form method="post" action="/admin/clientes/<%= c.id %>/prazo" class="prazo-form">
-                <input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" title="prazo em dias" /> d
-                <input name="limite" class="lim" value="<%= c.limite_centavos === null ? '' : (c.limite_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) %>" placeholder="sem limite" title="limite de crédito (R$)" />
-                <label title="com pedido vencido, bloquear envios novos"><input type="checkbox" name="bloquear_vencido" value="1" <%= c.bloquear_vencido ? 'checked' : '' %> /> bloq.</label>
-                <button class="btn ghost sm" type="submit">ok</button>
-              </form>
-            </td>
+            <td><%= c.prazo_dias %> dia<%= c.prazo_dias === 1 ? '' : 's' %></td>
             <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
             <td>
-              <div class="actions-inline" style="flex-wrap:nowrap">
-                <form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin:0"><button class="btn ghost sm" type="submit"><%= c.ativo ? 'Desativar' : 'Ativar' %></button></form>
-                <button type="button" class="btn ghost sm danger btn-excluir-cli" data-id="<%= c.id %>" data-nome="<%= c.nome %>" data-pedidos="<%= c.pedidos %>" data-aberto="<%= formatBRL(c.em_aberto) %>">Excluir</button>
+              <div class="acts">
+                <button type="button" class="btn ico nome-edit" data-id="<%= c.id %>" title="Editar nome">✎</button>
+                <button type="button" class="btn ico com-toggle" data-id="<%= c.id %>" title="Comissão (quem agregou)">%</button>
+                <button type="button" class="btn ico prazo-toggle" data-id="<%= c.id %>" title="Prazo, limite e bloqueio">⚙</button>
+                <form method="post" action="/admin/clientes/<%= c.id %>/toggle" style="margin:0"><button class="btn ico" type="submit" title="<%= c.ativo ? 'Desativar' : 'Ativar' %>"><%= c.ativo ? '⏸' : '▶' %></button></form>
+                <button type="button" class="btn ico perigo btn-excluir-cli" data-id="<%= c.id %>" data-nome="<%= c.nome %>" data-pedidos="<%= c.pedidos %>" data-aberto="<%= formatBRL(c.em_aberto) %>" title="Excluir">🗑</button>
               </div>
             </td>
           </tr>
-          <tr class="com-row" id="com-<%= c.id %>" style="display:none">
-            <td colspan="7" style="background:var(--panel)">
-              <form method="post" action="/admin/clientes/<%= c.id %>/comissao">
-                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-                  <div class="field" style="margin:0;min-width:260px"><label>Agregado por</label>
-                    <select name="representante_id" class="com-sel" data-cli="<%= c.id %>">
-                      <option value="">— sem comissão —</option>
-                      <% reps.forEach(function (r) { %>
-                        <option value="<%= r.id %>" data-prep="<%= r.representante_pai_id ? 1 : 0 %>" <%= c.representante_id === r.id ? 'selected' : '' %>><%= r.nome %><%= r.representante_pai_id ? ' (preposto de ' + (r.pai_nome || '') + ')' : '' %></option>
-                      <% }); %>
-                    </select>
+
+          <!-- Editor: comissão / quem agregou -->
+          <tr class="editor-row com-row" id="com-<%= c.id %>" style="display:none">
+            <td colspan="7">
+              <div class="editor-box">
+                <form method="post" action="/admin/clientes/<%= c.id %>/comissao">
+                  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                    <div class="field" style="margin:0;min-width:260px"><label>Agregado por</label>
+                      <select name="representante_id" class="com-sel" data-cli="<%= c.id %>">
+                        <option value="">— sem comissão —</option>
+                        <% reps.forEach(function (r) { %>
+                          <option value="<%= r.id %>" data-prep="<%= r.representante_pai_id ? 1 : 0 %>" <%= c.representante_id === r.id ? 'selected' : '' %>><%= r.nome %><%= r.representante_pai_id ? ' (preposto de ' + (r.pai_nome || '') + ')' : '' %></option>
+                        <% }); %>
+                      </select>
+                    </div>
+                    <div class="field" style="margin:0;width:150px"><label>Comissão total %</label><input name="total" value="<%= c.comissao_total_bps ? (c.comissao_total_bps / 100) : '' %>" placeholder="ex.: 5" /></div>
+                    <div class="field com-prep" style="margin:0;width:150px" data-cli="<%= c.id %>"><label>% do preposto</label><input name="preposto" value="<%= c.comissao_preposto_bps != null ? (c.comissao_preposto_bps / 100) : '' %>" placeholder="ex.: 4" /></div>
+                    <button class="btn sm" type="submit">Salvar comissão</button>
                   </div>
-                  <div class="field" style="margin:0;width:140px"><label>Comissão total %</label><input name="total" value="<%= c.comissao_total_bps ? (c.comissao_total_bps / 100) : '' %>" placeholder="ex.: 5" /></div>
-                  <div class="field com-prep" style="margin:0;width:140px" data-cli="<%= c.id %>"><label>% do preposto</label><input name="preposto" value="<%= c.comissao_preposto_bps != null ? (c.comissao_preposto_bps / 100) : '' %>" placeholder="ex.: 4" /></div>
-                  <button class="btn sm" type="submit">Salvar comissão</button>
-                </div>
-                <div class="dim" style="font-size:11.5px;margin-top:6px">Preposto: informe quanto fica com ele; o restante do total vai para o representante dele. Vale para os próximos pedidos deste cliente.</div>
-              </form>
+                  <div class="dim" style="font-size:11.5px;margin-top:6px">Preposto: informe quanto fica com ele; o restante do total vai para o representante dele. Vale para os próximos pedidos deste cliente.</div>
+                </form>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Editor: prazo / limite / bloqueio -->
+          <tr class="editor-row prazo-row" id="prazo-<%= c.id %>" style="display:none">
+            <td colspan="7">
+              <div class="editor-box">
+                <form method="post" action="/admin/clientes/<%= c.id %>/prazo">
+                  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                    <div class="field" style="margin:0;width:170px"><label>Prazo de pagamento (dias)</label><input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" /></div>
+                    <div class="field" style="margin:0;width:190px"><label>Limite de crédito (R$)</label><input name="limite" value="<%= c.limite_centavos === null ? '' : (c.limite_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) %>" placeholder="vazio = sem limite" /></div>
+                    <label class="field" style="margin:0;flex-direction:row;align-items:center;gap:7px;width:auto"><input type="checkbox" name="bloquear_vencido" value="1" <%= c.bloquear_vencido ? 'checked' : '' %> style="width:auto" /> <span style="font-size:12.5px">Bloquear novos envios se tiver pedido vencido</span></label>
+                    <button class="btn sm" type="submit">Salvar</button>
+                  </div>
+                </form>
+              </div>
             </td>
           </tr>
         <% }); %>
       </tbody>
     </table>
-    <% } %>
+  </div>
+  <div class="cli-vazio" id="semResultado" style="display:none">Nenhum cliente encontrado para esse filtro.</div>
+  <% } %>
+</div>
+
+<!-- Modal: Novo cliente -->
+<div class="overlay" id="novoOverlay">
+  <div class="card pad modal" style="max-width:520px">
+    <h2 class="title" style="margin-bottom:4px">Novo cliente</h2>
+    <p class="sub" style="margin-bottom:16px">Login e senha próprios para o cliente subir as etiquetas.</p>
+    <form method="post" action="/admin/clientes">
+      <div class="field"><label>Nome / empresa</label><input name="nome" placeholder="Loja do Cliente Ltda" required /></div>
+      <div class="field"><label>E-mail</label><input name="email" placeholder="cliente@email.com" /></div>
+      <div class="field"><label>WhatsApp (DDD + número)</label><input name="telefone" placeholder="17999990000" inputmode="numeric" /></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:150px"><label>Login</label><input name="login" placeholder="loja.cliente" required /></div>
+        <div class="field" style="flex:1;min-width:150px"><label>Senha</label><input name="senha" placeholder="definir senha" required /></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:150px"><label>Prazo (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>
+        <div class="field" style="flex:1;min-width:150px"><label>Limite de crédito (R$)</label><input name="limite" placeholder="5.000,00 (vazio = sem limite)" /></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+        <button class="btn ghost" type="button" id="novoCancelar">Cancelar</button>
+        <button class="btn" type="submit">Salvar cliente</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -128,7 +215,7 @@
   <div class="card pad modal" style="max-width:520px">
     <h2 class="title">Excluir cliente</h2>
     <p class="sub">Você vai excluir <b id="exNome"></b> com <b id="exPedidos"></b> pedido(s) e <b id="exAberto"></b> em aberto no financeiro. Login, preços, pedidos, etiquetas, comprovantes e lançamentos serão apagados. <b>Não tem volta.</b></p>
-    <div class="hint-box" style="margin:0 0 14px">Se a intenção é só impedir novos envios, use "Desativar": o histórico fica guardado.</div>
+    <div class="hint-box" style="margin:0 0 14px">Se a intenção é só impedir novos envios, use “Desativar” (⏸): o histórico fica guardado.</div>
     <form method="post" id="exForm" action="#">
       <div class="field">
         <label for="exSenha">Confirme com a sua senha de administrador</label>
@@ -141,8 +228,19 @@
     </form>
   </div>
 </div>
+
 <script>
   (function () {
+    // ----- Modal novo cliente -----
+    var novoOv = document.getElementById('novoOverlay');
+    var btnNovo = document.getElementById('btnNovoCliente');
+    if (btnNovo && novoOv) {
+      btnNovo.addEventListener('click', function () { novoOv.classList.add('on'); setTimeout(function () { var f = novoOv.querySelector('input[name="nome"]'); if (f) f.focus(); }, 30); });
+      document.getElementById('novoCancelar').addEventListener('click', function () { novoOv.classList.remove('on'); });
+      novoOv.addEventListener('click', function (e) { if (e.target === novoOv) novoOv.classList.remove('on'); });
+    }
+
+    // ----- Modal excluir -----
     var ov = document.getElementById('excluirOverlay');
     var form = document.getElementById('exForm');
     document.querySelectorAll('.btn-excluir-cli').forEach(function (b) {
@@ -159,32 +257,23 @@
     document.getElementById('exCancelar').addEventListener('click', function () { ov.classList.remove('on'); });
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('on'); });
 
-    // Comissao por cliente: abre/fecha o editor e mostra o campo "% do preposto" so quando for preposto.
-    function syncPrep(sel) {
-      var cli = sel.getAttribute('data-cli');
-      var opt = sel.options[sel.selectedIndex];
-      var ehPrep = opt && opt.getAttribute('data-prep') === '1';
-      var box = document.querySelector('.com-prep[data-cli="' + cli + '"]');
-      if (box) box.style.display = ehPrep ? '' : 'none';
-    }
-    document.querySelectorAll('.com-toggle').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var row = document.getElementById('com-' + b.getAttribute('data-id'));
-        if (!row) return;
-        row.style.display = row.style.display === 'none' ? '' : 'none';
-        if (row.style.display !== 'none') { var s = row.querySelector('.com-sel'); if (s) syncPrep(s); }
-      });
-    });
-    document.querySelectorAll('.com-sel').forEach(function (s) {
-      syncPrep(s);
-      s.addEventListener('change', function () { syncPrep(s); });
-    });
+    // Fecha qualquer modal com Esc.
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { ov.classList.remove('on'); if (novoOv) novoOv.classList.remove('on'); } });
 
-    // Editar o nome do cliente: alterna entre o texto e o campo inline.
+    // ----- Editores inline (abre um por vez por cliente) -----
+    function fecharEditores(id) {
+      var com = document.getElementById('com-' + id), pz = document.getElementById('prazo-' + id);
+      if (com) com.style.display = 'none';
+      if (pz) pz.style.display = 'none';
+      var v = document.getElementById('nomeview-' + id), f = document.getElementById('nomeform-' + id);
+      if (v && f) { v.style.display = ''; f.style.display = 'none'; }
+    }
+    // Nome
     function nomeMostra(id, editando) {
       var v = document.getElementById('nomeview-' + id), f = document.getElementById('nomeform-' + id);
       if (!v || !f) return;
-      v.style.display = editando ? 'none' : 'flex';
+      if (editando) fecharEditores(id);
+      v.style.display = editando ? 'none' : '';
       f.style.display = editando ? 'flex' : 'none';
       if (editando) { var inp = f.querySelector('input[name="nome"]'); if (inp) { inp.focus(); inp.select(); } }
     }
@@ -198,6 +287,47 @@
         nomeMostra(id, false);
       });
     });
+    // Comissão (%) e Prazo (⚙): alternam a linha-editor
+    function toggleEditor(id, qual) {
+      var row = document.getElementById(qual + '-' + id);
+      if (!row) return;
+      var abrir = row.style.display === 'none' || !row.style.display;
+      fecharEditores(id);
+      row.style.display = abrir ? '' : 'none';
+      if (abrir && qual === 'com') { var s = row.querySelector('.com-sel'); if (s) syncPrep(s); }
+    }
+    document.querySelectorAll('.com-toggle').forEach(function (b) { b.addEventListener('click', function () { toggleEditor(b.getAttribute('data-id'), 'com'); }); });
+    document.querySelectorAll('.prazo-toggle').forEach(function (b) { b.addEventListener('click', function () { toggleEditor(b.getAttribute('data-id'), 'prazo'); }); });
+
+    // Mostra o campo "% do preposto" só quando o selecionado for preposto.
+    function syncPrep(sel) {
+      var cli = sel.getAttribute('data-cli');
+      var opt = sel.options[sel.selectedIndex];
+      var ehPrep = opt && opt.getAttribute('data-prep') === '1';
+      var box = document.querySelector('.com-prep[data-cli="' + cli + '"]');
+      if (box) box.style.display = ehPrep ? '' : 'none';
+    }
+    document.querySelectorAll('.com-sel').forEach(function (s) { syncPrep(s); s.addEventListener('change', function () { syncPrep(s); }); });
+
+    // ----- Busca + filtro de status -----
+    var busca = document.getElementById('buscaCli'), filtro = document.getElementById('filtroStatus'), semRes = document.getElementById('semResultado');
+    function aplicarFiltro() {
+      var q = (busca && busca.value || '').trim().toLowerCase();
+      var st = filtro && filtro.value || 'todos';
+      var achou = 0;
+      document.querySelectorAll('tr.linha').forEach(function (tr) {
+        var id = tr.id.replace('row-', '');
+        var okBusca = !q || (tr.getAttribute('data-busca') || '').indexOf(q) !== -1;
+        var okStatus = st === 'todos' || tr.getAttribute('data-status') === st;
+        var mostra = okBusca && okStatus;
+        tr.style.display = mostra ? '' : 'none';
+        if (!mostra) fecharEditores(id); // esconde editores de linhas filtradas
+        if (mostra) achou++;
+      });
+      if (semRes) semRes.style.display = achou === 0 ? '' : 'none';
+    }
+    if (busca) busca.addEventListener('input', aplicarFiltro);
+    if (filtro) filtro.addEventListener('change', aplicarFiltro);
   })();
 </script>
 
