@@ -36,7 +36,9 @@ function payload(valorCentavos, txid) {
 
 function chaveFormatada() {
   const k = CFG.chave;
-  return /^\d{11}$/.test(k) ? k.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : k;
+  if (/^\d{11}$/.test(k)) return k.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');            // CPF
+  if (/^\d{14}$/.test(k)) return k.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');  // CNPJ
+  return k; // celular, e-mail ou chave aleatoria: exibe como esta
 }
 function favorecido() {
   const t = (s) => String(s).toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()).replace(/ (De|Da|Do|Dos|Das|E) /g, (m) => m.toLowerCase());

@@ -492,7 +492,7 @@ router.get('/pedido/:id/retirada.pdf', exigeCliente, async (req, res, next) => {
     const pr = await db.query('SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1 AND p.cliente_id = $2', [req.params.id, req.session.user.clienteId]);
     if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return res.status(404).render('erro', { titulo: 'Comprovante indisponivel', mensagem: 'Comprovante de retirada não encontrado.', user: req.session.user });
     const p = pr.rows[0];
-    const linhas = await db.query('SELECT item_nome, quantidade, preco_centavos, total_centavos FROM linhas WHERE pedido_id = $1 ORDER BY id', [p.id]);
+    const linhas = await db.query('SELECT l.item_nome, l.quantidade, l.preco_centavos, l.total_centavos, pr.peso_gramas FROM linhas l LEFT JOIN itens i ON i.id = l.item_id LEFT JOIN produtos pr ON pr.id = i.produto_id WHERE l.pedido_id = $1 ORDER BY l.id', [p.id]);
     const fin = await db.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc_br, parcela_num, parcela_total FROM financeiro WHERE pedido_id = $1 ORDER BY parcela_num NULLS FIRST, id", [p.id]);
     const pdf = await gerarComprovanteRetirada(montarDados(p, linhas.rows, fin.rows));
     enviarPdf(res, 'retirada-' + p.numero + '.pdf', pdf);

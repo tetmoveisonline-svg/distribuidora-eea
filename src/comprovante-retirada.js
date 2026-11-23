@@ -33,6 +33,8 @@ function gerarComprovanteRetirada(dados) {
       const cliente = dados.cliente || {};
       const base = Number(dados.baseCentavos != null ? dados.baseCentavos : dados.totalCentavos) || 0;
       const pct = (bps) => (bps % 100 === 0 ? String(bps / 100) : (bps / 100).toFixed(2).replace('.', ',')) + '%';
+      const pesoG = Number(dados.pesoTotalGramas) || 0;
+      const pesoTxt = pesoG > 0 ? (pesoG / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg' : '';
 
       // ---------- Cabecalho ----------
       const topo = doc.y;
@@ -60,7 +62,7 @@ function gerarComprovanteRetirada(dados) {
       // ---------- Total (mercadoria) ----------
       const yT = doc.y + 6;
       doc.rect(48, yT, 499, 26).fill(C.faixa);
-      doc.fillColor(C.texto).font('Helvetica-Bold').fontSize(11).text('Total  -  ' + (dados.totalItens || 0) + ' itens', 56, yT + 7);
+      doc.fillColor(C.texto).font('Helvetica-Bold').fontSize(11).text('Total  -  ' + (dados.totalItens || 0) + ' itens' + (pesoTxt ? '  ·  ' + pesoTxt : ''), 56, yT + 7);
       doc.text(formatBRL(base), 48, yT + 7, { width: 491, align: 'right' });
       doc.y = yT + 34;
 
@@ -130,7 +132,7 @@ function blocoPagamentoVista(doc, C, pg) {
   doc.font('Helvetica-Bold').fontSize(11).fillColor(C.texto).text('Pague com Pix', tx, y + 14, { width: tw });
   doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Abra o app do banco > Pix > Ler QR Code. O valor já vem preenchido.', tx, y + 30, { width: tw });
   linhaKV(doc, C, 'Valor', formatBRL(pg.valorCentavos), tx, y + 58, true);
-  linhaKV(doc, C, 'Chave CPF', pg.chave, tx, y + 76);
+  linhaKV(doc, C, 'Chave Pix', pg.chave, tx, y + 76);
   linhaKV(doc, C, 'Favorecido', pg.favorecido, tx, y + 92);
   doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Copia e cola', tx, y + 110, { width: 62 });
   doc.font('Courier').fontSize(6.6).fillColor('#4a525c').text(pg.codigo, tx + 64, y + 110, { width: 281, lineGap: 0.5 });
@@ -147,7 +149,7 @@ function blocoPagamentoParcelado(doc, C, pg, parcelas) {
   const tx = 192, tw = 345;
   doc.font('Helvetica-Bold').fontSize(11).fillColor(C.texto).text('Pague cada parcela com Pix', tx, y + 14, { width: tw });
   doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Leia o QR Code e DIGITE o valor da parcela que está pagando (o QR não vem com valor).', tx, y + 30, { width: tw });
-  linhaKV(doc, C, 'Chave CPF', pg.chave, tx, y + 56);
+  linhaKV(doc, C, 'Chave Pix', pg.chave, tx, y + 56);
   linhaKV(doc, C, 'Favorecido', pg.favorecido, tx, y + 72);
   doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Copia e cola', tx, y + 90, { width: 62 });
   doc.font('Courier').fontSize(6.6).fillColor('#4a525c').text(pg.codigo, tx + 64, y + 90, { width: tw - 64, lineGap: 0.5 });
@@ -216,11 +218,12 @@ function montarDados(p, linhasRows, finRows) {
     const d = pix.dadosPagamento(p.numero, aPagar, '');
     pagamento = { parcelado: false, codigo: d.codigo, chave: d.chave, favorecido: d.favorecido, valorCentavos: aPagar, vencimento: f.venc_br };
   }
+  const pesoTotalGramas = (linhasRows || []).reduce((s, l) => s + (Number(l.peso_gramas) || 0) * (Number(l.quantidade) || 0), 0);
   return {
     numero: p.numero, criadoEm: p.aceite_em || p.criado_em, retiradoEm: p.retirado_em,
     empresa: { nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
     cliente: { nome: p.cliente_nome, email: p.cliente_email },
-    linhas: linhasRows, totalItens: p.total_etiquetas, baseCentavos: base, totalCentavos: total,
+    linhas: linhasRows, totalItens: p.total_etiquetas, pesoTotalGramas, baseCentavos: base, totalCentavos: total,
     nf: p.com_nf ? { taxaBps: p.nf_bps, parcelaBps: p.nf_parcela_bps, impostoCentavos: p.imposto_centavos, baseCentavos: base, totalCentavos: total } : null,
     pagamento, parcelas,
   };

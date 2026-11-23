@@ -47,7 +47,7 @@
               <div class="dim pix-sub">Abra o app do banco, escolha Pix &gt; Ler QR Code. O valor já vem preenchido.</div>
               <div class="pix-grid">
                 <span class="dim">Valor</span><b class="pix-valor"><%= formatBRL(l.valor_centavos) %></b><span></span>
-                <span class="dim">Chave CPF</span><span class="mono"><%= l.pix.chave %></span><button type="button" class="btn ghost sm pix-copy" data-copy="<%= l.pix.chaveCopia %>">Copiar chave</button>
+                <span class="dim">Chave Pix</span><span class="mono"><%= l.pix.chave %></span><button type="button" class="btn ghost sm pix-copy" data-copy="<%= l.pix.chaveCopia %>">Copiar chave</button>
                 <span class="dim">Copia e cola</span><span class="mono pix-cod"><%= l.pix.codigo %></span><button type="button" class="btn ghost sm pix-copy" data-copy="<%= l.pix.codigo %>">Copiar código</button>
                 <span class="dim">Favorecido</span><span><%= l.pix.favorecido %></span><span></span>
               </div>

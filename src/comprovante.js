@@ -156,7 +156,7 @@ function blocoPagamento(doc, C, pg) {
   };
   linha('Valor', formatBRL(pg.valorCentavos), y + 58, true);
   if (pg.creditoUsado > 0) doc.font('Helvetica').fontSize(8).fillColor(C.verde).text('(já abatido ' + formatBRL(pg.creditoUsado) + ' de crédito)', tx + 140, y + 59.5, { width: 205 });
-  linha('Chave CPF', pg.chave, y + 76);
+  linha('Chave Pix', pg.chave, y + 76);
   linha('Favorecido', pg.favorecido, y + 92);
   doc.font('Helvetica').fontSize(8.5).fillColor(C.suave).text('Copia e cola', tx, y + 110, { width: 62 });
   doc.font('Courier').fontSize(6.6).fillColor('#4a525c').text(pg.codigo, tx + 64, y + 110, { width: 281, lineGap: 0.5 });
