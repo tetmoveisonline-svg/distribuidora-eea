@@ -53,7 +53,18 @@
       <tbody>
         <% clientes.forEach(function (c) { %>
           <tr>
-            <td><%= c.nome %><% if (c.limite_centavos !== null) { %><div class="dim" style="font-size:11.5px"><%= formatBRL(c.em_aberto) %> em aberto de <%= formatBRL(c.limite_centavos) %></div><% } %></td>
+            <td>
+              <div class="nome-view" id="nomeview-<%= c.id %>" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span><%= c.nome %></span>
+                <button type="button" class="btn ghost sm nome-edit" data-id="<%= c.id %>" title="Editar nome" style="padding:2px 9px;font-size:11px;line-height:1.5">✏️ editar nome</button>
+              </div>
+              <form method="post" action="/admin/clientes/<%= c.id %>/nome" class="nome-form" id="nomeform-<%= c.id %>" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
+                <input name="nome" value="<%= c.nome %>" maxlength="120" required style="min-width:150px" />
+                <button class="btn sm" type="submit">Salvar</button>
+                <button type="button" class="btn ghost sm nome-cancel" data-id="<%= c.id %>">Cancelar</button>
+              </form>
+              <% if (c.limite_centavos !== null) { %><div class="dim" style="font-size:11.5px"><%= formatBRL(c.em_aberto) %> em aberto de <%= formatBRL(c.limite_centavos) %></div><% } %>
+            </td>
             <td class="dim"><%= c.login || '—' %></td>
             <td class="num"><%= c.produtos %></td>
             <td>
@@ -167,6 +178,25 @@
     document.querySelectorAll('.com-sel').forEach(function (s) {
       syncPrep(s);
       s.addEventListener('change', function () { syncPrep(s); });
+    });
+
+    // Editar o nome do cliente: alterna entre o texto e o campo inline.
+    function nomeMostra(id, editando) {
+      var v = document.getElementById('nomeview-' + id), f = document.getElementById('nomeform-' + id);
+      if (!v || !f) return;
+      v.style.display = editando ? 'none' : 'flex';
+      f.style.display = editando ? 'flex' : 'none';
+      if (editando) { var inp = f.querySelector('input[name="nome"]'); if (inp) { inp.focus(); inp.select(); } }
+    }
+    document.querySelectorAll('.nome-edit').forEach(function (b) {
+      b.addEventListener('click', function () { nomeMostra(b.getAttribute('data-id'), true); });
+    });
+    document.querySelectorAll('.nome-cancel').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-id'), f = document.getElementById('nomeform-' + id);
+        if (f) { var inp = f.querySelector('input[name="nome"]'); if (inp) inp.value = inp.defaultValue; }
+        nomeMostra(id, false);
+      });
     });
   })();
 </script>

@@ -6,6 +6,46 @@
 <% if (erro) { %><div class="alert err"><%= erro %></div><% } %>
 <% if (ok) { %><div class="alert ok"><%= ok %></div><% } %>
 
+<!-- Promoções em andamento: visão geral de todas as promoções ativas, de todos os clientes -->
+<div class="card pad" style="margin-bottom:16px">
+  <div class="section-title" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">🏷️ Promoções em andamento
+    <span class="badge neutral"><%= promocoes.length %> ativa<%= promocoes.length === 1 ? '' : 's' %></span>
+  </div>
+  <p class="dim" style="margin:0 0 12px;font-size:12.5px">Todas as promoções por tempo limitado valendo agora, de todos os clientes.</p>
+  <% if (promocoes.length === 0) { %>
+    <div class="empty">Nenhuma promoção ativa no momento.</div>
+  <% } else { %>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Produto</th><th>Cliente</th><th class="num">De</th><th class="num">Por</th><th class="num">Desconto</th><th>Vale até</th><th></th></tr></thead>
+      <tbody>
+        <% promocoes.forEach(function (pr) { %>
+          <tr>
+            <td><b><%= pr.nome %></b></td>
+            <td><a href="/admin/precos?cliente=<%= pr.cliente_id %>"><%= pr.cliente_nome %></a></td>
+            <td class="num" style="text-decoration:line-through;color:var(--text-dim)"><%= formatBRL(pr.de) %></td>
+            <td class="num"><b style="color:var(--ok)"><%= formatBRL(pr.por) %></b></td>
+            <td class="num"><span class="badge gold">−<%= Math.round(pr.desc_bps / 100) %>%</span></td>
+            <td style="white-space:nowrap"><%= pr.fim ? brDate(pr.fim) : '—' %>
+              <% if (pr.dias !== null) { %>
+                <% if (pr.dias <= 2) { %><span class="badge danger"><%= pr.dias <= 0 ? 'vence hoje' : (pr.dias === 1 ? 'vence amanhã' : 'vence em 2 dias') %></span>
+                <% } else { %><span class="badge ok"><%= pr.dias %> dias</span><% } %>
+              <% } %>
+            </td>
+            <td>
+              <form method="post" action="/admin/precos/<%= pr.id %>/promo/remover" style="margin:0" onsubmit="return confirm('Encerrar a promoção de <%= pr.nome.replace(/'/g, '') %> para <%= pr.cliente_nome.replace(/'/g, '') %>?')">
+                <input type="hidden" name="voltar" value="<%= clienteId || '' %>" />
+                <button class="btn ghost sm danger" type="submit">encerrar</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <% } %>
+</div>
+
 <div class="card pad" style="margin-bottom:16px">
   <form method="get" action="/admin/precos">
     <div class="field" style="max-width:340px;margin:0">

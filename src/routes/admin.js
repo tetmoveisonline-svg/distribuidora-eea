@@ -694,6 +694,26 @@ router.post('/clientes/:id/prazo', async (req, res, next) => {
     res.redirect('/admin/clientes');
   } catch (e) { next(e); }
 });
+// Editar o nome (loja) do cliente. Muda só o nome; login, histórico, pedidos e financeiro são por id e continuam.
+router.post('/clientes/:id/nome', async (req, res, next) => {
+  const cid = pInt(req.params.id);
+  try {
+    const nome = (req.body.nome || '').toString().trim().replace(/\s+/g, ' ');
+    if (nome.length < 2) throw new Error('Informe o nome do cliente (mínimo 2 caracteres).');
+    if (nome.length > 120) throw new Error('Nome muito longo (máximo 120 caracteres).');
+    const ex = await db.query('SELECT id FROM clientes WHERE id = $1', [cid]);
+    if (ex.rowCount === 0) throw new Error('Cliente não encontrado.');
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE clientes SET nome = $2 WHERE id = $1', [cid, nome]);
+      // o usuário de login do cliente tem o mesmo nome de exibição: mantém em sincronia
+      await client.query("UPDATE usuarios SET nome = $2 WHERE cliente_id = $1 AND papel = 'cliente'", [cid, nome]);
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    res.redirect('/admin/clientes?ok=' + encodeURIComponent('Nome atualizado para "' + nome + '".'));
+  } catch (e) { res.redirect('/admin/clientes?erro=' + encodeURIComponent(msgErro(e))); }
+});
 router.get('/clientes', async (req, res, next) => {
   try {
     const r = await db.query(
@@ -1169,7 +1189,25 @@ router.get('/precos', async (req, res, next) => {
         promo_rep_txt: (i.promo_rep_bps !== null && i.promo_rep_bps !== undefined) ? formatPercent(i.promo_rep_bps).replace('%', '') : '',
         promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
     });
-    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, clienteRepBps, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
+    // Promoções em andamento: todas as promoções ativas hoje, de todos os clientes (visão geral no topo da tela).
+    const hojeD = new Date(hoje + 'T00:00:00');
+    const promoAll = await db.query(
+      `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, c.id AS cliente_id, c.nome AS cliente_nome,
+              to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
+       FROM itens i JOIN clientes c ON c.id = i.cliente_id
+       WHERE i.ativo = TRUE AND i.negociado = TRUE AND i.promo_tipo IS NOT NULL
+       ORDER BY i.promo_fim NULLS LAST, c.nome, i.nome`);
+    const promocoes = [];
+    for (const i of promoAll.rows) {
+      const ef = precoEfetivo(i, hoje);
+      if (!ef.promo) continue; // mostra só as que estão valendo hoje (ignora agendadas/encerradas)
+      const descBps = i.preco_centavos > 0 ? Math.round((i.preco_centavos - ef.preco_centavos) * 10000 / i.preco_centavos) : 0;
+      let dias = null;
+      if (i.promo_fim) dias = Math.round((new Date(i.promo_fim + 'T00:00:00') - hojeD) / 86400000);
+      promocoes.push({ id: i.id, nome: i.nome, cliente_id: i.cliente_id, cliente_nome: i.cliente_nome,
+        de: i.preco_centavos, por: ef.preco_centavos, desc_bps: descBps, fim: i.promo_fim, dias });
+    }
+    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, promocoes, clienteId, clienteNome, clienteRepBps, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
   } catch (e) { next(e); }
 });
 router.post('/precos', async (req, res, next) => {
@@ -1225,7 +1263,9 @@ router.post('/precos/:id/promo', async (req, res, next) => {
 router.post('/precos/:id/promo/remover', async (req, res, next) => {
   try {
     const it = await db.query('UPDATE itens SET promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL, promo_rep_bps = NULL WHERE id = $1 RETURNING cliente_id', [pInt(req.params.id)]);
-    res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : '') + '&ok=' + encodeURIComponent('Promoção removida.'));
+    // "voltar" = cliente que está aberto na tela (ao encerrar pelo card "Promoções em andamento"); senão, o dono da promoção.
+    const voltar = pInt(req.body.voltar) || (it.rowCount ? it.rows[0].cliente_id : '');
+    res.redirect('/admin/precos?cliente=' + voltar + '&ok=' + encodeURIComponent('Promoção encerrada.'));
   } catch (e) { next(e); }
 });
 router.post('/precos/:id/remove', async (req, res, next) => {
