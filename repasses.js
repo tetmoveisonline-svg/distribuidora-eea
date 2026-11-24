@@ -77,12 +77,21 @@ async function listarFunc(usuarioId) {
             p.taxa_func_centavos,
             p.func_pago_em AS pago_em, p.func_pago_forma AS pago_forma, p.func_pago_centavos AS pago_centavos,
             c.nome AS cliente_nome,
-            f.status AS fin_status, f.valor_original_centavos, f.credito_gerado_centavos,
-            to_char(f.vencimento, 'YYYY-MM-DD') AS venc_iso,
+            f.status AS fin_status, f.valor_original_centavos, f.credito_gerado_centavos, f.venc_iso,
             u.taxa_etiqueta_centavos AS u_taxa,
             (SELECT count(*) FROM etiquetas e WHERE e.pedido_id = p.id AND e.status = 'despachado')::int AS despachadas
      FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
-     LEFT JOIN financeiro f ON f.pedido_id = p.id
+     LEFT JOIN (
+       -- Agrega o financeiro por pedido (pedidos parcelados tem uma linha por parcela).
+       SELECT pedido_id,
+              CASE WHEN bool_and(status = 'pago') THEN 'pago'
+                   WHEN bool_and(status = 'cancelado') THEN 'cancelado'
+                   ELSE 'aberto' END AS status,
+              SUM(valor_original_centavos) AS valor_original_centavos,
+              SUM(credito_gerado_centavos) AS credito_gerado_centavos,
+              to_char(MIN(vencimento), 'YYYY-MM-DD') AS venc_iso
+       FROM financeiro GROUP BY pedido_id
+     ) f ON f.pedido_id = p.id
      LEFT JOIN usuarios u ON u.id = p.funcionario_id
      WHERE p.funcionario_id = $1 ORDER BY p.id DESC`, [usuarioId]
   );
@@ -103,16 +112,28 @@ async function listarFunc(usuarioId) {
 async function listarRep(usuarioId) {
   const uid = Number(usuarioId);
   const r = await db.query(
-    `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas, p.aceite_em, p.encerrado_em,
+    `SELECT p.id, p.numero, p.status, p.tipo, p.total_centavos, p.total_etiquetas, p.aceite_em, p.encerrado_em,
             p.representante_id, p.responsavel_id, p.comissao_bps, p.comissao_resp_bps,
+            p.comissao_centavos, p.comissao_resp_centavos,
             p.rep_pago_em, p.rep_pago_forma, p.rep_pago_centavos,
             p.resp_pago_em, p.resp_pago_forma, p.resp_pago_centavos,
             c.nome AS cliente_nome,
-            f.status AS fin_status, f.valor_original_centavos, f.credito_gerado_centavos,
-            to_char(f.vencimento, 'YYYY-MM-DD') AS venc_iso,
-            prep.nome AS preposto_nome
+            f.status AS fin_status, f.valor_original_centavos, f.credito_gerado_centavos, f.venc_iso,
+            prep.nome AS preposto_nome,
+            (SELECT COALESCE(SUM((preco_centavos - COALESCE(preco_base_centavos, preco_centavos)) * quantidade), 0) FROM linhas WHERE pedido_id = p.id)::int AS adicional_total
      FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
-     LEFT JOIN financeiro f ON f.pedido_id = p.id
+     LEFT JOIN (
+       -- Agrega o financeiro por pedido: pedidos parcelados tem varias linhas (uma por parcela).
+       -- Sem isso, o pedido apareceria repetido (uma vez por parcela) e a comissao dobraria.
+       SELECT pedido_id,
+              CASE WHEN bool_and(status = 'pago') THEN 'pago'
+                   WHEN bool_and(status = 'cancelado') THEN 'cancelado'
+                   ELSE 'aberto' END AS status,
+              SUM(valor_original_centavos) AS valor_original_centavos,
+              SUM(credito_gerado_centavos) AS credito_gerado_centavos,
+              to_char(MIN(vencimento), 'YYYY-MM-DD') AS venc_iso
+       FROM financeiro GROUP BY pedido_id
+     ) f ON f.pedido_id = p.id
      LEFT JOIN usuarios prep ON prep.id = p.representante_id
      WHERE p.representante_id = $1 OR p.responsavel_id = $1
      ORDER BY p.id DESC`, [uid]
@@ -127,8 +148,19 @@ async function listarRep(usuarioId) {
     const valorCobrado = p.valor_original_centavos != null
       ? Number(p.valor_original_centavos) - Number(p.credito_gerado_centavos || 0)
       : Number(p.total_centavos);
-    const valor = Math.round(valorCobrado * bps / 10000);
-    const base_txt = formatBRL(valorCobrado) + ' × ' + (bps / 100).toLocaleString('pt-BR') + '%';
+    // Retirada: comissao calculada sobre o PRECO DE SISTEMA (valor guardado no aceite da retirada);
+    // o acrescimo de venda vai 100% pro preposto/representante direto (papel 'rep'), nunca pro pai ('resp').
+    const ehRetirada = p.tipo === 'retirada';
+    let valor, base_txt;
+    if (ehRetirada) {
+      const comStored = papel === 'rep' ? Number(p.comissao_centavos || 0) : Number(p.comissao_resp_centavos || 0);
+      const adic = papel === 'rep' ? Number(p.adicional_total || 0) : 0;
+      valor = comStored + adic;
+      base_txt = 'comissão ' + (bps / 100).toLocaleString('pt-BR') + '% s/ sistema' + (adic > 0 ? ' + adic. ' + formatBRL(adic) : '');
+    } else {
+      valor = Math.round(valorCobrado * bps / 10000);
+      base_txt = formatBRL(valorCobrado) + ' × ' + (bps / 100).toLocaleString('pt-BR') + '%';
+    }
     const origem = papel === 'resp' ? ('Via preposto ' + (p.preposto_nome || '')) : 'Direto';
     const { finSit, situacao } = situacaoDe(p.fin_status, p.venc_iso, pago_em, hoje);
     return {

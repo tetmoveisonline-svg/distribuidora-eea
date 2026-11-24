@@ -85,7 +85,14 @@ CREATE TABLE IF NOT EXISTS pedidos (
 -- Mantemos 'preparando' na lista por compatibilidade com pedidos antigos (evita falha na constraint no boot).
 ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_status_check;
 ALTER TABLE pedidos ADD CONSTRAINT pedidos_status_check
-  CHECK (status IN ('aguardando','preparando','separacao','despachado'));
+  CHECK (status IN ('aguardando','preparando','separacao','despachado','retirado'));
+
+-- Tipo do pedido: 'envio' (fluxo normal de etiquetas) ou 'retirada' (cliente busca no CD).
+-- A retirada e criada pelo admin, reserva estoque e so baixa quando o admin confirma a retirada.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'envio';
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS retirado_em TIMESTAMPTZ;
+-- Numeracao propria das retiradas (RT-...), separada dos envios (DS-...).
+CREATE SEQUENCE IF NOT EXISTS retirada_numero_seq START 1;
 
 -- Comissao do representante (definida no pedido pelo admin).
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS representante_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL;
@@ -185,6 +192,9 @@ ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_tipo TEXT CHECK (promo_tipo IS 
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_valor INTEGER;
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_inicio DATE;
 ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_fim DATE;
+-- % do representante durante a campanha (pontos-base). NULL = mantem o % normal do cadastro do cliente.
+-- So vale enquanto a promocao estiver ativa (entre promo_inicio e promo_fim); fora disso volta ao normal.
+ALTER TABLE itens ADD COLUMN IF NOT EXISTS promo_rep_bps INTEGER;
 
 -- ===================== ENCERRAMENTO E CREDITO EM CONTA =====================
 -- Etiqueta que ficou para tras quando o admin encerrou o pedido: nao e cobrada.
@@ -206,6 +216,15 @@ ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS encerrado_em TIMESTAMPTZ;
 UPDATE financeiro f SET valor_original_centavos = f.valor_centavos WHERE f.valor_original_centavos IS NULL;
 UPDATE financeiro f SET etiquetas_total = p.total_etiquetas FROM pedidos p WHERE p.id = f.pedido_id AND f.etiquetas_total IS NULL;
 
+-- Parcelamento (hoje usado nas retiradas no CD): um pedido pode gerar varias parcelas, cada uma
+-- um lancamento proprio com seu vencimento. Pedidos normais ficam com parcela_num NULL (= a vista).
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS parcela_num INTEGER;
+ALTER TABLE financeiro ADD COLUMN IF NOT EXISTS parcela_total INTEGER;
+-- Troca o UNIQUE(pedido_id) por um unico por (pedido, parcela): assim o pedido a vista continua
+-- com um lancamento so (parcela_num NULL -> 0) e o parcelado aceita uma linha por parcela.
+ALTER TABLE financeiro DROP CONSTRAINT IF EXISTS financeiro_pedido_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS financeiro_pedido_parcela_uk ON financeiro (pedido_id, COALESCE(parcela_num, 0));
+
 -- ===================== SKU E CORES =====================
 -- SKU base do produto (opcional). Cada cor tem um sufixo e vira um SKU proprio (base-sufixo).
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS sku TEXT;
@@ -223,6 +242,17 @@ CREATE INDEX IF NOT EXISTS idx_produto_cores_produto ON produto_cores(produto_id
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_id INTEGER REFERENCES produto_cores(id) ON DELETE SET NULL;
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS cor_nome TEXT;
 ALTER TABLE linhas ADD COLUMN IF NOT EXISTS sku TEXT;
+-- Custo do produto CONGELADO no momento do aceite (snapshot), para o lucro do pedido nao mudar
+-- quando o custo do produto for reajustado depois. Preenchido no aceite (src/routes/cliente.js).
+-- O preenchimento dos pedidos antigos fica mais abaixo (depois de produtos.custo_centavos existir).
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
+
+-- Preco de SISTEMA (base) da linha, quando o preco cobrado (preco_centavos) foi acima do sistema.
+-- Usado em retiradas em que o preposto vende por um valor maior: a comissao e calculada sobre a
+-- base e a diferenca (preco_centavos - preco_base_centavos) e o acrescimo que vai 100% pro preposto.
+-- Para todas as linhas sem acrescimo, base = preco cobrado.
+ALTER TABLE linhas ADD COLUMN IF NOT EXISTS preco_base_centavos INTEGER;
+UPDATE linhas SET preco_base_centavos = preco_centavos WHERE preco_base_centavos IS NULL;
 
 -- O SKU e da cor (codigo completo), nao do produto. Migra o que ja foi cadastrado como base-sufixo.
 ALTER TABLE produto_cores ADD COLUMN IF NOT EXISTS sku TEXT;
@@ -253,7 +283,36 @@ CREATE INDEX IF NOT EXISTS idx_estoque_mov_produto ON estoque_mov(produto_id, cr
 -- ===================== CUSTO E LUCRO DO PRODUTO =====================
 -- Preco sugerido = (custo + taxa do funcionario + lucro desejado) / (1 - % do representante).
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS custo_centavos INTEGER;
+
+-- Configuracoes gerais (chave/valor). Guarda a taxa do imposto da nota fiscal (nf_bps, em pontos-base).
+CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT);
+INSERT INTO config (chave, valor) VALUES ('nf_bps', '0') ON CONFLICT (chave) DO NOTHING;
+
+-- Nota fiscal por pedido: parcela escolhida pelo cliente e imposto (repasse) daquele pedido.
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS com_nf BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_bps INTEGER;            -- taxa do imposto na epoca (snapshot)
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nf_parcela_bps INTEGER;   -- quanto do pedido com NF (3000 = 30%)
+ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS imposto_centavos INTEGER NOT NULL DEFAULT 0;
+
+-- PDF da nota fiscal emitida, anexado pelo admin DEPOIS do pedido. Tabela separada para o
+-- arquivo (BYTEA) nao ser carregado nas listagens/telas; o download le o conteudo sob demanda.
+CREATE TABLE IF NOT EXISTS notas_fiscais (
+  pedido_id INTEGER PRIMARY KEY REFERENCES pedidos(id) ON DELETE CASCADE,
+  conteudo  BYTEA NOT NULL,
+  nome      TEXT,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Preenche o custo congelado dos pedidos ANTIGOS (feitos antes da coluna linhas.custo_centavos)
+-- com o custo ATUAL do produto. So afeta linhas ainda sem custo; novas linhas ja gravam no aceite.
+UPDATE linhas l SET custo_centavos = pr.custo_centavos
+  FROM itens i, produtos pr
+  WHERE l.custo_centavos IS NULL AND l.item_id = i.id AND i.produto_id = pr.id AND pr.custo_centavos IS NOT NULL;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS lucro_centavos INTEGER;
+-- Lucro desejado em R$ (lucro_tipo = 'valor', usa lucro_centavos) ou em % do preco de venda
+-- (lucro_tipo = 'percentual', margem em pontos-base em lucro_bps: 25% = 2500).
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS lucro_tipo TEXT NOT NULL DEFAULT 'valor';
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS lucro_bps INTEGER;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS rep_bps INTEGER;   -- % do representante usada no calculo (pontos-base)
 
 -- Quem recebe no calculo do preco sugerido: representante (comissao %) e funcionario (taxa por etiqueta),
@@ -376,3 +435,19 @@ CREATE TABLE IF NOT EXISTS produto_imagens (
   criado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_produto_imagens_produto ON produto_imagens(produto_id);
+
+-- Backfill UNICO: atribui o funcionario ativo (quando ha exatamente um) aos pedidos que ainda nao
+-- tem funcionario. Roda so uma vez (marcado em config); nao repete nos boots seguintes, para nao
+-- desfazer remocoes manuais. Os pedidos novos ja recebem o funcionario automaticamente (aceite/retirada).
+DO $$
+DECLARE fcount int; fid int; ftaxa int;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM config WHERE chave = 'func_backfill_v1') THEN
+    SELECT count(*) INTO fcount FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE AND taxa_etiqueta_centavos IS NOT NULL;
+    IF fcount = 1 THEN
+      SELECT id, taxa_etiqueta_centavos INTO fid, ftaxa FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE AND taxa_etiqueta_centavos IS NOT NULL;
+      UPDATE pedidos SET funcionario_id = fid, taxa_func_centavos = ftaxa WHERE funcionario_id IS NULL;
+      INSERT INTO config (chave, valor) VALUES ('func_backfill_v1', 'done') ON CONFLICT (chave) DO NOTHING;
+    END IF;
+  END IF;
+END $$;

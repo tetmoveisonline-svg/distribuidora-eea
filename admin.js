@@ -2,7 +2,15 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
 const db = require('../db');
+
+// Upload do PDF da nota fiscal (em memoria; vai para o banco). Só PDF, até 10 MB.
+const uploadNf = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => cb(null, file.mimetype === 'application/pdf'),
+});
 const { exigeAdmin, exigeAdminFull } = require('../auth');
 const { enviarEtiquetas } = require('../etiquetas');
 const financeiro = require('../financeiro');
@@ -53,8 +61,11 @@ const {
 } = require('../util');
 
 // Calculo de preco sugerido e taxas: modulo compartilhado com a area do cliente.
-const { refCustos, comCustos } = require('../precos');
+const { refCustos, comCustos, catalogoDoCliente, garantirItem } = require('../precos');
 const imagens = require('../imagens');
+const config = require('../config');
+const { gerarComprovanteRetirada, montarDados } = require('../comprovante-retirada');
+const { gerarExtratoPreposto } = require('../extrato-preposto');
 
 const router = express.Router();
 router.use(exigeAdmin);
@@ -155,17 +166,37 @@ async function funcRef() {
 router.get('/pedidos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas,
-              p.aceite_em, p.etiquetas_expira_em, p.despachado_em, p.comissao_centavos,
-              c.nome AS cliente_nome, u.nome AS rep_nome
+      `SELECT p.id, p.numero, p.status, p.total_centavos, p.total_etiquetas, p.tipo,
+              p.aceite_em, p.etiquetas_expira_em, p.despachado_em,
+              p.comissao_centavos, p.comissao_resp_centavos, p.funcionario_id, p.taxa_func_centavos AS taxa_func_assinada,
+              p.imposto_centavos, p.com_nf,
+              EXISTS (SELECT 1 FROM notas_fiscais nf WHERE nf.pedido_id = p.id) AS tem_nf,
+              (SELECT COALESCE(SUM(custo_centavos * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS custo_total,
+              (SELECT COALESCE(SUM((preco_centavos - COALESCE(preco_base_centavos, preco_centavos)) * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS adicional_total,
+              c.nome AS cliente_nome, u.nome AS rep_nome, ur.nome AS resp_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
-       LEFT JOIN usuarios u ON u.id = p.representante_id ORDER BY p.id DESC`
+       LEFT JOIN usuarios u ON u.id = p.representante_id
+       LEFT JOIN usuarios ur ON ur.id = p.responsavel_id ORDER BY p.id DESC`
     );
     const fr = await funcRef();
-    const pedidos = r.rows.map((p) => ({
-      ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em),
-      taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
-    }));
+    const pedidos = r.rows.map((p) => {
+      // Lucro do pedido = valor - comissao (rep + preposto) - taxa do funcionario atribuido - custo CONGELADO dos itens.
+      const comissao = (Number(p.comissao_centavos) || 0) + (Number(p.comissao_resp_centavos) || 0);
+      const funcCusto = p.funcionario_id ? (Number(p.taxa_func_assinada) || 0) * p.total_etiquetas : 0;
+      const custoTotal = Number(p.custo_total) || 0;
+      // O imposto da NF e o acrescimo do preposto (venda acima do sistema) sao repasse, nao lucro:
+      // saem do valor antes de calcular o lucro e a margem. O lucro fica sobre o preco de SISTEMA.
+      const imposto = Number(p.imposto_centavos) || 0;
+      const adicional = Number(p.adicional_total) || 0;
+      const base = Number(p.total_centavos) - imposto - adicional;
+      const lucro = base - comissao - funcCusto - custoTotal;
+      const margem = base > 0 ? Math.round((lucro * 1000) / base) / 10 : 0;
+      return {
+        ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em),
+        taxa_func_centavos: fr ? fr.taxa_etiqueta_centavos * p.total_etiquetas : null,
+        lucro_centavos: lucro, margem_pct: margem,
+      };
+    });
     res.render('admin/pedidos', { pedidos, funcRef: fr, ok: req.query.ok || null, formatBRL, formatDateTime });
   } catch (e) { next(e); }
 });
@@ -190,13 +221,22 @@ router.get('/pedido/:id', async (req, res, next) => {
        WHERE e.pedido_id = $1 ORDER BY e.indice`, [pedido.id]
     );
     const etqDespachadas = etqs.rows.filter((e) => e.status === 'despachado').length;
+    // Metadados da NF anexada (sem carregar o PDF).
+    const nfRow = await db.query("SELECT nome, to_char(criado_em, 'DD/MM/YYYY HH24:MI') AS em FROM notas_fiscais WHERE pedido_id = $1", [pedido.id]);
+    const nf = nfRow.rowCount ? nfRow.rows[0] : null;
+    // Parcelas (retirada parcelada): lançamentos com parcela_num.
+    let parcelas = [];
+    if (pedido.tipo === 'retirada') {
+      const pp = await db.query("SELECT parcela_num, parcela_total, valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc, status FROM financeiro WHERE pedido_id = $1 AND parcela_num IS NOT NULL ORDER BY parcela_num", [pedido.id]);
+      parcelas = pp.rows;
+    }
     res.render('admin/pedido', {
-      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr,
+      pedido, linhas: linhas.rows, reps: reps.rows, funcs: funcs.rows, funcRef: fr, nf, parcelas,
       taxaFuncCentavos: fr ? fr.taxa_etiqueta_centavos * pedido.total_etiquetas : null,
       passos: andamentoDisplay(pedido),
       etiquetas: etqs.rows, etqDespachadas, etqTotal: etqs.rowCount,
       expirado: etiquetasExpiradas(pedido.etiquetas_expira_em), horas: horasRestantes(pedido.etiquetas_expira_em),
-      erro: req.query.erro || null,
+      erro: req.query.erro || null, ok: req.query.ok || null,
       formatBRL, formatDateTime, formatPercent,
     });
   } catch (e) { next(e); }
@@ -314,6 +354,395 @@ router.get('/pedido/:id/comprovante', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ----- Nota fiscal: anexar (upload do PDF) e baixar. Só o admin completo anexa. -----
+router.post('/pedido/:id/nota-fiscal', exigeAdminFull, (req, res, next) => {
+  uploadNf.single('nota')(req, res, (err) => {
+    if (err) return res.redirect('/admin/pedido/' + pInt(req.params.id) + '?erro=' + encodeURIComponent(err.code === 'LIMIT_FILE_SIZE' ? 'O PDF passa de 10 MB.' : 'Falha no envio do arquivo.'));
+    next();
+  });
+}, async (req, res) => {
+  const pid = pInt(req.params.id);
+  try {
+    const ped = await db.query('SELECT id, com_nf FROM pedidos WHERE id = $1', [pid]);
+    if (ped.rowCount === 0) return res.redirect('/admin/pedidos');
+    if (!ped.rows[0].com_nf) return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Este pedido não foi pedido com nota fiscal.'));
+    if (!req.file || !req.file.buffer || !req.file.buffer.length) return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Anexe o PDF da nota fiscal.'));
+    const nome = (req.file.originalname || 'nota-fiscal.pdf').toString().slice(0, 180);
+    await db.query(
+      `INSERT INTO notas_fiscais (pedido_id, conteudo, nome, criado_em) VALUES ($1, $2, $3, now())
+       ON CONFLICT (pedido_id) DO UPDATE SET conteudo = EXCLUDED.conteudo, nome = EXCLUDED.nome, criado_em = now()`,
+      [pid, req.file.buffer, nome]
+    );
+    res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Nota fiscal anexada. O cliente já pode baixar.'));
+  } catch (e) { res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Falha ao salvar a nota fiscal.')); }
+});
+
+router.get('/pedido/:id/nota-fiscal', async (req, res, next) => {
+  try {
+    const nf = await db.query('SELECT n.conteudo, p.numero FROM notas_fiscais n JOIN pedidos p ON p.id = n.pedido_id WHERE n.pedido_id = $1', [pInt(req.params.id)]);
+    if (nf.rowCount === 0 || !nf.rows[0].conteudo) return naoEncontrado(res, req);
+    enviarPdf(res, 'nota-fiscal-' + nf.rows[0].numero + '.pdf', nf.rows[0].conteudo);
+  } catch (e) { next(e); }
+});
+
+// ===================== RETIRADA NO CD =====================
+// Formulario para criar uma retirada (cliente retira a mercadoria no CD). Só admin completo.
+router.get('/retirada/nova', exigeAdminFull, async (req, res, next) => {
+  try {
+    const clientes = await db.query('SELECT id, nome FROM clientes ORDER BY nome');
+    const nfBps = await config.nfBps(db);
+    res.render('admin/retirada-nova', { clientes: clientes.rows, nfBps, erro: req.query.erro || null, formatBRL });
+  } catch (e) { next(e); }
+});
+
+// Catalogo (produtos com preço) de um cliente, para montar a retirada no navegador.
+router.get('/retirada/itens', exigeAdminFull, async (req, res) => {
+  try {
+    const clienteId = pInt(req.query.cliente);
+    if (!clienteId) return res.json({ ok: true, itens: [] });
+    const cat = await catalogoDoCliente(db, clienteId);
+    const itens = cat.map((x) => ({
+      id: x.id, produto_id: x.produto_id, nome: x.nome, preco_centavos: x.preco_centavos,
+      cores: (x.cores || []).map((c) => ({ id: c.id, nome: c.nome, sku: c.sku, saldo: c.saldo })),
+    }));
+    res.json({ ok: true, itens });
+  } catch (e) { console.error('Erro retirada/itens:', e); res.status(500).json({ erro: 'Falha ao carregar os produtos.' }); }
+});
+
+// Atribui a comissao de uma retirada a partir do cadastro do cliente (preposto + representante-pai),
+// calculada SOBRE O PRECO DE SISTEMA (preco_base_centavos) — o acrescimo de venda nao entra na comissao.
+//   representante_id = preposto (fatia dele) · responsavel_id = pai (resto do total).
+async function atribuirComissaoRetirada(client, pedidoId, clienteId, linhas) {
+  const cc = await client.query(
+    `SELECT c.comissao_total_bps, c.comissao_preposto_bps, u.id AS u_id, u.comissao_bps AS u_bps, u.representante_pai_id
+     FROM clientes c LEFT JOIN usuarios u ON u.id = c.representante_id AND u.papel = 'representante'
+     WHERE c.id = $1`, [clienteId]
+  );
+  const comRow = cc.rows[0];
+  if (!comRow || !comRow.u_id) {
+    await client.query('UPDATE pedidos SET representante_id = NULL, comissao_bps = NULL, comissao_centavos = 0, responsavel_id = NULL, comissao_resp_bps = NULL, comissao_resp_centavos = NULL WHERE id = $1', [pedidoId]);
+    return;
+  }
+  const normalTotalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
+  const temPai = !!comRow.representante_pai_id;
+  let prepRatio = 0;
+  if (temPai && normalTotalBps > 0) {
+    let prepNormal = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
+    if (prepNormal > normalTotalBps) prepNormal = normalTotalBps;
+    prepRatio = prepNormal / normalTotalBps;
+  }
+  let somaPrep = 0, somaPai = 0, baseTotal = 0;
+  let prepBps = 0, paiBps = 0;
+  if (temPai) { prepBps = Math.min(normalTotalBps, Math.round(normalTotalBps * prepRatio)); paiBps = normalTotalBps - prepBps; }
+  else { prepBps = normalTotalBps; paiBps = 0; }
+  for (const l of linhas) {
+    const baseLinha = (Number(l.precoBaseCentavos) || 0) * (Number(l.quantidade) || 0);
+    baseTotal += baseLinha;
+    if (normalTotalBps <= 0) continue;
+    somaPrep += Math.round(baseLinha * prepBps / 10000);
+    somaPai += Math.round(baseLinha * paiBps / 10000);
+  }
+  const blendPrep = baseTotal > 0 ? Math.round(somaPrep * 10000 / baseTotal) : 0;
+  if (temPai) {
+    const blendPai = baseTotal > 0 ? Math.round(somaPai * 10000 / baseTotal) : 0;
+    await client.query(
+      `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
+              responsavel_id = $5, comissao_resp_bps = $6, comissao_resp_centavos = $7 WHERE id = $1`,
+      [pedidoId, comRow.u_id, blendPrep, somaPrep, comRow.representante_pai_id, blendPai, somaPai]
+    );
+  } else {
+    await client.query(
+      `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
+              responsavel_id = NULL, comissao_resp_bps = NULL, comissao_resp_centavos = NULL WHERE id = $1`,
+      [pedidoId, comRow.u_id, blendPrep, somaPrep]
+    );
+  }
+}
+
+// Atribui o unico funcionario ativo (com taxa) ao pedido, se houver exatamente um. Com 0 ou 2+, fica manual.
+async function atribuirFuncionarioUnico(client, pedidoId) {
+  const fr = await client.query("SELECT id, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE AND taxa_etiqueta_centavos IS NOT NULL ORDER BY id");
+  if (fr.rowCount === 1) {
+    await client.query('UPDATE pedidos SET funcionario_id = $2, taxa_func_centavos = $3 WHERE id = $1', [pedidoId, fr.rows[0].id, fr.rows[0].taxa_etiqueta_centavos]);
+  }
+}
+
+// Cria a retirada: monta o pedido (tipo retirada), reserva o estoque e lança no financeiro.
+router.post('/retirada', exigeAdminFull, async (req, res) => {
+  const body = req.body || {};
+  const clienteId = pInt(body.clienteId);
+  let itensReq = [];
+  try { itensReq = typeof body.itens === 'string' ? JSON.parse(body.itens) : (Array.isArray(body.itens) ? body.itens : []); } catch (e) { itensReq = []; }
+  if (!clienteId) return res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent('Escolha o cliente.'));
+  if (!Array.isArray(itensReq) || itensReq.length === 0) return res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent('Adicione ao menos um produto.'));
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const cliRow = await client.query('SELECT id, nome, email FROM clientes WHERE id = $1', [clienteId]);
+    if (cliRow.rowCount === 0) throw new Error('Cliente inválido.');
+    const catMap = new Map((await catalogoDoCliente(client, clienteId)).map((i) => [String(i.id), i]));
+
+    const linhas = [];
+    let totalCentavos = 0, totalQtd = 0;
+    for (const l of itensReq) {
+      const qtd = parseInt(l.quantidade, 10);
+      if (!qtd || qtd < 1) throw new Error('Quantidade inválida em uma das linhas.');
+      const item = catMap.get(String(l.itemId));
+      if (!item) throw new Error('Produto inválido para este cliente.');
+      let cor = null;
+      if (item.cores && item.cores.length > 0) {
+        const corId = parseInt(l.corId, 10);
+        cor = item.cores.find((c) => c.id === corId) || null;
+        if (!cor) throw new Error('Escolha a cor de "' + item.nome + '".');
+      }
+      const itemId = await garantirItem(client, clienteId, item);
+      const custoRow = await client.query('SELECT custo_centavos FROM produtos WHERE id = $1', [item.produto_id]);
+      const custoCentavos = (custoRow.rowCount && custoRow.rows[0].custo_centavos !== null) ? Number(custoRow.rows[0].custo_centavos) : null;
+      // Preco de sistema (base) e preco de venda do preposto (opcional). Venda >= base; a diferenca e o acrescimo.
+      const baseCentavos = item.preco_centavos;
+      let vendaCentavos = baseCentavos;
+      const vTxt = (l.precoVenda == null ? '' : String(l.precoVenda)).trim();
+      if (vTxt !== '') { const v = parsePrecoToCentavos(vTxt); if (v !== null && v > baseCentavos) vendaCentavos = v; }
+      const totalLinha = vendaCentavos * qtd;
+      totalCentavos += totalLinha; totalQtd += qtd;
+      linhas.push({ itemId, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome, corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : null, precoCentavos: vendaCentavos, precoBaseCentavos: baseCentavos, quantidade: qtd, totalCentavos: totalLinha, custoCentavos });
+    }
+
+    // Nota fiscal (mesmas regras dos pedidos): taxa do admin, parcela escolhida (min 30%).
+    const nfTaxaBps = await config.nfBps(client);
+    const comNf = body.comNf === 'true' || body.comNf === 'on' || body.comNf === true;
+    let nfParcelaBps = null, impostoCentavos = 0, comNfFinal = false;
+    if (comNf && nfTaxaBps > 0) {
+      comNfFinal = true;
+      let parcela = parseInt(body.nfParcela, 10);
+      if (isNaN(parcela)) parcela = 3000;
+      parcela = Math.max(3000, Math.min(10000, parcela));
+      nfParcelaBps = parcela;
+      impostoCentavos = Math.round(totalCentavos * parcela / 10000 * nfTaxaBps / 10000);
+    }
+    const totalComImposto = totalCentavos + impostoCentavos;
+
+    const numero = (await client.query("SELECT 'RT-' || nextval('retirada_numero_seq') AS numero")).rows[0].numero;
+    const ped = await client.query(
+      `INSERT INTO pedidos (numero, cliente_id, usuario_id, tipo, status, total_centavos, total_etiquetas, aceite_em, com_nf, nf_bps, nf_parcela_bps, imposto_centavos)
+       VALUES ($1,$2,$3,'retirada','aguardando',$4,$5, now(), $6,$7,$8,$9) RETURNING id`,
+      [numero, clienteId, req.session.user.id, totalComImposto, totalQtd, comNfFinal, comNfFinal ? nfTaxaBps : null, nfParcelaBps, impostoCentavos]
+    );
+    const pedidoId = ped.rows[0].id;
+    for (const l of linhas) {
+      await client.query(
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, preco_base_centavos, quantidade, total_centavos, cor_id, cor_nome, sku, custo_centavos)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [pedidoId, l.itemId, l.itemNome, 'Retirada no CD', l.precoCentavos, l.precoBaseCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
+      );
+    }
+    await atribuirComissaoRetirada(client, pedidoId, clienteId, linhas);
+    await atribuirFuncionarioUnico(client, pedidoId);
+    await estoque.reservarPedido(client, pedidoId, req.session.user.id);
+
+    // Pagamento: a vista (um lancamento) ou parcelado (uma parcela por data, valores iguais).
+    let parcelaVencs = [];
+    try { parcelaVencs = typeof body.parcelaVencs === 'string' ? JSON.parse(body.parcelaVencs) : (Array.isArray(body.parcelaVencs) ? body.parcelaVencs : []); } catch (e) { parcelaVencs = []; }
+    const nParcelas = parseInt(body.parcelas, 10) || 1;
+    let msgPag = 'lancei no financeiro do cliente';
+    if (nParcelas > 1) {
+      if (parcelaVencs.length !== nParcelas) throw new Error('As datas das parcelas estão incompletas.');
+      const vencs = parcelaVencs.map((d) => {
+        const s = String(d).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('Data de parcela inválida.');
+        return { venc: s };
+      });
+      await financeiro.criarParcelas(client, pedidoId, clienteId, totalComImposto, vencs);
+      msgPag = 'lancei em ' + nParcelas + ' parcelas no financeiro do cliente';
+    } else {
+      await financeiro.criarLancamento(client, pedidoId, clienteId, totalComImposto, totalQtd);
+    }
+    await client.query('COMMIT');
+    res.redirect('/admin/pedido/' + pedidoId + '?ok=' + encodeURIComponent('Retirada ' + numero + ' criada. Reservei o estoque e ' + msgPag + '.'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.redirect('/admin/retirada/nova?erro=' + encodeURIComponent(e.message || 'Falha ao criar a retirada.'));
+  } finally { client.release(); }
+});
+
+// Editar retirada (só enquanto aguardando): abre a tela de criação pré-preenchida.
+router.get('/pedido/:id/editar', exigeAdminFull, async (req, res, next) => {
+  try {
+    const pid = pInt(req.params.id);
+    const pr = await db.query('SELECT p.*, c.nome AS cliente_nome FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1', [pid]);
+    if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return naoEncontrado(res, req);
+    const ped = pr.rows[0];
+    if (ped.status !== 'aguardando') return res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Só dá para editar enquanto a retirada está aguardando.'));
+    const linhas = await db.query('SELECT l.quantidade, l.cor_id, l.preco_centavos, l.preco_base_centavos, i.produto_id FROM linhas l LEFT JOIN itens i ON i.id = l.item_id WHERE l.pedido_id = $1 ORDER BY l.id', [pid]);
+    const parc = await db.query("SELECT to_char(vencimento, 'YYYY-MM-DD') AS venc FROM financeiro WHERE pedido_id = $1 AND parcela_num IS NOT NULL ORDER BY parcela_num", [pid]);
+    const nfBps = await config.nfBps(db);
+    const edit = {
+      pedidoId: pid, clienteId: ped.cliente_id, clienteNome: ped.cliente_nome,
+      comNf: ped.com_nf, nfBps: ped.nf_bps, nfParcelaBps: ped.nf_parcela_bps, numero: ped.numero,
+      itens: linhas.rows.filter((r) => r.produto_id).map((r) => {
+        // Pré-preenche o preço de venda só quando houve acréscimo (venda acima do preço de sistema).
+        const base = r.preco_base_centavos != null ? r.preco_base_centavos : r.preco_centavos;
+        const venda = (r.preco_centavos != null && base != null && r.preco_centavos > base)
+          ? (r.preco_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+        return { produtoId: r.produto_id, corId: r.cor_id, quantidade: r.quantidade, venda };
+      }),
+      parcelaVencs: parc.rows.map((r) => r.venc),
+    };
+    res.render('admin/retirada-nova', { clientes: [{ id: ped.cliente_id, nome: ped.cliente_nome }], nfBps, edit, erro: req.query.erro || null, formatBRL });
+  } catch (e) { next(e); }
+});
+
+router.post('/pedido/:id/editar', exigeAdminFull, async (req, res) => {
+  const pid = pInt(req.params.id);
+  const body = req.body || {};
+  let itensReq = [];
+  try { itensReq = typeof body.itens === 'string' ? JSON.parse(body.itens) : (Array.isArray(body.itens) ? body.itens : []); } catch (e) { itensReq = []; }
+  if (!Array.isArray(itensReq) || itensReq.length === 0) return res.redirect('/admin/pedido/' + pid + '/editar?erro=' + encodeURIComponent('Adicione ao menos um produto.'));
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const ped = (await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pid])).rows[0];
+    if (!ped || ped.tipo !== 'retirada') { await client.query('ROLLBACK'); return res.redirect('/admin/pedidos'); }
+    if (ped.status !== 'aguardando') throw new Error('Só dá para editar enquanto a retirada está aguardando.');
+    const clienteId = ped.cliente_id;
+    const catMap = new Map((await catalogoDoCliente(client, clienteId)).map((i) => [String(i.id), i]));
+    const linhas = [];
+    let totalCentavos = 0, totalQtd = 0;
+    for (const l of itensReq) {
+      const qtd = parseInt(l.quantidade, 10);
+      if (!qtd || qtd < 1) throw new Error('Quantidade inválida em uma das linhas.');
+      const item = catMap.get(String(l.itemId));
+      if (!item) throw new Error('Produto inválido para este cliente.');
+      let cor = null;
+      if (item.cores && item.cores.length > 0) {
+        const corId = parseInt(l.corId, 10);
+        cor = item.cores.find((c) => c.id === corId) || null;
+        if (!cor) throw new Error('Escolha a cor de "' + item.nome + '".');
+      }
+      const itemId = await garantirItem(client, clienteId, item);
+      const custoRow = await client.query('SELECT custo_centavos FROM produtos WHERE id = $1', [item.produto_id]);
+      const custoCentavos = (custoRow.rowCount && custoRow.rows[0].custo_centavos !== null) ? Number(custoRow.rows[0].custo_centavos) : null;
+      const baseCentavos = item.preco_centavos;
+      let vendaCentavos = baseCentavos;
+      const vTxt = (l.precoVenda == null ? '' : String(l.precoVenda)).trim();
+      if (vTxt !== '') { const v = parsePrecoToCentavos(vTxt); if (v !== null && v > baseCentavos) vendaCentavos = v; }
+      const totalLinha = vendaCentavos * qtd;
+      totalCentavos += totalLinha; totalQtd += qtd;
+      linhas.push({ itemId, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome, corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : null, precoCentavos: vendaCentavos, precoBaseCentavos: baseCentavos, quantidade: qtd, totalCentavos: totalLinha, custoCentavos });
+    }
+    // Estorna a reserva atual e limpa linhas/lancamentos antigos.
+    await estoque.estornarReserva(client, pid, req.session.user.id);
+    await client.query('DELETE FROM financeiro WHERE pedido_id = $1', [pid]);
+    await client.query('DELETE FROM linhas WHERE pedido_id = $1', [pid]);
+    // NF mantida como estava: recalcula o imposto sobre a nova base.
+    const impostoCentavos = ped.com_nf ? Math.round(totalCentavos * (ped.nf_parcela_bps / 10000) * (ped.nf_bps / 10000)) : 0;
+    const totalComImposto = totalCentavos + impostoCentavos;
+    for (const l of linhas) {
+      await client.query(
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, preco_base_centavos, quantidade, total_centavos, cor_id, cor_nome, sku, custo_centavos)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [pid, l.itemId, l.itemNome, 'Retirada no CD', l.precoCentavos, l.precoBaseCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
+      );
+    }
+    await atribuirComissaoRetirada(client, pid, clienteId, linhas);
+    await estoque.reservarPedido(client, pid, req.session.user.id);
+    // Pagamento (igual à criação): à vista ou parcelado por datas.
+    let parcelaVencs = [];
+    try { parcelaVencs = typeof body.parcelaVencs === 'string' ? JSON.parse(body.parcelaVencs) : (Array.isArray(body.parcelaVencs) ? body.parcelaVencs : []); } catch (e) { parcelaVencs = []; }
+    const nParcelas = parseInt(body.parcelas, 10) || 1;
+    if (nParcelas > 1) {
+      if (parcelaVencs.length !== nParcelas) throw new Error('As datas das parcelas estão incompletas.');
+      const vencs = parcelaVencs.map((d) => { const s = String(d).trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('Data de parcela inválida.'); return { venc: s }; });
+      await financeiro.criarParcelas(client, pid, clienteId, totalComImposto, vencs);
+    } else {
+      await financeiro.criarLancamento(client, pid, clienteId, totalComImposto, totalQtd);
+    }
+    await client.query('UPDATE pedidos SET total_centavos = $2, total_etiquetas = $3, imposto_centavos = $4 WHERE id = $1', [pid, totalComImposto, totalQtd, impostoCentavos]);
+    await client.query('COMMIT');
+    res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Retirada ' + ped.numero + ' atualizada.'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.redirect('/admin/pedido/' + pid + '/editar?erro=' + encodeURIComponent(e.message || 'Falha ao salvar as alterações.'));
+  } finally { client.release(); }
+});
+
+// Confirma que o cliente retirou: baixa o estoque (fisico) e marca como retirado.
+router.post('/pedido/:id/confirmar-retirada', exigeAdminFull, async (req, res) => {
+  const pid = pInt(req.params.id);
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const p = await client.query('SELECT id, tipo, status FROM pedidos WHERE id = $1 FOR UPDATE', [pid]);
+    if (p.rowCount === 0 || p.rows[0].tipo !== 'retirada') { await client.query('ROLLBACK'); return res.redirect('/admin/pedidos'); }
+    if (p.rows[0].status === 'retirado') { await client.query('ROLLBACK'); return res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Esta retirada já estava confirmada.')); }
+    await estoque.baixarRetirada(client, pid, req.session.user.id);
+    await client.query("UPDATE pedidos SET status = 'retirado', retirado_em = now() WHERE id = $1", [pid]);
+    await client.query('COMMIT');
+    res.redirect('/admin/pedido/' + pid + '?ok=' + encodeURIComponent('Retirada confirmada. O estoque foi baixado.'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.redirect('/admin/pedido/' + pid + '?erro=' + encodeURIComponent('Falha ao confirmar a retirada.'));
+  } finally { client.release(); }
+});
+
+// Comprovante de retirada (PDF, gerado na hora).
+router.get('/pedido/:id/retirada.pdf', async (req, res, next) => {
+  try {
+    const pr = await db.query('SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1', [pInt(req.params.id)]);
+    if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return naoEncontrado(res, req);
+    const p = pr.rows[0];
+    const linhas = await db.query('SELECT l.item_nome, l.quantidade, l.preco_centavos, l.total_centavos, pr.peso_gramas FROM linhas l LEFT JOIN itens i ON i.id = l.item_id LEFT JOIN produtos pr ON pr.id = i.produto_id WHERE l.pedido_id = $1 ORDER BY l.id', [p.id]);
+    const fin = await db.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc_br, parcela_num, parcela_total FROM financeiro WHERE pedido_id = $1 ORDER BY parcela_num NULLS FIRST, id", [p.id]);
+    const pdf = await gerarComprovanteRetirada(montarDados(p, linhas.rows, fin.rows));
+    enviarPdf(res, 'retirada-' + p.numero + '.pdf', pdf);
+  } catch (e) { next(e); }
+});
+
+// Extrato do representante/preposto de uma retirada (interno). Comissao sobre o preco de SISTEMA
+// + acrescimo (venda - sistema, 100% dele). NAO mostra o % do representante pai (Gabriel).
+router.get('/pedido/:id/extrato-preposto.pdf', exigeAdminFull, async (req, res, next) => {
+  try {
+    const pr = await db.query(
+      `SELECT p.id, p.numero, p.criado_em, p.tipo, c.nome AS cliente_nome,
+              c.representante_id, c.comissao_total_bps, c.comissao_preposto_bps,
+              rep.nome AS rep_nome, rep.representante_pai_id AS rep_pai_id
+       FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
+       LEFT JOIN usuarios rep ON rep.id = c.representante_id
+       WHERE p.id = $1`, [pInt(req.params.id)]);
+    if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return naoEncontrado(res, req);
+    const p = pr.rows[0];
+    // % do preposto: se o representante do cliente for um preposto, usa a parte dele (comissao_preposto_bps);
+    // senao, usa a comissao total (representante direto). O pai nunca aparece aqui.
+    const ehPreposto = p.rep_pai_id !== null && p.rep_pai_id !== undefined;
+    let prepostoBps = 0;
+    if (p.representante_id) prepostoBps = Number(ehPreposto ? (p.comissao_preposto_bps || 0) : (p.comissao_total_bps || 0)) || 0;
+    const prepostoNome = p.rep_nome || (p.representante_id ? '—' : '(sem representante definido)');
+
+    const lin = await db.query(
+      `SELECT item_nome, quantidade, preco_centavos, COALESCE(preco_base_centavos, preco_centavos) AS base_centavos
+       FROM linhas WHERE pedido_id = $1 ORDER BY id`, [p.id]);
+    let totComissao = 0, totAdicional = 0;
+    const linhas = lin.rows.map((l) => {
+      const qtd = Number(l.quantidade) || 0;
+      const base = Number(l.base_centavos) || 0;
+      const venda = Number(l.preco_centavos) || 0;
+      const comissao = Math.round(base * qtd * prepostoBps / 10000);
+      const adicional = Math.max(0, venda - base) * qtd;
+      totComissao += comissao; totAdicional += adicional;
+      return { nome: l.item_nome, qtd, baseCentavos: base, vendaCentavos: venda, comissaoCentavos: comissao, adicionalCentavos: adicional };
+    });
+    const pdf = await gerarExtratoPreposto({
+      numero: p.numero, criadoEm: p.criado_em,
+      empresa: { nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
+      cliente: { nome: p.cliente_nome },
+      preposto: { nome: prepostoNome, bps: prepostoBps },
+      linhas, totComissao, totAdicional, totGeral: totComissao + totAdicional,
+    });
+    enviarPdf(res, 'extrato-preposto-' + p.numero + '.pdf', pdf);
+  } catch (e) { next(e); }
+});
+
 // ===================== FINANCEIRO =====================
 router.get('/financeiro', async (req, res, next) => {
   try {
@@ -390,6 +819,26 @@ router.post('/clientes/:id/prazo', async (req, res, next) => {
     res.redirect('/admin/clientes');
   } catch (e) { next(e); }
 });
+// Editar o nome (loja) do cliente. Muda só o nome; login, histórico, pedidos e financeiro são por id e continuam.
+router.post('/clientes/:id/nome', async (req, res, next) => {
+  const cid = pInt(req.params.id);
+  try {
+    const nome = (req.body.nome || '').toString().trim().replace(/\s+/g, ' ');
+    if (nome.length < 2) throw new Error('Informe o nome do cliente (mínimo 2 caracteres).');
+    if (nome.length > 120) throw new Error('Nome muito longo (máximo 120 caracteres).');
+    const ex = await db.query('SELECT id FROM clientes WHERE id = $1', [cid]);
+    if (ex.rowCount === 0) throw new Error('Cliente não encontrado.');
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE clientes SET nome = $2 WHERE id = $1', [cid, nome]);
+      // o usuário de login do cliente tem o mesmo nome de exibição: mantém em sincronia
+      await client.query("UPDATE usuarios SET nome = $2 WHERE cliente_id = $1 AND papel = 'cliente'", [cid, nome]);
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    res.redirect('/admin/clientes?ok=' + encodeURIComponent('Nome atualizado para "' + nome + '".'));
+  } catch (e) { res.redirect('/admin/clientes?erro=' + encodeURIComponent(msgErro(e))); }
+});
 router.get('/clientes', async (req, res, next) => {
   try {
     const r = await db.query(
@@ -415,7 +864,7 @@ router.get('/clientes', async (req, res, next) => {
     if (req.session.acessoCliente) {
       const a = req.session.acessoCliente; delete req.session.acessoCliente;
       const site = 'https://' + (req.get('host') || 'distribuidoraeea.up.railway.app');
-      const nomeEmpresa = process.env.EMPRESA_NOME || 'Distribuidora E&A Móveis';
+      const nomeEmpresa = process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora';
       const manualUrl = process.env.MANUAL_CLIENTE_URL || null;
       const mensagem = montarMensagemAcesso({ nome: a.nome, login: a.login, senha: a.senha, site, empresa: nomeEmpresa, manualUrl });
       acesso = { nome: a.nome, login: a.login, telefone: a.telefone, mensagem, site };
@@ -594,7 +1043,7 @@ router.post('/funcionarios/:id/toggle', async (req, res, next) => {
 router.get('/produtos', async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT p.id, p.nome, p.sku, p.descricao, p.peso_gramas, p.medidas, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id,
+      `SELECT p.id, p.nome, p.sku, p.descricao, p.peso_gramas, p.medidas, p.ativo, p.saldo, p.reservado, p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id,
               to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS criado_iso, to_char(p.criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS criado_br,
               (SELECT count(*) FROM itens i WHERE i.produto_id = p.id AND i.ativo)::int AS precos
        FROM produtos p ORDER BY p.nome`
@@ -608,8 +1057,18 @@ router.get('/produtos', async (req, res, next) => {
     }
     const imgMap = await imagens.listarPorProdutos(r.rows.map((p) => p.id));
     const produtos = r.rows.map((p) => ({ ...comCustos(p, ref), cores: (coresMap.get(p.id) || []).map((c) => ({ ...c, sku: skuCor(p.sku, c) })), imagens: imgMap.get(p.id) || [] }));
-    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, pesoTxt });
+    const nfBps = await config.nfBps(db);
+    res.render('admin/produtos', { produtos, ref, motivos: estoque.MOTIVOS, ativo: 'produtos', nfBps, erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, pesoTxt });
   } catch (e) { next(e); }
+});
+// Taxa do imposto da nota fiscal (vale para todos os produtos) - so o admin completo define.
+router.post('/config/nf', exigeAdminFull, async (req, res) => {
+  try {
+    const bps = parsePercentToBps(req.body.imposto);
+    if (bps === null || bps < 0 || bps >= 100000) throw new Error('Informe o imposto em % (ex.: 10).');
+    await config.setNfBps(db, bps);
+    res.redirect('/admin/produtos?ok=' + encodeURIComponent('Imposto da nota fiscal salvo: ' + formatPercent(bps) + '.'));
+  } catch (e) { res.redirect('/admin/produtos?erro=' + encodeURIComponent(e.message || 'Falha ao salvar o imposto.')); }
 });
 router.post('/produtos', async (req, res, next) => {
   try {
@@ -718,16 +1177,25 @@ router.post('/produtos/importar', async (req, res, next) => {
 router.post('/produtos/:id/custos', async (req, res, next) => {
   try {
     const custoTxt = (req.body.custo || '').toString().trim(), lucroTxt = (req.body.lucro || '').toString().trim();
+    const lucroTipo = req.body.lucro_tipo === 'percentual' ? 'percentual' : 'valor';
     const custo = custoTxt === '' ? null : parsePrecoToCentavos(custoTxt);
-    const lucro = lucroTxt === '' ? null : parsePrecoToCentavos(lucroTxt);
-    if ((custoTxt !== '' && custo === null) || (lucroTxt !== '' && lucro === null)) throw new Error('Custo e lucro devem ser valores em R$ (ex.: 40,00).');
+    if (custoTxt !== '' && custo === null) throw new Error('O custo deve ser um valor em R$ (ex.: 40,00).');
+    let lucro = null, lucroBps = null;
+    if (lucroTipo === 'percentual') {
+      lucroBps = lucroTxt === '' ? null : parsePercentToBps(lucroTxt);
+      if (lucroTxt !== '' && lucroBps === null) throw new Error('O lucro em % deve ser um número (ex.: 25).');
+    } else {
+      lucro = lucroTxt === '' ? null : parsePrecoToCentavos(lucroTxt);
+      if (lucroTxt !== '' && lucro === null) throw new Error('O lucro deve ser um valor em R$ (ex.: 20,00).');
+    }
     // quem recebe: validados contra o cadastro (papel certo e ativo)
     const repId = pInt(req.body.rep_id), funcId = pInt(req.body.func_id);
-    const okRep = repId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]) : { rowCount: 0 };
+    const okRep = repId ? await db.query("SELECT COALESCE(comissao_bps, 0)::int AS bps FROM usuarios WHERE id = $1 AND papel = 'representante'", [repId]) : { rowCount: 0, rows: [] };
     const okFunc = funcId ? await db.query("SELECT 1 FROM usuarios WHERE id = $1 AND papel = 'funcionario'", [funcId]) : { rowCount: 0 };
+    if (lucroBps !== null && (okRep.rowCount ? okRep.rows[0].bps : 0) + lucroBps >= 10000) throw new Error('Lucro + representante precisam ficar abaixo de 100%.');
     const antes = await db.query('SELECT nome, custo_centavos FROM produtos WHERE id = $1', [pInt(req.params.id)]);
-    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5 WHERE id = $1',
-      [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null]);
+    await db.query('UPDATE produtos SET custo_centavos = $2, lucro_centavos = $3, rep_usuario_id = $4, func_usuario_id = $5, lucro_tipo = $6, lucro_bps = $7 WHERE id = $1',
+      [pInt(req.params.id), custo, lucro, okRep.rowCount ? repId : null, okFunc.rowCount ? funcId : null, lucroTipo, lucroBps]);
     // produto que ganhou custo pela primeira vez passa a ter preco sugerido: fica liberado para os clientes
     if (antes.rowCount && antes.rows[0].custo_centavos === null && custo !== null) {
       await novidades.registrar(db, { tipo: 'produto', produtoId: pInt(req.params.id), titulo: antes.rows[0].nome + ' liberado', detalhe: 'já disponível para envio' });
@@ -735,9 +1203,10 @@ router.post('/produtos/:id/custos', async (req, res, next) => {
     if (isAjax(req)) {
       // devolve o quadro recalculado para a tela atualizar sem recarregar
       const ref = await refCustos();
-      const p = await db.query('SELECT custo_centavos, lucro_centavos, rep_usuario_id, func_usuario_id FROM produtos WHERE id = $1', [pInt(req.params.id)]);
+      const p = await db.query('SELECT custo_centavos, lucro_centavos, lucro_tipo, lucro_bps, rep_usuario_id, func_usuario_id FROM produtos WHERE id = $1', [pInt(req.params.id)]);
       const pc = comCustos(p.rows[0], ref);
-      return res.json({ ok: true, custo: pc.custo_centavos !== null ? formatBRL(pc.custo_centavos) : '—', lucro: pc.lucro_centavos !== null ? formatBRL(pc.lucro_centavos) : '—',
+      return res.json({ ok: true, custo: pc.custo_centavos !== null ? formatBRL(pc.custo_centavos) : '—', lucro: pc.lucro_alvo !== null ? formatBRL(pc.lucro_alvo) : '—',
+        lucroRot: pc.lucro_pct && pc.lucro_bps !== null ? '· ' + formatPercent(pc.lucro_bps) + ' da venda' : '',
         func: formatBRL(pc.func_centavos), funcNome: pc.func ? pc.func.nome : 'ninguém', repNome: pc.rep ? pc.rep.nome : 'ninguém', repPct: formatPercent(pc.rep_bps_efetivo),
         comissao: pc.sugerido !== null ? formatBRL(Math.round(pc.sugerido * pc.rep_bps_efetivo / 10000)) : '—', sugerido: pc.sugerido !== null ? formatBRL(pc.sugerido) : '—' });
     }
@@ -801,21 +1270,28 @@ router.get('/precos', async (req, res, next) => {
   try {
     const clientes = await db.query('SELECT id, nome FROM clientes WHERE ativo = TRUE ORDER BY nome');
     const ref = await refCustos();
-    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, rep_usuario_id, func_usuario_id FROM produtos WHERE ativo = TRUE ORDER BY nome');
+    const prodRes = await db.query('SELECT id, nome, custo_centavos, lucro_centavos, lucro_tipo, lucro_bps, rep_usuario_id, func_usuario_id FROM produtos WHERE ativo = TRUE ORDER BY nome');
     const produtos = { rows: prodRes.rows.map((p) => comCustos(p, ref)) };
     let clienteId = pInt(req.query.cliente);
     if (!clienteId && clientes.rowCount > 0) clienteId = clientes.rows[0].id;
     let itens = { rows: [] }, clienteNome = '';
     if (clienteId) {
       itens = await db.query(
-        `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.produto_id,
+        `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, i.promo_rep_bps, i.produto_id,
                 to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim,
-                p.custo_centavos, p.lucro_centavos, p.rep_usuario_id, p.func_usuario_id
+                p.custo_centavos, p.lucro_centavos, p.lucro_tipo, p.lucro_bps, p.rep_usuario_id, p.func_usuario_id
          FROM itens i LEFT JOIN produtos p ON p.id = i.produto_id
          WHERE i.cliente_id = $1 AND i.ativo = TRUE AND i.negociado = TRUE ORDER BY i.nome`, [clienteId]
       );
       const cn = await db.query('SELECT nome FROM clientes WHERE id = $1', [clienteId]);
       clienteNome = cn.rowCount ? cn.rows[0].nome : '';
+    }
+    // % normal do representante para este cliente (vale fora da campanha): o do cadastro do cliente,
+    // ou, na falta, o % padrao do representante vinculado.
+    let clienteRepBps = 0;
+    if (clienteId) {
+      const cr = await db.query("SELECT c.comissao_total_bps, u.comissao_bps AS u_bps FROM clientes c LEFT JOIN usuarios u ON u.id = c.representante_id AND u.papel = 'representante' WHERE c.id = $1", [clienteId]);
+      if (cr.rowCount) clienteRepBps = Number(cr.rows[0].comissao_total_bps != null ? cr.rows[0].comissao_total_bps : (cr.rows[0].u_bps || 0)) || 0;
     }
     const hoje = hojeISO();
     const lista = itens.rows.map((i) => {
@@ -825,16 +1301,38 @@ router.get('/precos', async (req, res, next) => {
       if (i.promo_tipo && !ef.promo) promoEstado = (i.promo_inicio && i.promo_inicio > hoje) ? 'agendada' : 'encerrada';
       // lucro por unidade com o preco negociado (e com a promocao, se ativa)
       const pc = comCustos(i, ref);
+      // Durante a campanha a comissao do rep usa o % da campanha (se definido); senao, o % do produto.
+      const repPromoBps = (ef.promo && i.promo_rep_bps !== null && i.promo_rep_bps !== undefined) ? Number(i.promo_rep_bps) : pc.rep_bps_efetivo;
       const lucroInfo = pc.temCustos ? {
         sugerido: pc.sugerido,
         lucro: lucroCom(i.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos),
-        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: pc.rep_bps_efetivo }, pc.func_centavos) : null,
-        lucroAlvo: Number(i.lucro_centavos || 0),
+        lucroPromo: ef.promo ? lucroCom(ef.preco_centavos, { custo_centavos: pc.custo_centavos, rep_bps: repPromoBps }, pc.func_centavos) : null,
+        lucroAlvo: Number(pc.lucro_alvo || 0),
         diffSugerido: pc.sugerido !== null ? i.preco_centavos - pc.sugerido : null,
       } : null;
-      return { ...i, efetivo: ef, promoEstado, lucroInfo, promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
+      return { ...i, efetivo: ef, promoEstado, lucroInfo,
+        promo_rep_txt: (i.promo_rep_bps !== null && i.promo_rep_bps !== undefined) ? formatPercent(i.promo_rep_bps).replace('%', '') : '',
+        promo_valor_txt: i.promo_tipo === 'percentual' ? formatPercent(i.promo_valor).replace('%', '') : (i.promo_valor !== null ? (i.promo_valor / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '') };
     });
-    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, clienteId, clienteNome, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
+    // Promoções em andamento: todas as promoções ativas hoje, de todos os clientes (visão geral no topo da tela).
+    const hojeD = new Date(hoje + 'T00:00:00');
+    const promoAll = await db.query(
+      `SELECT i.id, i.nome, i.preco_centavos, i.promo_tipo, i.promo_valor, c.id AS cliente_id, c.nome AS cliente_nome,
+              to_char(i.promo_inicio, 'YYYY-MM-DD') AS promo_inicio, to_char(i.promo_fim, 'YYYY-MM-DD') AS promo_fim
+       FROM itens i JOIN clientes c ON c.id = i.cliente_id
+       WHERE i.ativo = TRUE AND i.negociado = TRUE AND i.promo_tipo IS NOT NULL
+       ORDER BY i.promo_fim NULLS LAST, c.nome, i.nome`);
+    const promocoes = [];
+    for (const i of promoAll.rows) {
+      const ef = precoEfetivo(i, hoje);
+      if (!ef.promo) continue; // mostra só as que estão valendo hoje (ignora agendadas/encerradas)
+      const descBps = i.preco_centavos > 0 ? Math.round((i.preco_centavos - ef.preco_centavos) * 10000 / i.preco_centavos) : 0;
+      let dias = null;
+      if (i.promo_fim) dias = Math.round((new Date(i.promo_fim + 'T00:00:00') - hojeD) / 86400000);
+      promocoes.push({ id: i.id, nome: i.nome, cliente_id: i.cliente_id, cliente_nome: i.cliente_nome,
+        de: i.preco_centavos, por: ef.preco_centavos, desc_bps: descBps, fim: i.promo_fim, dias });
+    }
+    res.render('admin/precos', { clientes: clientes.rows, produtos: produtos.rows, itens: lista, promocoes, clienteId, clienteNome, clienteRepBps, ref, ativo: 'precos', erro: req.query.erro || null, ok: req.query.ok || null, formatBRL, formatPercent, brDate });
   } catch (e) { next(e); }
 });
 router.post('/precos', async (req, res, next) => {
@@ -871,7 +1369,14 @@ router.post('/precos/:id/promo', async (req, res, next) => {
     const fim = /^\d{4}-\d{2}-\d{2}$/.test(req.body.fim || '') ? req.body.fim : null;
     if (!fim) throw new Error('Informe até quando vale a promoção.');
     if (ini && fim < ini) throw new Error('A data final é anterior à inicial.');
-    await db.query('UPDATE itens SET promo_tipo = $2, promo_valor = $3, promo_inicio = $4, promo_fim = $5 WHERE id = $1', [id, tipo, valor, ini, fim]);
+    // % do representante durante a campanha (opcional). Vazio = mantem o % normal do cadastro.
+    const repTxt = (req.body.rep_percent || '').toString().trim();
+    let repBps = null;
+    if (repTxt !== '') {
+      repBps = parsePercentToBps(repTxt);
+      if (repBps === null || repBps < 0 || repBps >= 10000) throw new Error('% do representante na campanha inválida (0 a 99,99%).');
+    }
+    await db.query('UPDATE itens SET promo_tipo = $2, promo_valor = $3, promo_inicio = $4, promo_fim = $5, promo_rep_bps = $6 WHERE id = $1', [id, tipo, valor, ini, fim, repBps]);
     {
       const it = await db.query('SELECT nome, produto_id, preco_centavos FROM itens WHERE id = $1', [id]);
       const novo = tipo === 'percentual' ? Math.round(it.rows[0].preco_centavos * (10000 - valor) / 10000) : valor;
@@ -882,14 +1387,16 @@ router.post('/precos/:id/promo', async (req, res, next) => {
 });
 router.post('/precos/:id/promo/remover', async (req, res, next) => {
   try {
-    const it = await db.query('UPDATE itens SET promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL WHERE id = $1 RETURNING cliente_id', [pInt(req.params.id)]);
-    res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : '') + '&ok=' + encodeURIComponent('Promoção removida.'));
+    const it = await db.query('UPDATE itens SET promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL, promo_rep_bps = NULL WHERE id = $1 RETURNING cliente_id', [pInt(req.params.id)]);
+    // "voltar" = cliente que está aberto na tela (ao encerrar pelo card "Promoções em andamento"); senão, o dono da promoção.
+    const voltar = pInt(req.body.voltar) || (it.rowCount ? it.rows[0].cliente_id : '');
+    res.redirect('/admin/precos?cliente=' + voltar + '&ok=' + encodeURIComponent('Promoção encerrada.'));
   } catch (e) { next(e); }
 });
 router.post('/precos/:id/remove', async (req, res, next) => {
   try {
     // remover a negociacao: o produto volta ao preco sugerido (o vinculo fica, sem negociacao, para o historico)
-    const it = await db.query('UPDATE itens SET negociado = FALSE, promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL WHERE id = $1 RETURNING cliente_id', [req.params.id]);
+    const it = await db.query('UPDATE itens SET negociado = FALSE, promo_tipo = NULL, promo_valor = NULL, promo_inicio = NULL, promo_fim = NULL, promo_rep_bps = NULL WHERE id = $1 RETURNING cliente_id', [req.params.id]);
     res.redirect('/admin/precos?cliente=' + (it.rowCount ? it.rows[0].cliente_id : ''));
   } catch (e) { next(e); }
 });

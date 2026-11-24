@@ -2,13 +2,20 @@
 
 const express = require('express');
 const multer = require('multer');
+const os = require('os');
+const fs = require('fs');
+const fsp = fs.promises;
+const pathmod = require('path');
+const crypto = require('crypto');
 const db = require('../db');
 const { exigeCliente, exigeLogin } = require('../auth');
 const imagens = require('../imagens');
 const { contarPaginas, enviarEtiquetas, recortarPrimeirasPaginas } = require('../etiquetas');
 const { gerarComprovante } = require('../comprovante');
+const { gerarComprovanteRetirada, montarDados } = require('../comprovante-retirada');
 const financeiro = require('../financeiro');
 const estoque = require('../estoque');
+const config = require('../config');
 const { formatBRL, formatDateTime, horasRestantes, etiquetasExpiradas, andamentoDisplay } = require('../util');
 
 // Catalogo do cliente: todos os produtos ativos ao preco sugerido, ou ao negociado quando houver
@@ -20,8 +27,29 @@ async function itensComPreco(q, clienteId) {
 
 const router = express.Router();
 
+// Lista de precos em PDF com os mesmos precos da tela de Estoque de quem baixa.
+async function enviarListaPrecos(req, res, produtos, negociado) {
+  const { gerarListaPrecos, nomeArquivo } = require('../listaPrecos');
+  const para = (req.session.user && req.session.user.nome) || '';
+  const pdf = await gerarListaPrecos(produtos, {
+    para, negociado, empresa: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora',
+    contato: process.env.EMPRESA_CONTATO || null, site: (req.get('host') || 'distribuidoraeea.up.railway.app'),
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="' + nomeArquivo(para) + '"');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(pdf);
+}
+
+// Grava os uploads em disco (temporario) em vez de manter todos em memoria: o pico de
+// memoria passa a ser ~1 arquivo por vez, evitando OOM com muitos PDFs grandes.
+const TMP_UP = pathmod.join(os.tmpdir(), 'a4-uploads');
+try { fs.mkdirSync(TMP_UP, { recursive: true }); } catch (e) { /* ja existe */ }
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, TMP_UP),
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + crypto.randomBytes(6).toString('hex') + '.pdf'),
+  }),
   limits: { fileSize: 25 * 1024 * 1024, files: 30 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname)) return cb(null, true);
@@ -64,8 +92,9 @@ router.get('/novo', exigeCliente, async (req, res, next) => {
     const cli = await db.query('SELECT nome FROM clientes WHERE id = $1', [req.session.user.clienteId]);
     // WhatsApp da distribuidora (so digitos, com DDI). Vazio = botao nao aparece.
     const whatsapp = (process.env.EMPRESA_WHATSAPP || '').replace(/\D/g, '');
+    const nfBps = await config.nfBps(db);
     res.render('cliente/novo', {
-      itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', whatsapp,
+      itens: itens.rows, credito, contato: process.env.EMPRESA_CONTATO || '', whatsapp, nfBps,
       clienteNome: (cli.rows[0] && cli.rows[0].nome) || req.session.user.nome, clienteLogin: req.session.user.login || '',
       formatBRL,
     });
@@ -74,25 +103,28 @@ router.get('/novo', exigeCliente, async (req, res, next) => {
 
 // ---------- Upload + deteccao de paginas ----------
 router.post('/api/upload', exigeCliente, upload.array('arquivos', 30), async (req, res) => {
+  const arquivos = req.files || [];
   try {
-    if (!req.files || req.files.length === 0) return res.status(400).json({ erro: 'Envie ao menos um PDF.' });
+    if (arquivos.length === 0) return res.status(400).json({ erro: 'Envie ao menos um PDF.' });
     // Codigos lidos no navegador (um conjunto {br,nfe} por pagina), alinhados aos arquivos.
     const codigosBody = req.body && req.body.codigos;
     const codigosArr = Array.isArray(codigosBody) ? codigosBody : (codigosBody !== undefined ? [codigosBody] : []);
     const resultado = [];
-    for (let fi = 0; fi < req.files.length; fi++) {
-      const f = req.files[fi];
+    for (let fi = 0; fi < arquivos.length; fi++) {
+      const f = arquivos[fi];
+      const buffer = await fsp.readFile(f.path); // 1 arquivo por vez na memoria
       let paginas = 0;
-      try { paginas = await contarPaginas(f.buffer); }
+      try { paginas = await contarPaginas(buffer); }
       catch (e) { return res.status(400).json({ erro: 'Nao consegui ler o PDF "' + f.originalname + '". Verifique o arquivo.' }); }
       if (paginas < 1) return res.status(400).json({ erro: 'O arquivo "' + f.originalname + '" nao tem paginas validas.' });
       const codigos = normalizarCodigos(codigosArr[fi], paginas);
       const ins = await db.query('INSERT INTO arquivos (usuario_id, nome, paginas, conteudo, codigos) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-        [req.session.user.id, f.originalname, paginas, f.buffer, codigos ? JSON.stringify(codigos) : null]);
+        [req.session.user.id, f.originalname, paginas, buffer, codigos ? JSON.stringify(codigos) : null]);
       resultado.push({ id: ins.rows[0].id, nome: f.originalname, paginas });
     }
     res.json({ arquivos: resultado });
   } catch (e) { console.error('Erro no upload:', e); res.status(500).json({ erro: 'Falha ao processar o upload.' }); }
+  finally { for (const f of arquivos) fsp.unlink(f.path).catch(() => {}); } // apaga os temporarios
 });
 
 // ---------- Criar pedido (aceite) ----------
@@ -131,34 +163,55 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
       const arq = await client.query('SELECT id, nome, paginas, codigos FROM arquivos WHERE id = $1 AND usuario_id = $2 AND pedido_id IS NULL', [arquivoId, usuarioId]);
       if (arq.rowCount === 0) throw httpErr(400, 'Arquivo invalido ou ja utilizado.');
+      // Custo CONGELADO do produto neste aceite (snapshot): fica gravado na linha e nao muda se o custo
+      // do produto for reajustado depois. Lido no servidor; nunca vai para o catalogo do cliente.
+      const custoRow = await client.query('SELECT custo_centavos FROM produtos WHERE id = $1', [item.produto_id]);
+      const custoCentavos = (custoRow.rowCount && custoRow.rows[0].custo_centavos !== null) ? Number(custoRow.rows[0].custo_centavos) : null;
       const totalLinha = item.preco_centavos * quantidade;
       totalCentavos += totalLinha; totalEtiquetas += quantidade;
       linhas.push({
         arquivoId, arquivoNome: arq.rows[0].nome, paginas: arq.rows[0].paginas, codigos: arq.rows[0].codigos || [],
         itemId: item.id, itemNome: cor ? item.nome + ' · ' + cor.nome : item.nome,
         corId: cor ? cor.id : null, corNome: cor ? cor.nome : null, sku: cor ? cor.sku : item.sku,
-        precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha,
+        precoCentavos: item.preco_centavos, quantidade, totalCentavos: totalLinha, custoCentavos,
+        repCampanhaBps: (item.rep_bps_campanha !== null && item.rep_bps_campanha !== undefined) ? Number(item.rep_bps_campanha) : null,
       });
     }
+
+    // Nota fiscal (opcional). O admin define a TAXA de imposto (nfTaxaBps, vale p/ todos os produtos);
+    // o cliente escolhe a PARCELA do pedido que sai com NF (minimo 30%). O imposto incide SO sobre
+    // essa parcela e e repassado: o cliente paga total + imposto, e o imposto NAO entra no lucro nem
+    // na comissao (e o tributo que a empresa recolhe). totalCentavos = base da comissao/lucro.
+    const nfTaxaBps = await config.nfBps(client);
+    let comNf = body.comNf === true && nfTaxaBps > 0;
+    let nfParcelaBps = null, impostoCentavos = 0;
+    if (comNf) {
+      let parcela = parseInt(body.nfParcela, 10);
+      if (isNaN(parcela)) parcela = 3000; // default: minimo
+      parcela = Math.max(3000, Math.min(10000, parcela)); // [30%, 100%]
+      nfParcelaBps = parcela;
+      impostoCentavos = Math.round(totalCentavos * parcela / 10000 * nfTaxaBps / 10000);
+    }
+    const totalComImposto = totalCentavos + impostoCentavos; // valor que o cliente paga
 
     // Limite de credito: o que esta em aberto no financeiro consome o limite; vencido pode bloquear.
     const credito = await financeiro.creditoCliente(clienteId);
     if (credito && credito.bloqueado) {
       throw httpErr(400, 'Há pedido vencido em aberto (' + credito.maisVencido.numero + ', ' + formatBRL(credito.maisVencido.valor) + '). Regularize o pagamento para liberar novos envios.');
     }
-    if (credito && credito.controlado && totalCentavos > credito.disponivel) {
-      throw httpErr(400, 'O pedido (' + formatBRL(totalCentavos) + ') ultrapassa seu crédito disponível (' + formatBRL(credito.disponivel) + '). Reduza a quantidade ou fale com a empresa para liberar saldo.');
+    if (credito && credito.controlado && totalComImposto > credito.disponivel) {
+      throw httpErr(400, 'O pedido (' + formatBRL(totalComImposto) + ') ultrapassa seu crédito disponível (' + formatBRL(credito.disponivel) + '). Reduza a quantidade ou fale com a empresa para liberar saldo.');
     }
 
     const seq = await client.query("SELECT 'DS-' || nextval('pedido_numero_seq') AS numero");
     const numero = seq.rows[0].numero;
-    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+    const ip = (req.ip || '').toString(); // com trust proxy=1, req.ip e o IP real do cliente (nao o X-Forwarded-For bruto, falsificavel)
 
     const ped = await client.query(
-      `INSERT INTO pedidos (numero, cliente_id, usuario_id, status, total_centavos, total_etiquetas, aceite_em, aceite_ip, etiquetas_expira_em)
-       VALUES ($1,$2,$3,'aguardando',$4,$5, now(), $6, now() + interval '72 hours')
+      `INSERT INTO pedidos (numero, cliente_id, usuario_id, status, total_centavos, total_etiquetas, aceite_em, aceite_ip, etiquetas_expira_em, com_nf, nf_bps, nf_parcela_bps, imposto_centavos)
+       VALUES ($1,$2,$3,'aguardando',$4,$5, now(), $6, now() + interval '72 hours', $7, $8, $9, $10)
        RETURNING id, criado_em, aceite_em`,
-      [numero, clienteId, usuarioId, totalCentavos, totalEtiquetas, ip]
+      [numero, clienteId, usuarioId, totalComImposto, totalEtiquetas, ip, comNf, comNf ? nfTaxaBps : null, nfParcelaBps, impostoCentavos]
     );
     const pedidoId = ped.rows[0].id;
 
@@ -173,25 +226,52 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
     );
     const comRow = cc.rows[0];
     if (comRow && comRow.u_id) {
-      const totalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
-      if (totalBps > 0) {
-        if (comRow.representante_pai_id) {
-          let prepBps = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
-          if (prepBps > totalBps) prepBps = totalBps;
-          const paiBps = totalBps - prepBps;
+      // % normal do representante para este cliente (vale fora de campanha).
+      const normalTotalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
+      const temPai = !!comRow.representante_pai_id;
+      // Proporcao da fatia do preposto sobre o total normal; mantida tambem na campanha.
+      let prepRatio = 0;
+      if (temPai && normalTotalBps > 0) {
+        let prepNormal = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
+        if (prepNormal > normalTotalBps) prepNormal = normalTotalBps;
+        prepRatio = prepNormal / normalTotalBps;
+      }
+      // Comissao calculada POR ITEM (cada linha usa o % da campanha, se o item estiver em campanha,
+      // ou o % normal do cliente) e somada. Guarda a soma em centavos; o bps fica como taxa media (exibicao).
+      let somaPrep = 0, somaPai = 0, algumBps = false;
+      for (const l of linhas) {
+        const lineBps = (l.repCampanhaBps !== null && l.repCampanhaBps !== undefined) ? Number(l.repCampanhaBps) : normalTotalBps;
+        if (lineBps <= 0) continue;
+        algumBps = true;
+        let prepLineBps, paiLineBps;
+        if (temPai) { prepLineBps = Math.min(lineBps, Math.round(lineBps * prepRatio)); paiLineBps = lineBps - prepLineBps; }
+        else { prepLineBps = lineBps; paiLineBps = 0; }
+        somaPrep += Math.round(l.totalCentavos * prepLineBps / 10000);
+        somaPai += Math.round(l.totalCentavos * paiLineBps / 10000);
+      }
+      if (algumBps) {
+        const blendPrep = totalCentavos > 0 ? Math.round(somaPrep * 10000 / totalCentavos) : 0;
+        if (temPai) {
+          const blendPai = totalCentavos > 0 ? Math.round(somaPai * 10000 / totalCentavos) : 0;
           await client.query(
             `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
                     responsavel_id = $5, comissao_resp_bps = $6, comissao_resp_centavos = $7 WHERE id = $1`,
-            [pedidoId, comRow.u_id, prepBps, Math.round(totalCentavos * prepBps / 10000),
-             comRow.representante_pai_id, paiBps, Math.round(totalCentavos * paiBps / 10000)]
+            [pedidoId, comRow.u_id, blendPrep, somaPrep, comRow.representante_pai_id, blendPai, somaPai]
           );
         } else {
           await client.query(
             `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4 WHERE id = $1`,
-            [pedidoId, comRow.u_id, totalBps, Math.round(totalCentavos * totalBps / 10000)]
+            [pedidoId, comRow.u_id, blendPrep, somaPrep]
           );
         }
       }
+    }
+
+    // Funcionario automatico: se houver exatamente UM funcionario ativo com taxa, atribui ele ao pedido
+    // (igual ao representante). Com 0 ou 2+ funcionarios ativos, continua manual.
+    const frUnico = await client.query("SELECT id, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE AND taxa_etiqueta_centavos IS NOT NULL ORDER BY id");
+    if (frUnico.rowCount === 1) {
+      await client.query('UPDATE pedidos SET funcionario_id = $2, taxa_func_centavos = $3 WHERE id = $1', [pedidoId, frUnico.rows[0].id, frUnico.rows[0].taxa_etiqueta_centavos]);
     }
 
     let indiceGlobal = 0;
@@ -207,9 +287,9 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
       await client.query('UPDATE arquivos SET pedido_id = $1 WHERE id = $2', [pedidoId, l.arquivoId]);
       const linhaIns = await client.query(
-        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku]
+        `INSERT INTO linhas (pedido_id, arquivo_id, item_id, item_nome, arquivo_nome, preco_centavos, quantidade, total_centavos, cor_id, cor_nome, sku, custo_centavos)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [pedidoId, l.arquivoId, l.itemId, l.itemNome, l.arquivoNome, l.precoCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
       );
       const linhaId = linhaIns.rows[0].id;
       const cods = Array.isArray(l.codigos) ? l.codigos : [];
@@ -224,24 +304,34 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
       }
     }
 
+    // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
+    // Criado antes do PDF para o comprovante sair com o vencimento e o Pix do valor a pagar.
+    const lanc = await financeiro.criarLancamento(client, pedidoId, clienteId, totalComImposto, totalEtiquetas);
+    const fin = await client.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc FROM financeiro WHERE pedido_id = $1", [pedidoId]);
+    let pagamento = null;
+    if (fin.rowCount && Number(fin.rows[0].valor_centavos) > 0) {
+      const aPagar = Number(fin.rows[0].valor_centavos);
+      const d = require('../pix').dadosPagamento(numero, aPagar, formatBRL(aPagar));
+      pagamento = { vencimento: fin.rows[0].venc, valorCentavos: aPagar, creditoUsado: lanc.creditoUsado || 0, codigo: d.codigo, chave: d.chave, favorecido: d.favorecido };
+    }
+
     const cli = await client.query('SELECT nome, email FROM clientes WHERE id = $1', [clienteId]);
     const pdfBuffer = await gerarComprovante({
       numero, criadoEm: ped.rows[0].criado_em, aceiteEm: ped.rows[0].aceite_em, aceiteIp: ip,
-      empresa: { nome: process.env.EMPRESA_NOME || 'Sua Empresa / Nome', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
+      empresa: { nome: process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora', cnpj: process.env.EMPRESA_CNPJ || '', contato: process.env.EMPRESA_CONTATO || '' },
       cliente: cli.rows[0] || {},
       linhas: linhas.map((l) => ({ arquivo_nome: l.arquivoNome, item_nome: l.itemNome + (l.sku ? ' [' + l.sku + ']' : ''), quantidade: l.quantidade, preco_centavos: l.precoCentavos, total_centavos: l.totalCentavos })),
       totalEtiquetas, totalCentavos,
-      formaPagamento: process.env.COMPROVANTE_FORMA_PAGAMENTO || 'A combinar',
+      nf: comNf ? { taxaBps: nfTaxaBps, parcelaBps: nfParcelaBps, impostoCentavos, baseCentavos: totalCentavos, totalCentavos: totalComImposto } : null,
+      formaPagamento: pagamento ? 'Pix' : (fin.rowCount && Number(fin.rows[0].valor_centavos) === 0 ? 'Crédito em conta' : (process.env.COMPROVANTE_FORMA_PAGAMENTO || 'A combinar')),
       prazoDespacho: process.env.COMPROVANTE_PRAZO_DESPACHO || 'Ate 1 dia util apos o aceite',
       observacoes: (body.observacoes || '').toString().slice(0, 500),
+      pagamento,
     });
     await client.query('UPDATE pedidos SET comprovante = $1 WHERE id = $2', [pdfBuffer, pedidoId]);
 
     // Estoque: reserva a quantidade de cada linha (o despacho consome depois).
     await estoque.reservarPedido(client, pedidoId, usuarioId);
-
-    // Lancamento financeiro do pedido (valor total, vencimento = aceite + prazo do cliente).
-    await financeiro.criarLancamento(client, pedidoId, clienteId, totalCentavos, totalEtiquetas);
 
     await client.query('COMMIT');
     res.json({ ok: true, pedidoId, numero });
@@ -257,7 +347,8 @@ router.post('/api/pedidos', exigeCliente, async (req, res) => {
 router.get('/meus-envios', exigeCliente, async (req, res, next) => {
   try {
     const r = await db.query(
-      `SELECT id, numero, status, total_centavos, total_etiquetas, aceite_em, criado_em, etiquetas_expira_em, preparando_em, despachado_em
+      `SELECT id, numero, status, total_centavos, total_etiquetas, aceite_em, criado_em, etiquetas_expira_em, preparando_em, despachado_em,
+              tipo, retirado_em, com_nf, EXISTS (SELECT 1 FROM notas_fiscais nf WHERE nf.pedido_id = pedidos.id) AS tem_nf
        FROM pedidos WHERE cliente_id = $1 ORDER BY id DESC`, [req.session.user.clienteId]
     );
     const pedidos = r.rows.map((p) => ({ ...p, expirado: etiquetasExpiradas(p.etiquetas_expira_em), horas: horasRestantes(p.etiquetas_expira_em), passos: andamentoDisplay(p) }));
@@ -324,15 +415,20 @@ router.get('/inicio', exigeCliente, async (req, res, next) => {
 router.get('/estoque', exigeCliente, async (req, res, next) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
-    res.render('cliente/estoque', { produtos, formatDateTime });
+    const nfBps = await config.nfBps(db);
+    res.render('cliente/estoque', { produtos, formatDateTime, nfBps });
   } catch (e) { next(e); }
+});
+router.get('/estoque/lista.pdf', exigeCliente, async (req, res, next) => {
+  try { await enviarListaPrecos(req, res, await estoque.saldosParaCliente(req.session.user.clienteId), true); } catch (e) { next(e); }
 });
 // Imagem do produto (qualquer usuario logado); ?baixar=1 forca o download.
 router.get('/produtos/:id/imagens/:img', exigeLogin, (req, res, next) => imagens.servir(req, res).catch(next));
 router.get('/api/estoque', exigeCliente, async (req, res) => {
   try {
     const produtos = await imagens.anexar(await estoque.saldosParaCliente(req.session.user.clienteId));
-    res.json({ ok: true, produtos, atualizado_em: formatDateTime(new Date()) });
+    const nfBps = await config.nfBps(db);
+    res.json({ ok: true, produtos, nfBps, atualizado_em: formatDateTime(new Date()) });
   } catch (e) { console.error('Erro estoque cliente:', e); res.status(500).json({ erro: 'Falha ao carregar o estoque.' }); }
 });
 
@@ -344,6 +440,13 @@ router.get('/financeiro', exigeCliente, async (req, res, next) => {
     const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : '';
     const todos = await financeiro.listar({ clienteId });
     const lista = financeiro.filtrarSituacao(mes ? await financeiro.listar({ clienteId, mes }) : todos, sit);
+    // "Pagamento do Pedido": Pix com o valor do lancamento (so o que ainda esta em aberto ou vencido)
+    const pix = require('../pix');
+    lista.forEach((l) => {
+      if (l.situacao !== 'pago' && l.situacao !== 'cancelado' && Number(l.valor_centavos) > 0) {
+        l.pix = pix.dadosPagamento(l.numero, Number(l.valor_centavos), formatBRL(l.valor_centavos));
+      }
+    });
     res.render('cliente/financeiro', {
       lancamentos: lista, resumo: financeiro.resumo(todos), creditoConta: await financeiro.creditoConta(clienteId),
       meses: await financeiro.mesesDisponiveis(clienteId), filtro: { situacao: sit, mes },
@@ -375,6 +478,31 @@ router.get('/pedido/:id/comprovante', exigeCliente, async (req, res, next) => {
     const p = await db.query('SELECT numero, comprovante FROM pedidos WHERE id = $1 AND cliente_id = $2', [req.params.id, req.session.user.clienteId]);
     if (p.rowCount === 0 || !p.rows[0].comprovante) return res.status(404).render('erro', { titulo: 'Comprovante indisponivel', mensagem: 'Comprovante nao encontrado.', user: req.session.user });
     enviarPdf(res, 'comprovante-' + p.rows[0].numero + '.pdf', p.rows[0].comprovante);
+  } catch (e) { next(e); }
+});
+
+// ---------- Download: nota fiscal (PDF anexado pela distribuidora) ----------
+router.get('/pedido/:id/nota-fiscal', exigeCliente, async (req, res, next) => {
+  try {
+    const nf = await db.query(
+      `SELECT n.conteudo, p.numero FROM notas_fiscais n JOIN pedidos p ON p.id = n.pedido_id
+       WHERE n.pedido_id = $1 AND p.cliente_id = $2`, [req.params.id, req.session.user.clienteId]
+    );
+    if (nf.rowCount === 0 || !nf.rows[0].conteudo) return res.status(404).render('erro', { titulo: 'Nota fiscal indisponivel', mensagem: 'A nota fiscal deste pedido ainda não está disponível.', user: req.session.user });
+    enviarPdf(res, 'nota-fiscal-' + nf.rows[0].numero + '.pdf', nf.rows[0].conteudo);
+  } catch (e) { next(e); }
+});
+
+// ---------- Download: comprovante de retirada (do proprio cliente) ----------
+router.get('/pedido/:id/retirada.pdf', exigeCliente, async (req, res, next) => {
+  try {
+    const pr = await db.query('SELECT p.*, c.nome AS cliente_nome, c.email AS cliente_email FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1 AND p.cliente_id = $2', [req.params.id, req.session.user.clienteId]);
+    if (pr.rowCount === 0 || pr.rows[0].tipo !== 'retirada') return res.status(404).render('erro', { titulo: 'Comprovante indisponivel', mensagem: 'Comprovante de retirada não encontrado.', user: req.session.user });
+    const p = pr.rows[0];
+    const linhas = await db.query('SELECT l.item_nome, l.quantidade, l.preco_centavos, l.total_centavos, pr.peso_gramas FROM linhas l LEFT JOIN itens i ON i.id = l.item_id LEFT JOIN produtos pr ON pr.id = i.produto_id WHERE l.pedido_id = $1 ORDER BY l.id', [p.id]);
+    const fin = await db.query("SELECT valor_centavos, to_char(vencimento, 'DD/MM/YYYY') AS venc_br, parcela_num, parcela_total FROM financeiro WHERE pedido_id = $1 ORDER BY parcela_num NULLS FIRST, id", [p.id]);
+    const pdf = await gerarComprovanteRetirada(montarDados(p, linhas.rows, fin.rows));
+    enviarPdf(res, 'retirada-' + p.numero + '.pdf', pdf);
   } catch (e) { next(e); }
 });
 
