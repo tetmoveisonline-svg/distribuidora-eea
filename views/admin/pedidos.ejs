@@ -28,8 +28,8 @@
             <td class="num"><%= p.total_etiquetas %></td>
             <td class="num"><%= formatBRL(p.total_centavos) %></td>
             <% if (isFull) { %>
-            <td><%= p.rep_nome ? p.rep_nome : '—' %></td>
-            <td class="num"><% if (p.comissao_centavos) { %><span class="badge gold"><%= formatBRL(p.comissao_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
+            <td><% if (p.rep_nome) { %><%= p.rep_nome %><% if (p.resp_nome) { %><div class="dim" style="font-size:11px">+ <%= p.resp_nome %></div><% } %><% } else { %>—<% } %></td>
+            <td class="num"><% var comTot = (Number(p.comissao_centavos) || 0) + (Number(p.comissao_resp_centavos) || 0); %><% if (comTot) { %><span class="badge gold"><%= formatBRL(comTot) %></span><% } else { %><span class="dim">—</span><% } %></td>
             <td class="num"><% if (p.taxa_func_centavos !== null) { %><span class="badge gold"><%= formatBRL(p.taxa_func_centavos) %></span><% } else { %><span class="dim">—</span><% } %></td>
             <td class="num" style="white-space:nowrap"><b style="color:<%= p.lucro_centavos >= 0 ? 'var(--ok)' : 'var(--danger)' %>"><%= formatBRL(p.lucro_centavos) %></b><div class="dim" style="font-size:11px"><%= p.margem_pct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>%</div></td>
             <% } %>

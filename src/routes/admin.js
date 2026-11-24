@@ -172,9 +172,11 @@ router.get('/pedidos', async (req, res, next) => {
               p.imposto_centavos, p.com_nf,
               EXISTS (SELECT 1 FROM notas_fiscais nf WHERE nf.pedido_id = p.id) AS tem_nf,
               (SELECT COALESCE(SUM(custo_centavos * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS custo_total,
-              c.nome AS cliente_nome, u.nome AS rep_nome
+              (SELECT COALESCE(SUM((preco_centavos - COALESCE(preco_base_centavos, preco_centavos)) * quantidade), 0) FROM linhas WHERE pedido_id = p.id) AS adicional_total,
+              c.nome AS cliente_nome, u.nome AS rep_nome, ur.nome AS resp_nome
        FROM pedidos p JOIN clientes c ON c.id = p.cliente_id
-       LEFT JOIN usuarios u ON u.id = p.representante_id ORDER BY p.id DESC`
+       LEFT JOIN usuarios u ON u.id = p.representante_id
+       LEFT JOIN usuarios ur ON ur.id = p.responsavel_id ORDER BY p.id DESC`
     );
     const fr = await funcRef();
     const pedidos = r.rows.map((p) => {
@@ -182,9 +184,11 @@ router.get('/pedidos', async (req, res, next) => {
       const comissao = (Number(p.comissao_centavos) || 0) + (Number(p.comissao_resp_centavos) || 0);
       const funcCusto = p.funcionario_id ? (Number(p.taxa_func_assinada) || 0) * p.total_etiquetas : 0;
       const custoTotal = Number(p.custo_total) || 0;
-      // O imposto da NF e repasse (nao e lucro): tira do valor antes de calcular o lucro e a margem.
+      // O imposto da NF e o acrescimo do preposto (venda acima do sistema) sao repasse, nao lucro:
+      // saem do valor antes de calcular o lucro e a margem. O lucro fica sobre o preco de SISTEMA.
       const imposto = Number(p.imposto_centavos) || 0;
-      const base = Number(p.total_centavos) - imposto;
+      const adicional = Number(p.adicional_total) || 0;
+      const base = Number(p.total_centavos) - imposto - adicional;
       const lucro = base - comissao - funcCusto - custoTotal;
       const margem = base > 0 ? Math.round((lucro * 1000) / base) / 10 : 0;
       return {
@@ -405,6 +409,56 @@ router.get('/retirada/itens', exigeAdminFull, async (req, res) => {
   } catch (e) { console.error('Erro retirada/itens:', e); res.status(500).json({ erro: 'Falha ao carregar os produtos.' }); }
 });
 
+// Atribui a comissao de uma retirada a partir do cadastro do cliente (preposto + representante-pai),
+// calculada SOBRE O PRECO DE SISTEMA (preco_base_centavos) — o acrescimo de venda nao entra na comissao.
+//   representante_id = preposto (fatia dele) · responsavel_id = pai (resto do total).
+async function atribuirComissaoRetirada(client, pedidoId, clienteId, linhas) {
+  const cc = await client.query(
+    `SELECT c.comissao_total_bps, c.comissao_preposto_bps, u.id AS u_id, u.comissao_bps AS u_bps, u.representante_pai_id
+     FROM clientes c LEFT JOIN usuarios u ON u.id = c.representante_id AND u.papel = 'representante'
+     WHERE c.id = $1`, [clienteId]
+  );
+  const comRow = cc.rows[0];
+  if (!comRow || !comRow.u_id) {
+    await client.query('UPDATE pedidos SET representante_id = NULL, comissao_bps = NULL, comissao_centavos = 0, responsavel_id = NULL, comissao_resp_bps = NULL, comissao_resp_centavos = NULL WHERE id = $1', [pedidoId]);
+    return;
+  }
+  const normalTotalBps = parseInt(comRow.comissao_total_bps != null ? comRow.comissao_total_bps : (comRow.u_bps || 0), 10) || 0;
+  const temPai = !!comRow.representante_pai_id;
+  let prepRatio = 0;
+  if (temPai && normalTotalBps > 0) {
+    let prepNormal = parseInt(comRow.comissao_preposto_bps != null ? comRow.comissao_preposto_bps : (comRow.u_bps || 0), 10) || 0;
+    if (prepNormal > normalTotalBps) prepNormal = normalTotalBps;
+    prepRatio = prepNormal / normalTotalBps;
+  }
+  let somaPrep = 0, somaPai = 0, baseTotal = 0;
+  let prepBps = 0, paiBps = 0;
+  if (temPai) { prepBps = Math.min(normalTotalBps, Math.round(normalTotalBps * prepRatio)); paiBps = normalTotalBps - prepBps; }
+  else { prepBps = normalTotalBps; paiBps = 0; }
+  for (const l of linhas) {
+    const baseLinha = (Number(l.precoBaseCentavos) || 0) * (Number(l.quantidade) || 0);
+    baseTotal += baseLinha;
+    if (normalTotalBps <= 0) continue;
+    somaPrep += Math.round(baseLinha * prepBps / 10000);
+    somaPai += Math.round(baseLinha * paiBps / 10000);
+  }
+  const blendPrep = baseTotal > 0 ? Math.round(somaPrep * 10000 / baseTotal) : 0;
+  if (temPai) {
+    const blendPai = baseTotal > 0 ? Math.round(somaPai * 10000 / baseTotal) : 0;
+    await client.query(
+      `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
+              responsavel_id = $5, comissao_resp_bps = $6, comissao_resp_centavos = $7 WHERE id = $1`,
+      [pedidoId, comRow.u_id, blendPrep, somaPrep, comRow.representante_pai_id, blendPai, somaPai]
+    );
+  } else {
+    await client.query(
+      `UPDATE pedidos SET representante_id = $2, comissao_bps = $3, comissao_centavos = $4,
+              responsavel_id = NULL, comissao_resp_bps = NULL, comissao_resp_centavos = NULL WHERE id = $1`,
+      [pedidoId, comRow.u_id, blendPrep, somaPrep]
+    );
+  }
+}
+
 // Cria a retirada: monta o pedido (tipo retirada), reserva o estoque e lança no financeiro.
 router.post('/retirada', exigeAdminFull, async (req, res) => {
   const body = req.body || {};
@@ -475,6 +529,7 @@ router.post('/retirada', exigeAdminFull, async (req, res) => {
         [pedidoId, l.itemId, l.itemNome, 'Retirada no CD', l.precoCentavos, l.precoBaseCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
       );
     }
+    await atribuirComissaoRetirada(client, pedidoId, clienteId, linhas);
     await estoque.reservarPedido(client, pedidoId, req.session.user.id);
 
     // Pagamento: a vista (um lancamento) ou parcelado (uma parcela por data, valores iguais).
@@ -581,6 +636,7 @@ router.post('/pedido/:id/editar', exigeAdminFull, async (req, res) => {
         [pid, l.itemId, l.itemNome, 'Retirada no CD', l.precoCentavos, l.precoBaseCentavos, l.quantidade, l.totalCentavos, l.corId, l.corNome, l.sku, l.custoCentavos]
       );
     }
+    await atribuirComissaoRetirada(client, pid, clienteId, linhas);
     await estoque.reservarPedido(client, pid, req.session.user.id);
     // Pagamento (igual à criação): à vista ou parcelado por datas.
     let parcelaVencs = [];
