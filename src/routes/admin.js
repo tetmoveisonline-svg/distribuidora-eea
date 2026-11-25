@@ -459,6 +459,14 @@ async function atribuirComissaoRetirada(client, pedidoId, clienteId, linhas) {
   }
 }
 
+// Atribui o unico funcionario ativo (com taxa) ao pedido, se houver exatamente um. Com 0 ou 2+, fica manual.
+async function atribuirFuncionarioUnico(client, pedidoId) {
+  const fr = await client.query("SELECT id, taxa_etiqueta_centavos FROM usuarios WHERE papel = 'funcionario' AND ativo = TRUE AND taxa_etiqueta_centavos IS NOT NULL ORDER BY id");
+  if (fr.rowCount === 1) {
+    await client.query('UPDATE pedidos SET funcionario_id = $2, taxa_func_centavos = $3 WHERE id = $1', [pedidoId, fr.rows[0].id, fr.rows[0].taxa_etiqueta_centavos]);
+  }
+}
+
 // Cria a retirada: monta o pedido (tipo retirada), reserva o estoque e lança no financeiro.
 router.post('/retirada', exigeAdminFull, async (req, res) => {
   const body = req.body || {};
@@ -530,6 +538,7 @@ router.post('/retirada', exigeAdminFull, async (req, res) => {
       );
     }
     await atribuirComissaoRetirada(client, pedidoId, clienteId, linhas);
+    await atribuirFuncionarioUnico(client, pedidoId);
     await estoque.reservarPedido(client, pedidoId, req.session.user.id);
 
     // Pagamento: a vista (um lancamento) ou parcelado (uma parcela por data, valores iguais).
@@ -805,7 +814,8 @@ router.post('/clientes/:id/prazo', async (req, res, next) => {
     const limTxt = (req.body.limite || '').toString().trim();
     const limite = limTxt === '' ? null : parsePrecoToCentavos(limTxt);
     if (limTxt !== '' && limite === null) return res.redirect('/admin/clientes?erro=' + encodeURIComponent('Limite inválido. Use por exemplo 5000 ou 5.000,00 (vazio = sem limite).'));
-    const bloquear = req.body.bloquear_vencido === '1';
+    // Marcado "permitir lançar mesmo com vencido" = NAO bloqueia; desmarcado = bloqueia (padrão).
+    const bloquear = req.body.permitir_vencido !== '1';
     await db.query('UPDATE clientes SET prazo_dias = $2, limite_centavos = $3, bloquear_vencido = $4 WHERE id = $1', [pInt(req.params.id), dias, limite, bloquear]);
     res.redirect('/admin/clientes');
   } catch (e) { next(e); }
@@ -873,8 +883,10 @@ router.post('/clientes', async (req, res, next) => {
     const limite = limTxt === '' ? null : parsePrecoToCentavos(limTxt);
     if (limTxt !== '' && limite === null) throw new Error('Limite inválido. Use por exemplo 5000 ou 5.000,00 (vazio = sem limite).');
     const telefone = (req.body.telefone || '').toString().replace(/\D/g, '').slice(0, 15) || null;
+    // Marcado "permitir lançar mesmo com vencido" = NAO bloqueia; desmarcado (padrão) = bloqueia.
+    const bloquear = req.body.permitir_vencido !== '1';
     await client.query('BEGIN');
-    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias, limite_centavos, telefone) VALUES ($1,$2,$3,$4,$5) RETURNING id', [nome, email || null, prazo, limite, telefone]);
+    const c = await client.query('INSERT INTO clientes (nome, email, prazo_dias, limite_centavos, telefone, bloquear_vencido) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [nome, email || null, prazo, limite, telefone, bloquear]);
     await client.query('INSERT INTO usuarios (nome, login, senha_hash, papel, cliente_id) VALUES ($1,$2,$3,$4,$5)', [nome, login, await bcrypt.hash(senha, 10), 'cliente', c.rows[0].id]);
     await client.query('COMMIT');
     // Mensagem de boas-vindas com o acesso: mostrada uma unica vez na proxima tela (a senha nao vai na URL).

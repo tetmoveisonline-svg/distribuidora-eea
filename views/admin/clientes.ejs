@@ -125,7 +125,7 @@
                 <span class="dim">Sem limite<% if (c.em_aberto > 0) { %> · <%= formatBRL(c.em_aberto) %> em aberto<% } %></span>
               <% } %>
             </td>
-            <td><%= c.prazo_dias %> dia<%= c.prazo_dias === 1 ? '' : 's' %></td>
+            <td><%= c.prazo_dias %> dia<%= c.prazo_dias === 1 ? '' : 's' %><% if (!c.bloquear_vencido) { %><div style="margin-top:4px"><span class="badge" title="Este cliente lança etiquetas mesmo com boleto vencido" style="background:rgba(74,144,226,.14);color:#7fb3f0;border:1px solid #2b4d6e;font-size:10px;padding:2px 7px">🔓 Libera vencido</span></div><% } %></td>
             <td><% if (c.ativo) { %><span class="badge ok">Ativo</span><% } else { %><span class="badge neutral">Inativo</span><% } %></td>
             <td>
               <div class="acts">
@@ -170,7 +170,7 @@
                   <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
                     <div class="field" style="margin:0;width:170px"><label>Prazo de pagamento (dias)</label><input name="prazo_dias" type="number" min="0" max="365" value="<%= c.prazo_dias %>" /></div>
                     <div class="field" style="margin:0;width:190px"><label>Limite de crédito (R$)</label><input name="limite" value="<%= c.limite_centavos === null ? '' : (c.limite_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) %>" placeholder="vazio = sem limite" /></div>
-                    <label class="field" style="margin:0;flex-direction:row;align-items:center;gap:7px;width:auto"><input type="checkbox" name="bloquear_vencido" value="1" <%= c.bloquear_vencido ? 'checked' : '' %> style="width:auto" /> <span style="font-size:12.5px">Bloquear novos envios se tiver pedido vencido</span></label>
+                    <label class="field" style="margin:0;flex-direction:row;align-items:center;gap:7px;width:auto"><input type="checkbox" name="permitir_vencido" value="1" <%= c.bloquear_vencido ? '' : 'checked' %> style="width:auto" /> <span style="font-size:12.5px">Permitir lançar mesmo com pedido vencido</span></label>
                     <button class="btn sm" type="submit">Salvar</button>
                   </div>
                 </form>
@@ -202,6 +202,7 @@
         <div class="field" style="flex:1;min-width:150px"><label>Prazo (dias após o aceite)</label><input name="prazo_dias" type="number" min="0" max="365" value="7" /></div>
         <div class="field" style="flex:1;min-width:150px"><label>Limite de crédito (R$)</label><input name="limite" placeholder="5.000,00 (vazio = sem limite)" /></div>
       </div>
+      <label class="field" style="flex-direction:row;align-items:flex-start;gap:9px;margin-top:2px"><input type="checkbox" name="permitir_vencido" value="1" style="width:auto;margin-top:2px" /> <span style="font-size:12.5px;line-height:1.4">Permitir lançar mesmo com pedido vencido <span class="dim">— padrão: fica bloqueado até regularizar</span></span></label>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
         <button class="btn ghost" type="button" id="novoCancelar">Cancelar</button>
         <button class="btn" type="submit">Salvar cliente</button>
