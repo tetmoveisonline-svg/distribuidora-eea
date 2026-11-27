@@ -744,6 +744,32 @@ router.get('/pedido/:id/extrato-preposto.pdf', exigeAdminFull, async (req, res, 
 });
 
 // ===================== FINANCEIRO =====================
+// Cobrança no WhatsApp: monta o link wa.me do telefone do cliente com uma mensagem pronta.
+// Não envia nada — só abre o chat com o texto escrito para o admin revisar e enviar.
+function waNumero(telefone) {
+  const t = String(telefone || '').replace(/\D/g, '');
+  if (t.length < 10) return null;               // sem telefone válido cadastrado
+  return t.length <= 11 ? '55' + t : t;         // DDD + número -> prefixa 55
+}
+function primeiroNome(nome) { return String(nome || '').trim().split(/\s+/)[0] || ''; }
+function waLink(telefone, texto) {
+  const n = waNumero(telefone);
+  return n ? 'https://wa.me/' + n + '?text=' + encodeURIComponent(texto) : null;
+}
+function msgCobrancaCliente(nome, vencidoCentavos, qtd) {
+  const empresa = process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora';
+  const pl = qtd > 1 ? 'pedidos' : 'pedido';
+  return 'Olá, ' + primeiroNome(nome) + '! Tudo bem? 😊\n\n'
+    + 'Aqui é da ' + empresa + '. Passando só pra lembrar, com todo carinho, que consta um valor em aberto e já vencido por aqui: '
+    + formatBRL(vencidoCentavos) + ' (' + qtd + ' ' + pl + '). Deve ter passado despercebido! 🙂\n\n'
+    + 'Quando puder dar uma olhadinha e acertar, agradeço demais. Qualquer dúvida ou pra combinar o pagamento, é só me chamar por aqui. Obrigado! 🙏';
+}
+function msgCobrancaPedido(nome, numero, valorCentavos, vencimentoBr) {
+  const empresa = process.env.EMPRESA_NOME || 'A4 Móveis Distribuidora';
+  return 'Olá, ' + primeiroNome(nome) + '! Tudo bem? 😊\n\n'
+    + 'Aqui é da ' + empresa + '. Passando só pra lembrar, com todo carinho, que consta o pedido ' + numero + ' (' + formatBRL(valorCentavos) + '), vencido em ' + vencimentoBr + '. Deve ter passado despercebido! 🙂\n\n'
+    + 'Quando puder acertar, agradeço demais. Qualquer dúvida ou pra combinar o pagamento, é só me chamar por aqui. Obrigado! 🙏';
+}
 router.get('/financeiro', async (req, res, next) => {
   try {
     const clienteId = pInt(req.query.cliente);
@@ -756,15 +782,25 @@ router.get('/financeiro', async (req, res, next) => {
     const porCliente = new Map();
     for (const l of todos) {
       if (l.situacao !== 'aberto' && l.situacao !== 'vencido') continue;
-      const c = porCliente.get(l.cliente_id) || { id: l.cliente_id, nome: l.cliente_nome, aberto: 0, vencido: 0, qtd: 0 };
+      const c = porCliente.get(l.cliente_id) || { id: l.cliente_id, nome: l.cliente_nome, telefone: l.cliente_telefone, aberto: 0, vencido: 0, qtd: 0, vencidoQtd: 0 };
       c.aberto += l.valor_centavos; c.qtd++;
-      if (l.situacao === 'vencido') c.vencido += l.valor_centavos;
+      if (l.situacao === 'vencido') { c.vencido += l.valor_centavos; c.vencidoQtd++; }
       porCliente.set(l.cliente_id, c);
     }
+    const porClienteArr = Array.from(porCliente.values()).sort((a, b) => b.aberto - a.aberto);
+    // Link de cobrança no WhatsApp para quem tem valor vencido e telefone cadastrado.
+    for (const c of porClienteArr) {
+      c.waCobranca = c.vencido > 0 ? waLink(c.telefone, msgCobrancaCliente(c.nome, c.vencido, c.vencidoQtd)) : null;
+    }
+    // Link por pedido vencido (na lista detalhada).
+    const lancamentos = lista.map((l) => ({
+      ...l,
+      waCobranca: l.situacao === 'vencido' ? waLink(l.cliente_telefone, msgCobrancaPedido(l.cliente_nome, l.numero, l.valor_centavos, l.vencimento_br)) : null,
+    }));
     res.render('admin/financeiro', {
-      ativo: 'adm-financeiro', lancamentos: lista, resumo: financeiro.resumo(todos),
+      ativo: 'adm-financeiro', lancamentos, resumo: financeiro.resumo(todos),
       clientes: clientes.rows, meses: await financeiro.mesesDisponiveis(clienteId),
-      porCliente: Array.from(porCliente.values()).sort((a, b) => b.aberto - a.aberto),
+      porCliente: porClienteArr,
       filtro: { cliente: clienteId, situacao: sit, mes },
       formas: financeiro.FORMAS, hoje: financeiro.hojeISO(),
       ok: req.query.ok || null, erro: req.query.erro || null, formatBRL, formatDateTime,

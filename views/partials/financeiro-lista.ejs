@@ -35,7 +35,7 @@
           <% if (l.ajustado) { %><div class="dim" style="font-size:11px;text-decoration:line-through"><%= formatBRL(l.valor_original) %></div><% } %>
         </td>
         <td><%- badgeSit(l) %><% if (l.nao_enviadas > 0) { %> <span class="badge neutral" title="etiquetas que ficaram de fora no encerramento"><%= l.nao_enviadas %> não enviada(s)</span><% } %></td>
-        <td class="num" style="white-space:nowrap"><% if (!admin && l.pix) { %><button type="button" class="btn sm pix-toggle" data-pix="<%= l.id %>" style="margin-right:6px">Pagamento do Pedido</button><% } %><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= l.id %>">detalhe</button></td>
+        <td class="num" style="white-space:nowrap"><% if (!admin && l.pix) { %><button type="button" class="btn sm pix-toggle" data-pix="<%= l.id %>" style="margin-right:6px">Pagamento do Pedido</button><% } %><% if (admin && l.waCobranca) { %><a class="btn sm" href="<%= l.waCobranca %>" target="_blank" rel="noopener" title="Cobrar este pedido no WhatsApp do cliente" style="background:#25d366;color:#06340f;border:none;font-weight:700;margin-right:6px">💬 Cobrar</a><% } %><button type="button" class="btn ghost sm fin-toggle" data-fin="<%= l.id %>">detalhe</button></td>
       </tr>
       <% if (!admin && l.pix) { %>
       <tr class="pix-row" id="pix-<%= l.id %>" style="display:none">

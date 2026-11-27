@@ -25,7 +25,10 @@
           <td class="num"><%= c.qtd %></td>
           <td class="num"><%= formatBRL(c.aberto) %></td>
           <td class="num"><% if (c.vencido) { %><span class="badge danger"><%= formatBRL(c.vencido) %></span><% } else { %><span class="dim">—</span><% } %></td>
-          <td class="num"><a class="btn ghost sm" href="/admin/financeiro?cliente=<%= c.id %>&situacao=aberto">ver</a></td>
+          <td class="num"><div style="display:flex;gap:7px;justify-content:flex-end">
+            <% if (c.waCobranca) { %><a class="btn sm" href="<%= c.waCobranca %>" target="_blank" rel="noopener" title="Abrir o WhatsApp do cliente com a cobrança pronta" style="background:#25d366;color:#06340f;border:none;font-weight:700">💬 Cobrar</a><% } %>
+            <a class="btn ghost sm" href="/admin/financeiro?cliente=<%= c.id %>&situacao=aberto">ver</a>
+          </div></td>
         </tr>
       <% }); %>
     </tbody>

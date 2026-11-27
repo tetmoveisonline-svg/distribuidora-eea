@@ -145,7 +145,7 @@ async function listar(f) {
             to_char(f.vencimento, 'DD/MM/YYYY') AS vencimento_br,
             to_char(f.pago_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS pago_em_br,
             to_char(f.pago_em AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS pago_mes,
-            p.numero, p.total_etiquetas, p.aceite_em, c.nome AS cliente_nome
+            p.numero, p.total_etiquetas, p.aceite_em, c.nome AS cliente_nome, c.telefone AS cliente_telefone
      FROM financeiro f
      JOIN pedidos p ON p.id = f.pedido_id
      JOIN clientes c ON c.id = f.cliente_id
